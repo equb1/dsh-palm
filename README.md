@@ -15,12 +15,12 @@
 ## 现在长这样
 
 <p>
-<img src="docs/assets/screenshot-sessions.png" width="240" alt="会话列表与锦囊" />
+<img src="docs/assets/screenshot-home.png" width="240" alt="首页" />
+<img src="docs/assets/screenshot-sheet.png" width="240" alt="+ 抽屉里的锦囊" />
 <img src="docs/assets/screenshot-approval.png" width="240" alt="审批卡" />
-<img src="docs/assets/screenshot-connect.png" width="240" alt="连接页" />
 </p>
 
-左：收一个锦囊 · 中：审批卡只看一屏就能决定 · 右：连接引擎
+左：首页就一个输入框 · 中：能力都收在 + 抽屉里 · 右：审批卡只看一屏就能决定
 
 ## 它不是什么
 

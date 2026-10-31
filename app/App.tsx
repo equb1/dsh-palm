@@ -3,7 +3,7 @@ import { Platform, StatusBar, StyleSheet, View } from 'react-native';
 
 import { ChatScreen } from './src/ui/ChatScreen';
 import { ConnectScreen } from './src/ui/ConnectScreen';
-import { SessionsScreen } from './src/ui/SessionsScreen';
+import { HomeScreen } from './src/ui/HomeScreen';
 import { useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
 
@@ -15,7 +15,7 @@ export default function App(): React.ReactElement {
   ) : state.detail ? (
     <ChatScreen session={state.detail} />
   ) : (
-    <SessionsScreen />
+    <HomeScreen />
   );
 
   // web 上收成一列手机宽度，两边留黑，看起来才像手机

@@ -22,6 +22,8 @@ export interface AppState {
   approvals: Record<string, Approval>;
   error: string | null;
   busy: boolean;
+  /** 首页输入框当前选中的锦囊 */
+  draftPresetId: string | null;
 }
 
 const DEFAULT_URL = 'ws://192.168.1.100:8787/ws';
@@ -40,6 +42,7 @@ export class Store {
     approvals: {},
     error: null,
     busy: false,
+    draftPresetId: null,
   };
 
   private listeners = new Set<Listener>();
@@ -86,7 +89,12 @@ export class Store {
 
     try {
       const caps = await client.connect();
-      this.patch({ caps, conn: 'connected', error: null });
+      this.patch({
+        caps,
+        conn: 'connected',
+        error: null,
+        draftPresetId: this.state.draftPresetId ?? caps.presets[0]?.id ?? null,
+      });
       await this.refreshSessions();
     } catch (err) {
       this.patch({ conn: 'closed' });
@@ -133,6 +141,32 @@ export class Store {
     try {
       const { session } = await this.client.request('sessions.create', { presetId });
       await this.openSession(session.id);
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  setDraftPreset(presetId: string): void {
+    this.patch({ draftPresetId: presetId });
+  }
+
+  /**
+   * 首页输入框直接开聊：用当前选中的锦囊建会话，再把这句话发出去。
+   * 标题先取这句话的前 18 个字，之后可以再让模型改。
+   */
+  async startWith(text: string): Promise<void> {
+    const trimmed = text.trim();
+    if (!this.client || !trimmed) return;
+    const presetId = this.state.draftPresetId ?? this.state.caps?.presets[0]?.id;
+    if (!presetId) return;
+    this.patch({ busy: true, error: null });
+    try {
+      const { session } = await this.client.request('sessions.create', {
+        presetId,
+        title: trimmed.length > 18 ? `${trimmed.slice(0, 18)}…` : trimmed,
+      });
+      await this.openSession(session.id);
+      await this.send(trimmed);
     } catch (err) {
       this.fail(err);
     }

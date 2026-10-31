@@ -12,7 +12,8 @@ import {
 
 import type { Approval, Block, SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
-import { Btn, Chip, Dot, IconButton, Pill } from './parts';
+import { Btn, Dot, IconButton, Pill } from './parts';
+import { PresetSheet } from './PresetSheet';
 import { colors, font, radius, riskTone, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
@@ -194,6 +195,7 @@ function TurnView({ turn, approvals }: { turn: Turn; approvals: Record<string, A
 export function ChatScreen({ session }: { session: SessionDetail }): React.ReactElement {
   const state = useStore();
   const [draft, setDraft] = React.useState('');
+  const [sheet, setSheet] = React.useState(false);
   const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
@@ -225,7 +227,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             <Text style={styles.titleMetaText}>{running ? '生成中' : '就绪'}</Text>
           </View>
         </Pill>
-        <Pill style={styles.presetPill}>
+        <Pill style={styles.presetPill} onPress={() => setSheet(true)}>
           <Text style={styles.presetText} numberOfLines={1}>
             {preset?.glyph ?? '·'} {preset?.name ?? session.presetId}
           </Text>
@@ -265,9 +267,14 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
 
       <View style={styles.composerWrap}>
         <View style={styles.composer}>
-          <View style={styles.composerBtn}>
+          <Pressable
+            onPress={() => setSheet(true)}
+            accessibilityRole="button"
+            accessibilityLabel="选择锦囊"
+            style={({ pressed }) => [styles.composerBtn, pressed && { backgroundColor: colors.glassPressed }]}
+          >
             <Text style={styles.composerBtnText}>+</Text>
-          </View>
+          </Pressable>
           <TextInput
             style={styles.input}
             value={draft}
@@ -294,6 +301,13 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           </Pressable>
         </View>
       </View>
+
+      <PresetSheet
+        visible={sheet}
+        currentId={session.presetId}
+        onPick={(id) => void store.setPreset(id)}
+        onClose={() => setSheet(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -391,7 +405,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 34,
     maxHeight: 120,
-    paddingVertical: 8,
+    paddingVertical: 6,
     color: colors.text,
     fontSize: 15,
     lineHeight: 21,

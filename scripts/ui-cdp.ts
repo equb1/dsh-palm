@@ -1,5 +1,6 @@
 /**
- * 用 Chrome DevTools Protocol 驱动 web 版：连接 → 会话 → 聊天 → 审批，
+ * 用 Chrome DevTools Protocol 驱动 web 版：
+ * 连接 → 首页 → + 抽屉 → 选锦囊 → 发消息 → 审批 → 批准
  * 逐步截图，证明界面真的能用（不是"能编译"）。
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -65,14 +66,14 @@ async function evalJs(cdp: Cdp, expression: string): Promise<any> {
   return r?.result?.value;
 }
 
-async function waitFor(cdp: Cdp, needle: string, timeoutMs = 20_000): Promise<void> {
+async function waitForText(cdp: Cdp, needle: string, timeoutMs = 20_000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const text = (await evalJs(cdp, 'document.body ? document.body.innerText : ""')) as string;
     if (text && text.includes(needle)) return;
     await delay(250);
   }
-  throw new Error(`等待文本超时：${needle}`);
+  throw new Error('等待文本超时：' + needle);
 }
 
 async function waitForExpr(cdp: Cdp, expr: string, timeoutMs = 20_000): Promise<void> {
@@ -90,13 +91,24 @@ async function shot(cdp: Cdp, name: string): Promise<void> {
   console.log(`  shot -> ${OUT}/${name}.png`);
 }
 
-const CLICK = (matcher: string) => `
+const clickLabel = (label: string) => `
 (() => {
-  const els = [...document.querySelectorAll('[role="button"]')];
-  const el = els.find(e => (e.textContent || '').includes(${JSON.stringify(matcher)}));
-  if (!el) return 'not-found:' + els.map(e => (e.textContent||'').trim().slice(0,12)).join('|');
+  const el = document.querySelector('[aria-label=${JSON.stringify(label)}]');
+  if (!el) return 'not-found:${label}';
   el.click();
-  return 'clicked';
+  return 'clicked:${label}';
+})()
+`;
+
+/** 往输入框里写值（React 受控组件要走原生 setter + input 事件） */
+const typeInto = (value: string) => `
+(() => {
+  const el = document.querySelector('textarea') || document.querySelector('input');
+  if (!el) return 'no-input';
+  const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(value)});
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  return 'typed';
 })()
 `;
 
@@ -108,57 +120,43 @@ async function main(): Promise<void> {
     width: 430, height: 932, deviceScaleFactor: 2, mobile: true,
   });
 
-  console.log('1. 打开连接页');
+  console.log('1. 连接页');
   await cdp.send('Page.navigate', { url: APP_URL });
-  await waitFor(cdp, '装进口袋的智能体');
+  await waitForText(cdp, '装进口袋的智能体');
   await shot(cdp, '01-connect');
 
-  console.log('2. 填引擎地址并连接');
-  const setUrl = await evalJs(
-    cdp,
-    `(() => {
-      const input = document.querySelector('input');
-      if (!input) return 'no-input';
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      setter.call(input, 'ws://127.0.0.1:8787/ws');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      return input.value;
-    })()`,
-  );
-  console.log('   input =', setUrl);
+  console.log('2. 填地址并连接');
+  await evalJs(cdp, typeInto('ws://127.0.0.1:8787/ws'));
   await delay(200);
-  console.log('   click:', await evalJs(cdp, CLICK('连接')));
+  console.log('   ', await evalJs(cdp, clickLabel('连接')));
 
-  await waitFor(cdp, '收一个锦囊');
-  await shot(cdp, '02-sessions');
+  await waitForText(cdp, '需要我做点什么');
+  await shot(cdp, '02-home');
 
-  console.log('3. 打开一个会话');
-  console.log('   click:', await evalJs(cdp, CLICK('合同金额核对')));
-  await waitForExpr(cdp, "!!document.querySelector('textarea')");
-  await shot(cdp, '03-chat');
+  console.log('3. 打开 + 抽屉');
+  console.log('   ', await evalJs(cdp, clickLabel('选择锦囊')));
+  await waitForText(cdp, '收一个锦囊');
+  await shot(cdp, '03-sheet');
 
-  console.log('4. 发一条消息，等审批卡');
-  await evalJs(
-    cdp,
-    `(() => {
-      const input = document.querySelector('textarea') || document.querySelector('input[type="text"]') || [...document.querySelectorAll('input')].pop();
-      if (!input) return 'no-input';
-      const proto = input.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
-      Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, '这份合同的金额帮我对一下');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      return 'typed';
-    })()`,
-  );
+  console.log('4. 选「文档助手」');
+  console.log('   ', await evalJs(cdp, clickLabel('文档助手')));
+  await delay(400);
+
+  console.log('5. 发消息');
+  await evalJs(cdp, typeInto('这份合同的金额帮我对一下'));
   await delay(300);
-  console.log('   send:', await evalJs(cdp, CLICK('↑')));
+  console.log('   ', await evalJs(cdp, clickLabel('发送')));
 
-  await waitFor(cdp, '批准', 30_000);
-  await shot(cdp, '04-approval');
+  await waitForExpr(cdp, "!!document.querySelector('textarea')");
+  await delay(1200);
+  await shot(cdp, '04-chat');
 
-  console.log('5. 批准');
-  console.log('   click:', await evalJs(cdp, CLICK('批准')));
+  console.log('6. 等审批卡并批准');
+  await waitForText(cdp, '批准', 30_000);
+  await shot(cdp, '05-approval');
+  console.log('   ', await evalJs(cdp, clickLabel('批准')));
   await delay(2500);
-  await shot(cdp, '05-after-approve');
+  await shot(cdp, '06-after-approve');
 
   cdp.close();
   console.log('done');
