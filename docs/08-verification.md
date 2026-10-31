@@ -124,3 +124,91 @@ du -sh node        # 单个二进制
 | 后台必被杀 | 放弃"后台值守"，改成"打开即用" |
 
 **任何一种结论都比六个月后才发现要好。**
+
+---
+
+# 实测记录 #1（Android / Termux / 2026-11-01）
+
+第一次真机验证，用的是 **Termux + proot-distro Ubuntu**，不是我们的 App。
+目的是先证明"引擎能在这台手机上跑"，不涉及原生开发。
+
+## 环境
+
+| 项 | 值 |
+|---|---|
+| 架构 | arm64 |
+| 内存 | 15.8 GB |
+| CPU | 8 核 |
+| Node | v22.22.1（官方 arm64 tarball） |
+| 环境 | Termux → `proot-distro` Ubuntu 26.04（resolute） |
+| dsh | 0.2.1-rc.5（npm 全局装） |
+
+## 结果
+
+| 指标 | 过关线 | 实测 | 判定 |
+|---|---|---|---|
+| Node 能跑 | 必须 | ✅ | 过 |
+| dsh 引擎能起 | 必须 | ✅ 打印 token URL，浏览器可访问 | **过** |
+| 常驻内存 | ≤250MB | **178 MB**（单进程 RSS） | **过** |
+| 安装体积 | ≤150MB | **1.1 GB** | ❌ 差 7 倍 |
+| 冷启动 | ≤5s | 未测（首次测法有误） | 待测 |
+
+## 过程中的坑（都要写进实现）
+
+### 1. npm 在 proot 下装不了（换 pnpm 解决）
+
+`npm i -g` 在三种缓存目录（默认 / `/dev/shm` / 自建目录）下都报同一个错：
+
+```
+ENOENT: no such file or directory, rename
+  '_cacache/tmp/xxx' -> 'content-v2/sha256/...'
+Invalid response body while trying to fetch <pkg>
+```
+
+磁盘有 257G 空闲，两个 registry 都一样 → 不是磁盘、不是网络，是 **npm 的并发缓存写入在 proot 模拟的 syscall 上失败**。
+
+**解决**：换 pnpm（内容寻址存储 + 硬链接，机制不同），一次装完 568 个包，33 秒。
+
+### 2. 原生模块的平台判定被 Android 骗了
+
+pnpm 装完后 `dsh web` 报：
+
+```
+No usable native binding found for node-addon-require-builtin-linux-arm64-gnu (auto)
+```
+
+根因：`node-addon-require-builtin` 用 optionalDependencies 分发按平台预编译的 `.node`
+（`...-linux-arm64-gnu`、`...-linux-arm64-musl` 等）。**pnpm 靠 glibc 版本判断该装哪个变体，
+而 Android 用的是 bionic，读不到 glibc 版本**，于是所有变体都被过滤掉。
+
+**解决**：手动下载 `node-addon-require-builtin-linux-arm64-gnu@0.1.9` 的 tarball，
+解包后放进 loader 的 `node_modules` 旁边。
+
+**这条直接决定了架构**：真机上永远不能让包管理器去猜 libc。
+预构建镜像里必须直接带好 `.node` 文件。
+
+### 3. `pkill -f "dsh web"` 杀不掉
+
+进程的命令行是 `node .../dsh/lib/bin.js web`，**不含连续的 "dsh web"**，正则匹配不上。
+结果旧进程占着端口，新的启动失败，测出来的 14 秒是"失败耗时"。
+
+正确的模式：`pkill -f "bin.js web"`。
+
+## 体积 1.1GB 的构成（裁剪依据）
+
+| 内容 | 大小 | 何时需要 |
+|---|---|---|
+| `@deepseek-ai/libreoffice-kit-wasm` | 48 MB | 文档预设 |
+| `sherpa-onnx-linux-arm64` | 13.9 MB | 语音预设 |
+| `@img/sharp-*` | 8.5 MB | 图像处理 |
+| 非 arm64 的可选包 | 数十 MB | 永远不需要 |
+| 所有平台的 prebuild | — | 只留 arm64 |
+| 开发依赖 / sourcemap | 大头 | 永远不需要 |
+
+**结论：150MB 不是痴人说梦，但必须靠"CI 预构建 + 按预设分包"，而不是在手机上装。**
+
+## 这次验证改变了什么
+
+1. **"手机能不能当宿主"从假设变成了事实。** 后面所有架构讨论不用再讨论这个前提。
+2. **原生层的优先级下降了。** 至少能先用 Termux 跑引擎，把 App 和协议先打通。
+3. **"预构建镜像"从优化项变成了必选项。** 手机上的包管理器不可靠，这是硬约束。

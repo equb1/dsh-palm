@@ -33,6 +33,19 @@
 - [x] 流式输出无掉帧
 - [x] 断线重连、错误提示可见
 
+### 额外完成：真机验证已做（里程碑）
+
+2026-11-01，在一台 Android 手机上（Termux + proot Ubuntu）跑起了完整的 dsh 引擎：
+
+- Node v22.22.1 / arm64 / 15.8GB / 8 核
+- dsh web 成功打印 token URL，浏览器可访问
+- 常驻内存 **178MB**（目标 ≤250MB）✅
+- 安装体积 **1.1GB**（目标 ≤150MB）❌，靠裁剪 + 预构建镜像解决
+
+详细记录和三个坑见 [08-verification.md](08-verification.md) 末尾。
+
+**这条把「手机能不能当宿主」从假设变成了事实。**
+
 ### 额外完成：真引擎接口已摸清
 
 在隔离的 DSH_HOME 上起了一个真实的 dsh web（0.2.1-rc.5），把它的 HTTP RPC、认证、WebSocket 多路流全部跑通，结论写进 [10-dsh-api.md](10-dsh-api.md)。
