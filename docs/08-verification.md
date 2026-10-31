@@ -194,6 +194,43 @@ No usable native binding found for node-addon-require-builtin-linux-arm64-gnu (a
 
 正确的模式：`pkill -f "bin.js web"`。
 
+## 冷启动拆解：proot 的税是 10 秒
+
+冷启动 13.7s 看着像 dsh 太重，做了对照实验才发现不是。
+
+在 Windows 上装同一份 `@deepseek-ai/dsh@0.2.1-rc.5`（543 个包），
+用同一个测量方式（`scripts/measure-boot.ts`，从 spawn 到打印 token URL）：
+
+| 环境 | 冷启动 | 热启动 |
+|---|---|---|
+| Windows 11 / x64 / 无 proot | **3.40s** | **3.34s** |
+| Android / arm64 / proot Ubuntu | **13.7s** | 13.7s |
+| **差额 = proot 的税** | **≈ 10.3s** | |
+
+另外两个对照：
+
+| 项目 | 耗时 | 说明 |
+|---|---|---|
+| `dsh -V` | 0.54s | CLI 引导本身很快 |
+| `dsh --profile web --dump-config` | 0.55s | 配置组装很快 |
+| 断网启动 | 14.27s | 排除"网络超时"假设 |
+
+**结论：慢的不是配置解析、不是网络、也不是 dsh 本身，而是"加载 543 个 ESM 模块"这件事在 proot 里被放大了 4 倍。** proot 拦截并翻译每个 `stat` / `open`，模块解析又是海量小文件访问，乘起来就是 10 秒。
+
+### 这意味着两条路
+
+**A. 减少模块数**（改 profile）
+每个插件都是几个 ESM 包。手机端不需要 office / 语音 / web-search / hmr，
+裁掉一半插件，10 秒的税可能只剩 5 秒。
+
+**B. 绕开 proot**（原生 Node）
+Android 上直接跑 Node（像 Termux 那样），没有 syscall 翻译，理应回到 3–4 秒。
+代价：所有原生模块（node-pty / koffi / node-addon-require-builtin / sharp / sherpa-onnx）
+都得用 bionic 重新编译——glibc 版本的 `.node` 在 Android 的 linker 下加载不了。
+
+**短期选 A，长期看 B。** 但两条都指向同一个结论：**首个版本应当让引擎常驻**，
+把 14 秒藏进"手机开机后的第一次"，而不是每次打开 App 都付。
+
 ## 体积 1.1GB 的构成（裁剪依据）
 
 | 内容 | 大小 | 何时需要 |
