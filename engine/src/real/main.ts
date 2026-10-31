@@ -16,7 +16,11 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const bridge = await startRealBridge({ baseUrl, token, port });
+  const pairCode = process.env.DSH_PALM_NO_PAIR === '1'
+    ? ''
+    : String(Math.floor(100000 + Math.random() * 900000));
+
+  const bridge = await startRealBridge({ baseUrl, token, port, pairCode });
   console.log('');
   console.log('  dsh-palm 真引擎桥');
   console.log(`  WS     ws://localhost:${bridge.port}/ws`);

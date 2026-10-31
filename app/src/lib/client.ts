@@ -150,8 +150,21 @@ export class EngineClient {
         // onclose 一定会跟着来，这里不重复处理
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev: unknown) => {
+        const code = (ev as { code?: number })?.code ?? 0;
+        const reason = (ev as { reason?: string })?.reason ?? '';
         this.ws = null;
+        // 4001 = 宿主拒绝：缺配对码。重连也没用，直接停。
+        if (code === 4001) {
+          this.disposed = true;
+          this.setState('closed', reason || '需要配对码');
+          this.rejectAllPending(new Error(reason || '需要配对码'));
+          if (!settled) {
+            settled = true;
+            reject(new Error(reason || '需要配对码'));
+          }
+          return;
+        }
         this.rejectAllPending(new Error('连接已断开'));
         if (!settled) {
           settled = true;

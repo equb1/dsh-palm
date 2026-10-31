@@ -18,6 +18,7 @@ import type {
 } from '../../../app/src/protocol';
 import { PROTOCOL_VERSION } from '../../../app/src/protocol';
 import { DshRealClient, type RealSessionListItem } from './dshClient';
+import { projectRecords, type RealRecord } from './project';
 
 export interface RealBridgeOptions {
   /** 真 dsh 的根地址，例如 http://127.0.0.1:8899 */
@@ -25,6 +26,8 @@ export interface RealBridgeOptions {
   /** 启动时打印的那个 token */
   token: string;
   port?: number;
+  /** 手机配对码；传空字符串表示关闭鉴权（只在本机调试时用） */
+  pairCode?: string;
 }
 
 const HOST_ID = 'host-real-dsh';
@@ -150,14 +153,16 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       if (!item) throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
 
       const snap = await client.snapshot(sessionId);
-      // 真实消息在 snapshot.records 的事件流里，需要跑投影才行 —— 暂不投影，如实返回空回合
-      const turns: SessionDetail['turns'] = [];
+      const records = (snap?.records ?? []) as RealRecord[];
+      const proj = projectRecords(records);
+
       const detail: SessionDetail = {
         ...toSummary(item),
-        turns,
+        turns: proj.turns,
         contract: { tools: [], net: 'allow' },
       };
       if (snap?.header?.agentPreset) detail.presetId = snap.header.agentPreset;
+      if (proj.title) detail.title = proj.title;
       return { session: detail };
     },
 
@@ -184,7 +189,19 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
   const wss = new WebSocketServer({ server: http, path: '/ws' });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    // 配对：/ws?pair=123456
+    // MVP 只认配对码；正式版要改成「一次配对换设备密钥，之后每设备一把」
+    const url = new URL(req.url ?? '/ws', 'http://localhost');
+    const expected = options.pairCode ?? '';
+    if (expected.length > 0) {
+      const pair = url.searchParams.get('pair') ?? '';
+      if (pair !== expected) {
+        ws.close(4001, '需要配对码');
+        return;
+      }
+    }
+
     clients.add(ws);
     ws.on('close', () => clients.delete(ws));
     broadcast('engine.status', { state: 'ready' });

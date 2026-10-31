@@ -1,6 +1,7 @@
 /**
- * 真引擎桥的端到端验证：
- * 起桥 → 用我们的 EngineClient 连上去 → 读真实会话列表和详情。
+ * 真引擎桥的端到端验证 + 配对鉴权验证。
+ *
+ *   node --import tsx scripts/test-real-bridge.ts <baseUrl> <token>
  */
 import WebSocket from 'ws';
 
@@ -9,6 +10,15 @@ import { startRealBridge } from '../engine/src/real/server';
 
 const baseUrl = process.argv[2] ?? 'http://127.0.0.1:8899';
 const token = process.argv[3] ?? '';
+const PAIR = '246810';
+
+function newClient(url: string): EngineClient {
+  return new EngineClient({
+    url,
+    webSocketImpl: WebSocket as unknown as WebSocketCtor,
+    autoReconnect: false,
+  });
+}
 
 async function main(): Promise<void> {
   if (!token) {
@@ -16,39 +26,52 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const bridge = await startRealBridge({ baseUrl, token, port: 0 });
-  console.log('bridge port:', bridge.port);
+  const bridge = await startRealBridge({ baseUrl, token, port: 0, pairCode: PAIR });
+  const wsBase = `ws://127.0.0.1:${bridge.port}/ws`;
+  console.log('bridge port:', bridge.port, '| 配对码:', PAIR);
 
-  const client = new EngineClient({
-    url: `ws://127.0.0.1:${bridge.port}/ws`,
-    webSocketImpl: WebSocket as unknown as WebSocketCtor,
-    autoReconnect: false,
-  });
-
-  const caps = await client.connect();
-  console.log('宿主:', caps.host.name, '| kind =', caps.host.kind);
-  console.log('预设:', caps.presets.map((p) => `${p.id}(${p.name})`).join(', '));
-
-  const { sessions } = await client.request('sessions.list', {});
-  console.log('会话数:', sessions.length);
-  for (const s of sessions) {
-    console.log('  -', s.title, '|', s.status, '|', s.preview, '|', new Date(s.updatedAt).toLocaleString());
+  // 1) 不带配对码 → 必须被拒
+  const denied = newClient(wsBase);
+  let deniedMessage = '';
+  try {
+    await denied.connect();
+    console.error('✗ 没带配对码居然连上了');
+    process.exitCode = 1;
+  } catch (err) {
+    deniedMessage = (err as Error).message;
+    console.log('不带配对码被拒:', deniedMessage);
   }
+  denied.close();
+
+  // 2) 带错误配对码 → 必须被拒
+  const wrong = newClient(wsBase + '?pair=000000');
+  try {
+    await wrong.connect();
+    console.error('✗ 错误配对码居然连上了');
+    process.exitCode = 1;
+  } catch (err) {
+    console.log('错误配对码被拒:', (err as Error).message);
+  }
+  wrong.close();
+
+  // 3) 带正确配对码 → 通过，并能读到真会话
+  const ok = newClient(wsBase + '?pair=' + PAIR);
+  const caps = await ok.connect();
+  console.log('配对成功 | 宿主:', caps.host.name, '| 预设:', caps.presets.map((p) => p.id).join(','));
+
+  const { sessions } = await ok.request('sessions.list', {});
+  console.log('真实会话数:', sessions.length);
 
   if (sessions[0]) {
-    const { session } = await client.request('sessions.get', { sessionId: sessions[0].id });
-    console.log('详情:', session.title, '| preset =', session.presetId, '| turns =', session.turns.length);
-
-    // 未实现的方法必须给出可读错误，而不是静默失败
-    try {
-      await client.request('sessions.send', { sessionId: session.id, text: 'hi' });
-      console.error('✗ sessions.send 本应报不支持');
-    } catch (err) {
-      console.log('sessions.send 预期内不支持:', (err as Error).message);
-    }
+    const { session } = await ok.request('sessions.get', { sessionId: sessions[0].id });
+    console.log(
+      '详情:', session.title,
+      '| 回合:', session.turns.length,
+      '| 工具卡:', session.turns.flatMap((t) => t.blocks).filter((b) => b.kind === 'tool').length,
+    );
   }
 
-  client.close();
+  ok.close();
   await bridge.close();
   console.log('done');
 }

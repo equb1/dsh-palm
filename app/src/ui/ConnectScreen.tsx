@@ -35,6 +35,20 @@ export function ConnectScreen(): React.ReactElement {
             />
           </View>
 
+          <Text style={styles.label}>配对码</Text>
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={styles.input}
+              value={state.pairCode}
+              onChangeText={(t) => store.setPairCode(t)}
+              placeholder="6 位数字，宿主启动时会打印"
+              placeholderTextColor={colors.textFaint}
+              keyboardType="number-pad"
+              maxLength={6}
+              accessibilityLabel="配对码"
+            />
+          </View>
+
           {state.error ? (
             <Pressable onPress={() => store.clearError()}>
               <Text style={styles.error}>{state.error}</Text>

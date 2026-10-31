@@ -46,7 +46,8 @@
 | [docs/07-open-questions.md](docs/07-open-questions.md) | 尚未决定的事项 | 卡住的时候 |
 | [docs/08-verification.md](docs/08-verification.md) | 一周真机验证清单（Node/体积/内存/后台） | **动手接真机引擎之前** |
 | [docs/09-ui.md](docs/09-ui.md) | 界面语言：颜色、形状、排版、固定结构 | 改动任何界面前 |
-| [docs/10-dsh-api.md](docs/10-dsh-api.md) | **真 dsh 引擎的接口实测**（RPC / mux 流 / 快照） | 写适配器前 |
+| [docs/10-dsh-api.md](docs/10-dsh-api.md) | **真 dsh 引擎的接口实测**（RPC / mux 流 / 事件表） | 写适配器前 |
+| [docs/11-pairing.md](docs/11-pairing.md) | 登录与配对：为什么不做账号 | 动连接逻辑前 |
 
 ## 跑起来
 
@@ -93,7 +94,9 @@ Mock 引擎之后，有一个能连**真 dsh** 的桥：`engine/src/real/`。
 node --import tsx engine/src/real/main.ts http://127.0.0.1:8899 <token> 8788
 ```
 
-App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，就能看到真宿主上的会话、预设（standard / ptc / minimal / cordis）和宿主版本。
+App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六位配对码**，就能看到真宿主上的会话、预设（standard / ptc / minimal / cordis），以及完整对话——真引擎没有"消息列表"，只有事件流，回合是 `engine/src/real/project.ts` 折出来的。
+
+配对怎么设计的、为什么不做账号登录，见 [docs/11-pairing.md](docs/11-pairing.md)。
 
 发送、流式、审批还没通——卡在"隔离实例没有模型凭据，抓不到真实帧"，原因写在 [docs/10-dsh-api.md](docs/10-dsh-api.md) 第六节。
 

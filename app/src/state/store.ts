@@ -15,6 +15,8 @@ export interface AppState {
   conn: ConnectionState;
   connDetail?: string;
   url: string;
+  /** 宿主打印的六位配对码；空表示宿主没开鉴权 */
+  pairCode: string;
   caps: Capabilities | null;
   sessions: SessionSummary[];
   currentId: string | null;
@@ -35,6 +37,7 @@ export class Store {
     version: 0,
     conn: 'idle',
     url: DEFAULT_URL,
+    pairCode: '',
     caps: null,
     sessions: [],
     currentId: null,
@@ -73,12 +76,19 @@ export class Store {
     this.patch({ url });
   }
 
+  setPairCode(pairCode: string): void {
+    this.patch({ pairCode });
+  }
+
   async connect(url?: string): Promise<void> {
     const target = (url ?? this.state.url).trim();
+    const code = this.state.pairCode.trim();
+    const separator = target.includes('?') ? '&' : '?';
+    const endpoint = code ? target + separator + 'pair=' + encodeURIComponent(code) : target;
     this.patch({ url: target, error: null, conn: 'connecting' });
 
     this.client?.close();
-    const client = new EngineClient({ url: target, autoReconnect: true });
+    const client = new EngineClient({ url: endpoint, autoReconnect: true });
     this.client = client;
 
     client.onStateChange((conn, connDetail) => {
