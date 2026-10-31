@@ -1,15 +1,15 @@
-# --- 依赖 ---
+# 依赖
 node_modules/
 .pnp
 .pnp.js
 
-# --- 构建产物 ---
+# 构建产物
 dist/
 build/
 out/
 *.tsbuildinfo
 
-# --- Expo / RN ---
+# Expo / RN
 .expo/
 .expo-shared/
 web-build/
@@ -21,8 +21,10 @@ ios/
 *.p12
 *.mobileprovision
 *.orig.*
+install.log
+npm-debug.log*
 
-# --- 原生/工具链 ---
+# 原生/工具链
 .gradle/
 local.properties
 .cxx/
@@ -33,7 +35,7 @@ local.properties
 *.ipa
 *.hprof
 
-# --- 运行时镜像（大文件走发布，不进仓库）---
+# 运行时镜像（大文件走发布，不进仓库）
 runtime/out/
 runtime/layers/
 *.tar.zst
@@ -41,7 +43,7 @@ runtime/layers/
 *.squashfs
 *.img
 
-# --- 本地环境与密钥 ---
+# 本地环境与密钥
 .env
 .env.*
 !.env.example
@@ -50,16 +52,20 @@ runtime/layers/
 secrets/
 keystore/
 
-# --- 日志与诊断 ---
+# 日志与诊断
 logs/
 *.log
 diagnostics/
 coverage/
 
-# --- 编辑器 / 系统 ---
+# 编辑器 / 系统
 .idea/
 .vscode/*
 !.vscode/extensions.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ���ع���������֤����
+tools/
+artifacts/

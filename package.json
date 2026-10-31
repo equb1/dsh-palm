@@ -1,0 +1,21 @@
+{
+  "name": "dsh-palm-workspace",
+  "private": true,
+  "version": "0.0.1",
+  "description": "dsh-palm / 锦囊 — 手机上的 DSH 宿主（MVP 脚手架）",
+  "scripts": {
+    "engine": "tsx engine/src/main.ts",
+    "app": "npm --prefix app run start",
+    "app:web": "npm --prefix app run web",
+    "test": "node --import tsx --test test/e2e.test.ts",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "ws": "^8.18.0"
+  }
+}

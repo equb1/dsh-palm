@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "锦囊",
+    "slug": "dsh-palm",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "dshpalm",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0D10",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "cool.cnb.dshpalm"
+    },
+    "android": {
+      "package": "cool.cnb.dshpalm",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0D10"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
