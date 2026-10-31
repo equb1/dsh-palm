@@ -35,7 +35,7 @@ export function ConnectScreen(): React.ReactElement {
             />
           </View>
 
-          <Text style={styles.label}>配对码</Text>
+          <Text style={styles.label}>配对码<Text style={styles.optional}>（连电脑才需要，mock 引擎留空）</Text></Text>
           <View style={styles.inputWrap}>
             <TextInput
               style={styles.input}
@@ -102,6 +102,7 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.textFaint, fontSize: 13, textAlign: 'center', marginTop: 6, letterSpacing: 0.5 },
   spacer: { height: space.xxl },
   label: { color: colors.textFaint, fontSize: 11.5, marginBottom: space.sm, letterSpacing: 0.5 },
+  optional: { color: colors.textFaint, fontSize: 10.5 },
   inputWrap: {
     backgroundColor: colors.glass,
     borderWidth: StyleSheet.hairlineWidth,
