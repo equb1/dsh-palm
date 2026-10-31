@@ -12,7 +12,8 @@ import {
 
 import type { SessionSummary } from '../protocol';
 import { store, useStore } from './useStore';
-import { Dot, Pill } from './parts';
+import { Dot, IconButton } from './parts';
+import { SessionDrawer } from './SessionDrawer';
 import { Composer } from './Composer';
 import { colors, radius, space, topInset } from './theme';
 
@@ -48,6 +49,7 @@ export function HomeScreen(): React.ReactElement {
   const state = useStore();
   const [draft, setDraft] = React.useState('');
   const [refreshing, setRefreshing] = React.useState(false);
+  const [drawer, setDrawer] = React.useState(false);
 
   const presets = state.caps?.presets ?? [];
   const preset = presets.find((p) => p.id === state.draftPresetId) ?? presets[0];
@@ -84,11 +86,7 @@ export function HomeScreen(): React.ReactElement {
             <Text style={styles.connText}>{connLabel}</Text>
           </View>
         </View>
-        <Pressable onPress={() => store.disconnect()} accessibilityRole="button" accessibilityLabel="断开连接">
-          <Pill>
-            <Text style={styles.disconnect}>断开</Text>
-          </Pill>
-        </Pressable>
+        <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
       </View>
 
       <ScrollView
@@ -162,7 +160,11 @@ export function HomeScreen(): React.ReactElement {
         presets={presets}
         activePresetId={state.draftPresetId}
         onPickPreset={(id) => store.setDraftPreset(id)}
-      />    </KeyboardAvoidingView>
+      />
+
+      {/* 抽屉必须在最后一个子节点：后渲染的兄弟节点画在上层 */}
+      <SessionDrawer visible={drawer} onClose={() => setDrawer(false)} />
+    </KeyboardAvoidingView>
   );
 }
 
