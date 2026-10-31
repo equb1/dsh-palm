@@ -30,3 +30,4 @@
 | D24 | v1 运行时选**精简 rootfs**，不做"原生 node + toybox" | 后者要改引擎对 POSIX 的假设，一个人别碰 | 完整 rootfs（太大）；纯原生 node（太费工） |
 | D26 | 真 dsh 的接口是 **POST /api/<ns>/<method> + ws /api/remote.mux 多路流**，适配层放 engine/ | 实测（见 docs/10）；UI 绝不能直接碰 dsh API，否则每次 dsh 发版都要改界面 | 让 RN 直接调 dsh 的 HTTP |
 | D25 | 许可 **AGPL-3.0** | 与生态一致；别人拿去做网络服务也必须开源，防止被闭源厂商白嫖 | MIT（可被闭源商用）；双许可（一个人维护两套授权成本高） |
+| D27 | 首版按**引擎常驻**做，不追求冷启动 ≤5s | 实测：proot 下 13.7s，其中 10.3s 是 proot 税；裁 profile 只省 23%（Windows 3418→2626ms），到不了 5s。把 13.7s 藏进「手机开机后的第一次」比逼它变快现实 | 原生 Node（要重编 5–6 个原生模块）；把 targetSdk 压到 28（dsh-go 的老路） |

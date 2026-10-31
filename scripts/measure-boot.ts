@@ -6,6 +6,8 @@ import { spawn } from 'node:child_process';
 
 const BIN = process.argv[2];
 const PORT = process.argv[3] ?? '8899';
+/** 端口之后的所有参数原样传给 dsh（例如 --patch xxx.yml） */
+const EXTRA = process.argv.slice(4);
 
 if (!BIN) {
   console.error('用法: node --import tsx scripts/measure-boot.ts <bin.js> [port]');
@@ -13,7 +15,9 @@ if (!BIN) {
 }
 
 const started = Date.now();
-const child = spawn(process.execPath, [BIN, 'web', '--host', '127.0.0.1', '--port', PORT, '--no-open'], {
+// EXTRA 非空时完全接管参数顺序（launcher 选项必须放在 profile 名之前）
+const args = EXTRA.length > 0 ? [BIN, ...EXTRA] : [BIN, 'web', '--host', '127.0.0.1', '--port', PORT, '--no-open'];
+const child = spawn(process.execPath, args, {
   stdio: ['ignore', 'pipe', 'pipe'],
   env: { ...process.env, DSH_HOME: process.env.DSH_HOME ?? 'C:\\tmp\\dshtest\\home' },
 });

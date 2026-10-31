@@ -1,0 +1,103 @@
+# 手机端 profile 裁剪
+#
+# 用途：引擎跑在手机上时，只加载必要的插件。
+# 用法：dsh --profile web --patch runtime/profiles/phone.yml --host 127.0.0.1 --port 8787 --no-open
+#
+# 实测（Windows 基线，scripts/measure-boot.ts，三次均值）：
+#   不裁剪  3418 ms
+#   本文件  2626 ms   (-23%)
+#
+# 分组贡献（单独启用时）：
+#   遥测/开发工具  -327 ms   ← 最大的一块
+#   杂项（反馈/定时/插件市场） -111 ms
+#   office/终端侧栏、web 工具、workflow   ≈ 0（噪声内）
+#   全部 ui-* （52 个）          ≈ 0（网页前端几乎不耗时）
+#
+# 注意：这个文件只验证到"能起 + 快 23%"。手机上还需要再测一次，
+# 因为 proot 会把模块加载放大 4 倍，裁剪的收益可能更明显。
+# 手机端 profile 裁剪：先砍掉"桌面才需要"的一批插件
+# 用法: dsh web --patch phone.yml
+
+# 开发期工具
+- id: hmr
+  disabled: true
+- id: client-hmr
+  disabled: true
+- id: harness-dev-context
+  disabled: true
+
+# 遥测与分析
+- id: otel
+  disabled: true
+- id: session-telemetry-otel
+  disabled: true
+- id: desktop-product-telemetry
+  disabled: true
+- id: product-analytics
+  disabled: true
+
+# 文档/预览/终端侧栏（手机上用原生界面，不需要网页侧的）
+- id: office-to-pdf
+  disabled: true
+- id: ui-sidebar-documentpreview
+  disabled: true
+- id: ui-sidebar-browser
+  disabled: true
+- id: ui-sidebar-terminal
+  disabled: true
+- id: terminal-controller
+  disabled: true
+
+# 网页抓取与搜索（手机端先不做）
+- id: web-search-deepseek
+  disabled: true
+- id: web-deepseek-api
+  disabled: true
+- id: web-fetch-http
+  disabled: true
+- id: tool-web
+  disabled: true
+
+# 工作流与 cordis 调试
+- id: workflow-ptc
+  disabled: true
+- id: ptc-runtime
+  disabled: true
+- id: tool-workflow
+  disabled: true
+- id: cordis-host-runner
+  disabled: true
+- id: cordis-inspect-providers
+  disabled: true
+- id: ui-cordis
+  disabled: true
+
+# 反馈与日志导出
+- id: message-feedback
+  disabled: true
+- id: ui-message-feedback
+  disabled: true
+- id: command-feedback
+  disabled: true
+- id: session-log-download
+  disabled: true
+- id: ui-settings-session-log
+  disabled: true
+
+# 定时任务
+- id: schedule
+  disabled: true
+- id: ui-schedule
+  disabled: true
+
+# 插件市场/清单（手机端先不做）
+- id: plugin-manager
+  disabled: true
+- id: ui-plugin-manager
+  disabled: true
+- id: plugin-inventory
+  disabled: true
+- id: ui-settings-plugin-inventory
+  disabled: true
+- id: plugin-package-inventory-deepseek
+  disabled: true
