@@ -493,6 +493,11 @@ const handlers: { [M in Method]: Handler<M> } = {
     else mockCredentials.set(ref, value.trim());
     return { ok: true as const };
   },
+
+  'credentials.unset': ({ ref }) => {
+    mockCredentials.delete(ref);
+    return { ok: true as const };
+  },
 };
 
 /* ------------------------------------------------------------------ *

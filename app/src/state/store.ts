@@ -192,7 +192,9 @@ export class Store {
   async saveCredential(ref: string, value: string): Promise<boolean> {
     if (!this.client) return false;
     try {
-      await this.client.request('credentials.set', { ref, value });
+      // 真引擎的 credentials/set 拒绝空值，删除必须走 unset
+      if (value.trim().length === 0) await this.client.request('credentials.unset', { ref });
+      else await this.client.request('credentials.set', { ref, value });
       await this.refreshCredentials(ref);
       return true;
     } catch (err) {

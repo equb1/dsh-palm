@@ -188,7 +188,17 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     },
 
     'credentials.set': async ({ ref, value }) => {
+      // 真引擎拒绝空值（schema 要求 value 至少 1 个字符），清除走 unset
+      if (value.trim().length === 0) {
+        await client.rpc('credentials/unset', { ref });
+        return { ok: true as const };
+      }
       await client.rpc('credentials/set', { ref, value });
+      return { ok: true as const };
+    },
+
+    'credentials.unset': async ({ ref }) => {
+      await client.rpc('credentials/unset', { ref });
       return { ok: true as const };
     },
     'workspaces.list': async () => ({ workspaces: [] }),
