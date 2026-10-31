@@ -49,10 +49,33 @@ account/describe / status / login / startLogin / deviceCode  →  全部 HTTP 40
 ← { type:'item', value:{ status:'signed-out', links:{ usageUrl, topUpUrl } } }
 ```
 
-说明账号子系统**在 mux 里，不在 HTTP RPC 里**。也就是说：
+说明账号子系统**在 mux 里，不在 HTTP RPC 里**。
 
-- 登录动作大概率是一个 mux 端点（`account/login` 之类）返回一个授权 URL，UI 打开浏览器，登录完成后 `account/watch` 推 `status:'signed-in'`
-- 我们要复刻这条路，得先把 `account/*` 的流端点试出来
+### 但登录动作没有导出（实测）
+
+我把 mux 上的候选端点全开了一遍：
+
+```
+account/watch        → {"status":"signed-out","attempt":null,"links":{…}}      ✓ 存在
+account/login        → gateway/invocation-unavailable
+account/signIn       → gateway/invocation-unavailable
+account/startLogin   → gateway/invocation-unavailable
+account/authorize    → gateway/invocation-unavailable
+account/oauth        → gateway/invocation-unavailable
+account/deviceCode   → gateway/invocation-unavailable
+account/logout       → gateway/invocation-unavailable
+```
+
+错误信息统一是 **"no active Remote method exports this endpoint"**——不是方法名写错，是**这个 profile 里根本没有导出登录动作**。
+
+结论：**手机端没法远程触发宿主登录。** 登录是桌面宿主自己的事（Electron 主进程里），web profile 只暴露"当前状态"。
+
+### 所以现在能做的只有两件
+
+1. **读状态**：`account/watch` 告诉我们宿主有没有登录、余额链接在哪 —— 这个可以接
+2. **写 Key**：`credentials/set` —— 这个已经接好了
+
+要真正"从手机上完成登录"，只能等**本机引擎**：那时引擎在手机上，可以自己开系统浏览器走 OAuth，回到 App 拿令牌。见 [13-local-engine.md](13-local-engine.md)。
 
 ### 为什么"让宿主去登录"比"App 自己 OAuth"好
 

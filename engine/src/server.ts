@@ -36,6 +36,9 @@ const pendingApprovals = new Map<
   { approval: Approval; decide: (d: ApprovalDecision) => void }
 >();
 const cancelledRuns = new Set<string>();
+/** mock 的凭据库：只活在内存里，重启即清空 */
+const mockCredentials = new Map<string, string>();
+
 /** 每个会话当前在跑的 run，用于 stop */
 const activeRuns = new Map<string, string>();
 
@@ -478,6 +481,18 @@ const handlers: { [M in Method]: Handler<M> } = {
   'presets.list': () => ({ presets: PRESETS }),
 
   'workspaces.list': () => ({ workspaces: WORKSPACES }),
+
+  'credentials.describe': ({ refs }) => ({
+    credentials: Object.fromEntries(
+      refs.map((r) => [r, { configured: mockCredentials.has(r), writable: true }]),
+    ),
+  }),
+
+  'credentials.set': ({ ref, value }) => {
+    if (value.trim().length === 0) mockCredentials.delete(ref);
+    else mockCredentials.set(ref, value.trim());
+    return { ok: true as const };
+  },
 };
 
 /* ------------------------------------------------------------------ *

@@ -185,6 +185,17 @@ export function SessionDrawer({
             </View>
             <Text style={styles.connSub}>{state.caps?.host.engineVersion ?? ''}</Text>
           </View>
+          <Pressable
+            onPress={() => {
+              onClose();
+              void store.openSettings();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="模型与凭据"
+            style={({ pressed }) => [styles.settingsBtn, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.settingsText}>模型与凭据</Text>
+          </Pressable>
           <Pressable onPress={() => store.disconnect()} accessibilityRole="button" accessibilityLabel="断开连接">
             <Text style={styles.disconnect}>断开</Text>
           </Pressable>
@@ -265,5 +276,7 @@ const styles = StyleSheet.create({
   connRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   connText: { color: colors.textDim, fontSize: 11.5 },
   connSub: { color: colors.textFaint, fontSize: 10, marginTop: 2 },
+  settingsBtn: { paddingHorizontal: 8, paddingVertical: 4 },
+  settingsText: { color: colors.textDim, fontSize: 12.5 },
   disconnect: { color: colors.danger, fontSize: 12.5 },
 });

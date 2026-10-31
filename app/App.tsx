@@ -4,6 +4,7 @@ import { Platform, StatusBar, StyleSheet, View } from 'react-native';
 import { ChatScreen } from './src/ui/ChatScreen';
 import { ConnectScreen } from './src/ui/ConnectScreen';
 import { HomeScreen } from './src/ui/HomeScreen';
+import { SettingsScreen } from './src/ui/SettingsScreen';
 import { useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
 
@@ -12,6 +13,8 @@ export default function App(): React.ReactElement {
 
   const screen = !state.caps ? (
     <ConnectScreen />
+  ) : state.view === 'settings' ? (
+    <SettingsScreen />
   ) : state.detail ? (
     <ChatScreen session={state.detail} />
   ) : (

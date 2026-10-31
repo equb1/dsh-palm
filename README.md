@@ -48,7 +48,8 @@
 | [docs/09-ui.md](docs/09-ui.md) | 界面语言：颜色、形状、排版、固定结构 | 改动任何界面前 |
 | [docs/10-dsh-api.md](docs/10-dsh-api.md) | **真 dsh 引擎的接口实测**（RPC / mux 流 / 事件表） | 写适配器前 |
 | [docs/11-pairing.md](docs/11-pairing.md) | 配对：手机怎么证明自己是主人 | 动连接逻辑前 |
-| [docs/12-model-login.md](docs/12-model-login.md) | 模型登录：绑 API Key 已验证，账号 OAuth 待接 | 做登录页前 |
+| [docs/12-model-login.md](docs/12-model-login.md) | 模型登录：绑 Key 已接，账号 OAuth 没有导出端点 | 做登录页前 |
+| [docs/13-local-engine.md](docs/13-local-engine.md) | 本机引擎落地清单（阶段 1，未实现） | 上真机前 |
 
 ## 跑起来
 

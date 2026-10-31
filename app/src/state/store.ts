@@ -26,6 +26,10 @@ export interface AppState {
   busy: boolean;
   /** 首页输入框当前选中的锦囊 */
   draftPresetId: string | null;
+  /** 当前页面：主界面 / 设置 */
+  view: 'main' | 'settings';
+  /** 模型凭据状态（ref -> 是否已配置） */
+  credentials: Record<string, { configured: boolean; writable: boolean }>;
 }
 
 const DEFAULT_URL = 'ws://192.168.1.100:8787/ws';
@@ -46,6 +50,8 @@ export class Store {
     error: null,
     busy: false,
     draftPresetId: null,
+    view: 'main',
+    credentials: {},
   };
 
   private listeners = new Set<Listener>();
@@ -153,6 +159,37 @@ export class Store {
       await this.openSession(session.id);
     } catch (err) {
       this.fail(err);
+    }
+  }
+
+  async openSettings(): Promise<void> {
+    this.patch({ view: 'settings', error: null });
+    await this.refreshCredentials();
+  }
+
+  closeSettings(): void {
+    this.patch({ view: 'main' });
+  }
+
+  async refreshCredentials(ref = 'DEEPSEEK_API_KEY'): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { credentials } = await this.client.request('credentials.describe', { refs: [ref] });
+      this.patch({ credentials });
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  async saveCredential(ref: string, value: string): Promise<boolean> {
+    if (!this.client) return false;
+    try {
+      await this.client.request('credentials.set', { ref, value });
+      await this.refreshCredentials(ref);
+      return true;
+    } catch (err) {
+      this.fail(err);
+      return false;
     }
   }
 

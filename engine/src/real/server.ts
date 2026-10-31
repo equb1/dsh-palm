@@ -174,6 +174,23 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     'approvals.list': async () => ({ approvals: [] }),
     'approvals.resolve': async () => unsupported('approvals.resolve'),
     'presets.list': async () => ({ presets }),
+
+    'credentials.describe': async ({ refs }) => {
+      const raw = await client.rpc<Record<string, { configured?: boolean; writable?: boolean }>>(
+        'credentials/describe',
+        { refs },
+      );
+      return {
+        credentials: Object.fromEntries(
+          Object.entries(raw).map(([k, v]) => [k, { configured: v.configured === true, writable: v.writable !== false }]),
+        ),
+      };
+    },
+
+    'credentials.set': async ({ ref, value }) => {
+      await client.rpc('credentials/set', { ref, value });
+      return { ok: true as const };
+    },
     'workspaces.list': async () => ({ workspaces: [] }),
   };
 

@@ -232,6 +232,9 @@ export interface RequestParams {
   'approvals.resolve': { approvalId: string; decision: ApprovalDecision };
   'presets.list': Record<string, never>;
   'workspaces.list': Record<string, never>;
+  /** 模型凭据：查状态 / 写入（存在宿主上，手机不留） */
+  'credentials.describe': { refs: string[] };
+  'credentials.set': { ref: string; value: string };
 }
 
 export interface RequestResults {
@@ -247,6 +250,8 @@ export interface RequestResults {
   'approvals.resolve': { accepted: true };
   'presets.list': { presets: Preset[] };
   'workspaces.list': { workspaces: Workspace[] };
+  'credentials.describe': { credentials: Record<string, { configured: boolean; writable: boolean }> };
+  'credentials.set': { ok: true };
 }
 
 export type Method = keyof RequestParams;
