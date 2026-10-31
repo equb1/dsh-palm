@@ -133,16 +133,14 @@ async function main(): Promise<void> {
   await waitForText(cdp, '需要我做点什么');
   await shot(cdp, '02-home');
 
-  console.log('3. 打开 + 抽屉');
-  console.log('   ', await evalJs(cdp, clickLabel('选择锦囊')));
-  await waitForText(cdp, '收一个锦囊');
-  await shot(cdp, '03-sheet');
-
-  console.log('4. 选「文档助手」');
+  console.log('3. 点输入框里的预设胶囊');
+  console.log('   ', await evalJs(cdp, clickLabel('票据管家')));
+  await delay(300);
+  await shot(cdp, '03-chips');
   console.log('   ', await evalJs(cdp, clickLabel('文档助手')));
-  await delay(400);
+  await delay(300);
 
-  console.log('5. 发消息');
+  console.log('4. 发消息');
   await evalJs(cdp, typeInto('这份合同的金额帮我对一下'));
   await delay(300);
   console.log('   ', await evalJs(cdp, clickLabel('发送')));
@@ -151,7 +149,7 @@ async function main(): Promise<void> {
   await delay(1200);
   await shot(cdp, '04-chat');
 
-  console.log('6. 等审批卡并批准');
+  console.log('5. 等审批卡并批准');
   await waitForText(cdp, '批准', 30_000);
   await shot(cdp, '05-approval');
   console.log('   ', await evalJs(cdp, clickLabel('批准')));

@@ -16,11 +16,11 @@
 
 <p>
 <img src="docs/assets/screenshot-home.png" width="240" alt="首页" />
-<img src="docs/assets/screenshot-sheet.png" width="240" alt="+ 抽屉里的锦囊" />
+<img src="docs/assets/screenshot-connect.png" width="240" alt="连接页" />
 <img src="docs/assets/screenshot-approval.png" width="240" alt="审批卡" />
 </p>
 
-左：首页就一个输入框 · 中：能力都收在 + 抽屉里 · 右：审批卡只看一屏就能决定
+左：首页就一个输入框 · 中：连接页 · 右：审批卡只看一屏就能决定
 
 ## 它不是什么
 

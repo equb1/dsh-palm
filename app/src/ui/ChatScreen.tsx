@@ -6,14 +6,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import type { Approval, Block, SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
 import { Btn, Dot, IconButton, Pill } from './parts';
-import { PresetSheet } from './PresetSheet';
+import { Composer } from './Composer';
 import { colors, font, radius, riskTone, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
@@ -195,7 +194,6 @@ function TurnView({ turn, approvals }: { turn: Turn; approvals: Record<string, A
 export function ChatScreen({ session }: { session: SessionDetail }): React.ReactElement {
   const state = useStore();
   const [draft, setDraft] = React.useState('');
-  const [sheet, setSheet] = React.useState(false);
   const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
@@ -227,7 +225,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             <Text style={styles.titleMetaText}>{running ? '生成中' : '就绪'}</Text>
           </View>
         </Pill>
-        <Pill style={styles.presetPill} onPress={() => setSheet(true)}>
+        <Pill style={styles.presetPill}>
           <Text style={styles.presetText} numberOfLines={1}>
             {preset?.glyph ?? '·'} {preset?.name ?? session.presetId}
           </Text>
@@ -265,50 +263,17 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         </Pressable>
       ) : null}
 
-      <View style={styles.composerWrap}>
-        <View style={styles.composer}>
-          <Pressable
-            onPress={() => setSheet(true)}
-            accessibilityRole="button"
-            accessibilityLabel="选择锦囊"
-            style={({ pressed }) => [styles.composerBtn, pressed && { backgroundColor: colors.glassPressed }]}
-          >
-            <Text style={styles.composerBtnText}>+</Text>
-          </Pressable>
-          <TextInput
-            style={styles.input}
-            value={draft}
-            onChangeText={setDraft}
-            placeholder={running ? '生成中 · 可直接插话' : '给锦囊发消息…'}
-            placeholderTextColor={colors.textFaint}
-            multiline
-            numberOfLines={1}
-            accessibilityLabel="输入框"
-          />
-          <Pressable
-            onPress={send}
-            accessibilityRole="button"
-            accessibilityLabel={running && !hasText ? '停止' : '发送'}
-            style={({ pressed }) => [
-              styles.sendBtn,
-              running && !hasText && { backgroundColor: colors.glassStrong },
-              { opacity: pressed ? 0.75 : 1 },
-            ]}
-          >
-            <Text style={[styles.sendGlyph, running && !hasText && { color: colors.text }]}>
-              {running && !hasText ? '■' : '↑'}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <PresetSheet
-        visible={sheet}
-        currentId={session.presetId}
-        onPick={(id) => void store.setPreset(id)}
-        onClose={() => setSheet(false)}
-      />
-    </KeyboardAvoidingView>
+      <Composer
+        draft={draft}
+        onChangeDraft={setDraft}
+        onSend={send}
+        onStop={() => void store.stop()}
+        running={running}
+        placeholder={running ? '生成中 · 可直接插话' : '给锦囊发消息…'}
+        presets={state.caps?.presets ?? []}
+        activePresetId={session.presetId}
+        onPickPreset={(id) => void store.setPreset(id)}
+      />    </KeyboardAvoidingView>
   );
 }
 
@@ -376,48 +341,5 @@ const styles = StyleSheet.create({
   emptyChatTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   emptyChatText: { color: colors.textFaint, fontSize: 12.5 },
 
-  composerWrap: {
-    paddingHorizontal: space.md,
-    paddingTop: space.sm,
-    paddingBottom: Platform.OS === 'ios' ? space.lg : space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bg,
-  },
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.glass,
-    borderRadius: radius.xl,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-  },
-  composerBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  composerBtnText: { color: colors.textDim, fontSize: 20, marginTop: -2 },
-  input: {
-    flex: 1,
-    minHeight: 34,
-    maxHeight: 120,
-    paddingVertical: 6,
-    color: colors.text,
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.blue,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendGlyph: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.lg, paddingBottom: 6 },
 });

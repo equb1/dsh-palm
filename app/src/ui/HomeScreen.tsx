@@ -7,14 +7,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import type { SessionSummary } from '../protocol';
 import { store, useStore } from './useStore';
 import { Dot, Pill } from './parts';
-import { PresetSheet } from './PresetSheet';
+import { Composer } from './Composer';
 import { colors, radius, space, topInset } from './theme';
 
 function relTime(ts: number): string {
@@ -48,7 +47,6 @@ function StatusTag({ s }: { s: SessionSummary }): React.ReactElement | null {
 export function HomeScreen(): React.ReactElement {
   const state = useStore();
   const [draft, setDraft] = React.useState('');
-  const [sheet, setSheet] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
 
   const presets = state.caps?.presets ?? [];
@@ -110,7 +108,7 @@ export function HomeScreen(): React.ReactElement {
       >
         <View style={styles.greeting}>
           <Text style={styles.greetingTitle}>需要我做点什么？</Text>
-          <Text style={styles.greetingSub}>点 + 选一个锦囊，或者直接说</Text>
+          <Text style={styles.greetingSub}>下面选一个锦囊，或者直接说</Text>
         </View>
 
         {state.sessions.length > 0 ? (
@@ -156,62 +154,15 @@ export function HomeScreen(): React.ReactElement {
         ) : null}
       </ScrollView>
 
-      <View style={styles.composerWrap}>
-        <View style={styles.composer}>
-          <Pressable
-            onPress={() => setSheet(true)}
-            accessibilityRole="button"
-            accessibilityLabel="选择锦囊"
-            style={({ pressed }) => [styles.plusBtn, pressed && { backgroundColor: colors.glassPressed }]}
-          >
-            <Text style={styles.plus}>+</Text>
-          </Pressable>
-
-          <TextInput
-            style={styles.input}
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="给锦囊发消息…"
-            placeholderTextColor={colors.textFaint}
-            multiline
-            numberOfLines={1}
-            accessibilityLabel="输入框"
-          />
-
-          <Pressable
-            onPress={() => setSheet(true)}
-            accessibilityRole="button"
-            accessibilityLabel={`当前锦囊：${preset?.name ?? ''}`}
-            style={styles.presetBtn}
-          >
-            <Text style={styles.presetText} numberOfLines={1}>
-              {preset?.glyph} {preset?.name}
-            </Text>
-            <Text style={styles.presetChevron}>⌄</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={send}
-            disabled={!hasText}
-            accessibilityRole="button"
-            accessibilityLabel="发送"
-            style={({ pressed }) => [
-              styles.sendBtn,
-              { opacity: hasText ? (pressed ? 0.75 : 1) : 0.35 },
-            ]}
-          >
-            <Text style={styles.sendGlyph}>↑</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <PresetSheet
-        visible={sheet}
-        currentId={state.draftPresetId}
-        onPick={(id) => store.setDraftPreset(id)}
-        onClose={() => setSheet(false)}
-      />
-    </KeyboardAvoidingView>
+      <Composer
+        draft={draft}
+        onChangeDraft={setDraft}
+        onSend={send}
+        placeholder="给锦囊发消息…"
+        presets={presets}
+        activePresetId={state.draftPresetId}
+        onPickPreset={(id) => store.setDraftPreset(id)}
+      />    </KeyboardAvoidingView>
   );
 }
 
@@ -274,52 +225,5 @@ const styles = StyleSheet.create({
   tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill },
   tagText: { fontSize: 10, fontWeight: '600' },
 
-  composerWrap: {
-    paddingHorizontal: space.md,
-    paddingTop: space.sm,
-    paddingBottom: Platform.OS === 'ios' ? space.lg : space.md,
-  },
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.glass,
-    borderRadius: radius.xl,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  plusBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  plus: { color: colors.textDim, fontSize: 20, marginTop: -2 },
-  input: {
-    flex: 1,
-    minHeight: 34,
-    maxHeight: 120,
-    paddingVertical: 6,
-    color: colors.text,
-    fontSize: 15,
-  },
-  presetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    maxWidth: 108,
-    paddingHorizontal: 8,
-    height: 30,
-    borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
-  },
-  presetText: { color: colors.textDim, fontSize: 11.5, flexShrink: 1 },
-  presetChevron: { color: colors.textFaint, fontSize: 10 },
-  sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.blue,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendGlyph: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.lg, marginTop: space.md },
 });
