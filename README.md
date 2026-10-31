@@ -46,6 +46,7 @@
 | [docs/07-open-questions.md](docs/07-open-questions.md) | 尚未决定的事项 | 卡住的时候 |
 | [docs/08-verification.md](docs/08-verification.md) | 一周真机验证清单（Node/体积/内存/后台） | **动手接真机引擎之前** |
 | [docs/09-ui.md](docs/09-ui.md) | 界面语言：颜色、形状、排版、固定结构 | 改动任何界面前 |
+| [docs/10-dsh-api.md](docs/10-dsh-api.md) | **真 dsh 引擎的接口实测**（RPC / mux 流 / 快照） | 写适配器前 |
 
 ## 跑起来
 
