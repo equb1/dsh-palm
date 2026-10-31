@@ -12,11 +12,11 @@ import {
 
 import type { Approval, Block, SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
-import { Btn, Chip, Mono } from './parts';
-import { colors, font, radius, riskColor, riskLabel, space, topInset } from './theme';
+import { Btn, Chip, Dot, IconButton, Pill } from './parts';
+import { colors, font, radius, riskTone, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
- * 极简行内格式：**粗体** 和 `代码`
+ * 行内格式：**粗体** 和 `代码`
  * ------------------------------------------------------------------ */
 
 function Inline({ text, style }: { text: string; style?: object }): React.ReactElement {
@@ -33,7 +33,7 @@ function Inline({ text, style }: { text: string; style?: object }): React.ReactE
         }
         if (p.startsWith('`') && p.endsWith('`')) {
           return (
-            <Text key={i} style={{ fontFamily: font.mono, color: colors.gold }}>
+            <Text key={i} style={styles.inlineCode}>
               {p.slice(1, -1)}
             </Text>
           );
@@ -45,21 +45,23 @@ function Inline({ text, style }: { text: string; style?: object }): React.ReactE
 }
 
 /* ------------------------------------------------------------------ *
- * 审批卡：只看这一屏就要能做决定
+ * 审批卡
  * ------------------------------------------------------------------ */
 
 function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement {
-  const color = riskColor(approval.risk);
+  const tone = riskTone(approval.risk);
   return (
-    <View style={[styles.approval, { borderLeftColor: color }]}>
+    <View style={styles.approval}>
       <View style={styles.approvalHead}>
-        <Chip label={riskLabel(approval.risk)} color={color} bg={`${color}22`} />
         <Text style={styles.approvalTitle}>{approval.title}</Text>
+        <View style={[styles.chip, { backgroundColor: tone.bg }]}>
+          <Text style={[styles.chipText, { color: tone.color }]}>{tone.label}</Text>
+        </View>
       </View>
 
       {approval.command ? (
         <View style={styles.codeBox}>
-          <Mono style={{ color: colors.text }}>{approval.command}</Mono>
+          <Text style={styles.codeText}>{approval.command}</Text>
         </View>
       ) : null}
 
@@ -67,7 +69,18 @@ function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement 
 
       {approval.diff ? (
         <View style={styles.codeBox}>
-          <Mono>{approval.diff}</Mono>
+          {approval.diff.split('\n').map((line, i) => (
+            <Text
+              key={i}
+              style={[
+                styles.codeText,
+                line.startsWith('+') && { color: colors.ok },
+                line.startsWith('-') && { color: colors.danger },
+              ]}
+            >
+              {line}
+            </Text>
+          ))}
         </View>
       ) : null}
 
@@ -80,9 +93,8 @@ function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement 
         />
         <Btn
           label="批准"
-          kind="gold"
           onPress={() => void store.resolveApproval(approval.id, 'approve')}
-          style={{ flex: 1 }}
+          style={{ flex: 1.2 }}
         />
       </View>
     </View>
@@ -90,34 +102,42 @@ function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement 
 }
 
 /* ------------------------------------------------------------------ *
- * 块渲染
+ * 块
  * ------------------------------------------------------------------ */
 
-function ThinkingBlock({ text }: { text: string }): React.ReactElement {
+function ThinkingRow({ text }: { text: string }): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const firstLine = text.split('\n')[0] ?? '';
   return (
-    <Pressable onPress={() => setOpen((v) => !v)} accessibilityRole="button" accessibilityLabel="展开或收起思考">
-      <View style={styles.thinking}>
-        <Text style={styles.thinkingLabel}>思考</Text>
-        <Text style={styles.thinkingText} numberOfLines={open ? undefined : 1}>
-          {open ? text : firstLine}
-        </Text>
-      </View>
+    <Pressable
+      onPress={() => setOpen((v) => !v)}
+      accessibilityRole="button"
+      accessibilityLabel="展开或收起思考"
+      style={styles.row}
+    >
+      <Text style={styles.rowGlyph}>✳</Text>
+      <Text style={styles.thinkingLabel}>思考</Text>
+      <Text style={styles.rowText} numberOfLines={open ? undefined : 1}>
+        {open ? text : firstLine}
+      </Text>
+      <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
     </Pressable>
   );
 }
 
 function ToolRow({ block }: { block: Extract<Block, { kind: 'tool' }> }): React.ReactElement {
-  const color = block.state === 'running' ? colors.blue : block.state === 'error' ? colors.danger : colors.ok;
+  const color =
+    block.state === 'running' ? colors.blue : block.state === 'error' ? colors.danger : colors.textFaint;
   return (
-    <View style={styles.tool}>
-      <View style={[styles.toolDot, { backgroundColor: color }]} />
+    <View style={styles.row}>
+      <Text style={[styles.rowGlyph, { color }]}>▤</Text>
       <Text style={styles.toolName}>{block.name}</Text>
-      <Text style={styles.toolSummary} numberOfLines={1}>
+      <Text style={styles.rowText} numberOfLines={1}>
         {block.summary}
       </Text>
-      <Text style={{ color, fontSize: 11 }}>{block.state === 'running' ? '…' : block.state === 'error' ? '×' : '✓'}</Text>
+      <Text style={[styles.rowState, { color }]}>
+        {block.state === 'running' ? '·' : block.state === 'error' ? '×' : '✓'}
+      </Text>
     </View>
   );
 }
@@ -125,17 +145,14 @@ function ToolRow({ block }: { block: Extract<Block, { kind: 'tool' }> }): React.
 function renderBlock(block: Block, approvals: Record<string, Approval>): React.ReactElement | null {
   switch (block.kind) {
     case 'thinking':
-      return <ThinkingBlock key={block.id} text={block.text} />;
+      return <ThinkingRow key={block.id} text={block.text} />;
     case 'tool':
       return <ToolRow key={block.id} block={block} />;
     case 'text':
-      return (
-        <Inline key={block.id} text={block.text} style={styles.body} />
-      );
+      return <Inline key={block.id} text={block.text} style={styles.body} />;
     case 'approval': {
       const approval = approvals[block.approvalId];
-      if (!approval) return null;
-      return <ApprovalCard key={block.id} approval={approval} />;
+      return approval ? <ApprovalCard key={block.id} approval={approval} /> : null;
     }
     default:
       return null;
@@ -160,11 +177,10 @@ function TurnView({ turn, approvals }: { turn: Turn; approvals: Record<string, A
   return (
     <View style={styles.assistant}>
       {turn.blocks.map((b) => renderBlock(b, approvals))}
-      {turn.status === 'streaming' ? <Text style={styles.cursor}>▍</Text> : null}
-      {turn.status === 'stopped' ? <Text style={styles.stopped}>已停止</Text> : null}
+      {turn.status === 'stopped' ? <Text style={styles.turnMeta}>已停止</Text> : null}
       {turn.status === 'done' && turn.meta?.durationMs ? (
-        <Text style={styles.meta}>
-          {(turn.meta.durationMs / 1000).toFixed(1)}s · {turn.meta.steps} 步
+        <Text style={styles.turnMeta}>
+          {(turn.meta.durationMs / 1000).toFixed(0)} 秒 · {turn.meta.steps} 步
         </Text>
       ) : null}
     </View>
@@ -181,39 +197,45 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
+  const hasText = draft.trim().length > 0;
 
   const send = (): void => {
-    const text = draft.trim();
-    if (!text) return;
+    if (running && !hasText) {
+      void store.stop();
+      return;
+    }
+    if (!hasText) return;
     setDraft('');
-    void store.send(text);
+    void store.send(draft.trim());
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => store.closeSession()} accessibilityRole="button" accessibilityLabel="返回">
-          <Text style={styles.back}>‹</Text>
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
+        <IconButton glyph="‹" label="返回会话列表" onPress={() => store.closeSession()} />
+        <Pill style={styles.titlePill}>
+          <Text style={styles.titleText} numberOfLines={1}>
             {session.title}
           </Text>
-          <Text style={styles.headerSub} numberOfLines={1}>
-            {preset?.name ?? session.presetId}
-            {running ? ' · 运行中' : ''}
-            {session.contract.net === 'deny' ? ' · 禁网' : ''}
+          <View style={styles.titleMeta}>
+            <Dot color={running ? colors.blue : colors.textFaint} size={5} />
+            <Text style={styles.titleMetaText}>{running ? '生成中' : '就绪'}</Text>
+          </View>
+        </Pill>
+        <Pill style={styles.presetPill}>
+          <Text style={styles.presetText} numberOfLines={1}>
+            {preset?.glyph ?? '·'} {preset?.name ?? session.presetId}
           </Text>
-        </View>
-        {running ? (
-          <Pressable onPress={() => void store.stop()} accessibilityRole="button" accessibilityLabel="停止">
-            <Text style={styles.stop}>停止</Text>
-          </Pressable>
-        ) : null}
+        </Pill>
+        <View style={{ flex: 1 }} />
+        <IconButton
+          glyph="✎"
+          label="新建会话"
+          onPress={() => void store.createSession(session.presetId)}
+        />
       </View>
 
       <ScrollView
@@ -224,14 +246,14 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.scroll}>
-        {session.turns.length === 0 ? (
-          <View style={styles.emptyChat}>
-            <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
-            <Text style={styles.emptyChatText}>{preset?.tagline}</Text>
-          </View>
-        ) : (
-          session.turns.map((t) => <TurnView key={t.id} turn={t} approvals={state.approvals} />)
-        )}
+          {session.turns.length === 0 ? (
+            <View style={styles.emptyChat}>
+              <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
+              <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
+            </View>
+          ) : (
+            session.turns.map((t) => <TurnView key={t.id} turn={t} approvals={state.approvals} />)
+          )}
         </View>
       </ScrollView>
 
@@ -241,28 +263,36 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         </Pressable>
       ) : null}
 
-      <View style={styles.composer}>
-        <TextInput
-          style={styles.input}
-          value={draft}
-          onChangeText={setDraft}
-          placeholder={running ? '运行中，输入即插话…' : '说点什么…'}
-          placeholderTextColor={colors.faint}
-          multiline
-          accessibilityLabel="输入框"
-        />
-        <Pressable
-          onPress={send}
-          disabled={!draft.trim()}
-          accessibilityRole="button"
-          accessibilityLabel={running ? '插话' : '发送'}
-          style={({ pressed }) => [
-            styles.send,
-            { opacity: draft.trim() ? (pressed ? 0.7 : 1) : 0.35 },
-          ]}
-        >
-          <Text style={styles.sendText}>{running ? '插' : '↑'}</Text>
-        </Pressable>
+      <View style={styles.composerWrap}>
+        <View style={styles.composer}>
+          <View style={styles.composerBtn}>
+            <Text style={styles.composerBtnText}>+</Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder={running ? '生成中 · 可直接插话' : '给锦囊发消息…'}
+            placeholderTextColor={colors.textFaint}
+            multiline
+            numberOfLines={1}
+            accessibilityLabel="输入框"
+          />
+          <Pressable
+            onPress={send}
+            accessibilityRole="button"
+            accessibilityLabel={running && !hasText ? '停止' : '发送'}
+            style={({ pressed }) => [
+              styles.sendBtn,
+              running && !hasText && { backgroundColor: colors.glassStrong },
+              { opacity: pressed ? 0.75 : 1 },
+            ]}
+          >
+            <Text style={[styles.sendGlyph, running && !hasText && { color: colors.text }]}>
+              {running && !hasText ? '■' : '↑'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -270,105 +300,110 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
   },
-  back: { color: colors.dim, fontSize: 28, width: 24, marginTop: -4 },
-  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  headerSub: { color: colors.faint, fontSize: 11, marginTop: 2 },
-  stop: { color: colors.danger, fontSize: 13, fontWeight: '600' },
-  scrollOuter: { paddingBottom: space.xl },
-  scroll: { padding: space.lg, gap: space.md },
+  titlePill: { flexShrink: 1, flexDirection: 'column', alignItems: 'flex-start', gap: 2, paddingVertical: 6 },
+  titleText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  titleMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  titleMetaText: { color: colors.textFaint, fontSize: 10.5 },
+  presetPill: { flexShrink: 1 },
+  presetText: { color: colors.textDim, fontSize: 12 },
+
+  scrollOuter: { paddingBottom: space.lg },
+  scroll: { paddingHorizontal: space.lg, paddingTop: space.md, gap: 14 },
 
   userRow: { alignItems: 'flex-end' },
   userBubble: {
-    backgroundColor: colors.cardAlt,
-    paddingHorizontal: space.md,
+    backgroundColor: colors.bubble,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: radius.lg,
-    maxWidth: '86%',
+    maxWidth: '84%',
   },
-  userText: { color: colors.text, fontSize: 15, lineHeight: 22 },
+  userText: { color: colors.text, fontSize: 15, lineHeight: 23 },
 
-  assistant: { gap: 10 },
-  body: { color: colors.text, fontSize: 15, lineHeight: 23 },
-  cursor: { color: colors.gold, fontSize: 14, marginTop: -6 },
+  assistant: { gap: 8 },
+  body: { color: colors.text, fontSize: 15, lineHeight: 25 },
+  inlineCode: { fontFamily: font.mono, fontSize: 13, color: colors.text, backgroundColor: colors.glassStrong },
+  turnMeta: { color: colors.textFaint, fontSize: 10.5 },
 
-  thinking: { borderLeftWidth: 2, borderLeftColor: colors.line, paddingLeft: 10, gap: 3 },
-  thinkingLabel: { color: colors.faint, fontSize: 10, letterSpacing: 1 },
-  thinkingText: { color: colors.dim, fontSize: 12, lineHeight: 18 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
+  rowGlyph: { color: colors.textFaint, fontSize: 11 },
+  rowText: { color: colors.textDim, fontSize: 13, flex: 1 },
+  thinkingLabel: { color: colors.textFaint, fontSize: 13 },
+  toolName: { color: colors.textFaint, fontSize: 11, fontFamily: font.mono },
+  rowState: { fontSize: 11 },
+  chevron: { color: colors.textFaint, fontSize: 11 },
 
-  tool: {
+  approval: {
+    backgroundColor: colors.glass,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    padding: 14,
+    gap: 10,
+  },
+  approvalHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  approvalTitle: { color: colors.text, fontSize: 14.5, fontWeight: '600', flex: 1 },
+  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
+  chipText: { fontSize: 10.5, fontWeight: '600' },
+  approvalSummary: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
+  codeBox: { backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: radius.sm, padding: 9, gap: 1 },
+  codeText: { fontFamily: font.mono, fontSize: 11.5, color: colors.textDim, lineHeight: 17 },
+  approvalActions: { flexDirection: 'row', gap: space.sm, marginTop: 2 },
+
+  emptyChat: { paddingTop: 80, alignItems: 'center', gap: 6 },
+  emptyChatTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  emptyChatText: { color: colors.textFaint, fontSize: 12.5 },
+
+  composerWrap: {
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+    paddingBottom: Platform.OS === 'ios' ? space.lg : space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  composer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: colors.card,
-    borderRadius: radius.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    backgroundColor: colors.glass,
+    borderRadius: radius.xl,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
   },
-  toolDot: { width: 6, height: 6, borderRadius: 3 },
-  toolName: { color: colors.dim, fontSize: 11, fontFamily: font.mono },
-  toolSummary: { color: colors.text, fontSize: 12, flex: 1 },
-
-  approval: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderLeftWidth: 3,
-    padding: space.md,
-    gap: 10,
-  },
-  approvalHead: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  approvalTitle: { color: colors.text, fontSize: 14, fontWeight: '600', flexShrink: 1 },
-  approvalSummary: { color: colors.dim, fontSize: 12, lineHeight: 18 },
-  codeBox: {
-    backgroundColor: colors.bg,
-    borderRadius: radius.sm,
-    padding: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  approvalActions: { flexDirection: 'row', gap: space.sm, marginTop: 2 },
-
-  stopped: { color: colors.faint, fontSize: 11 },
-  meta: { color: colors.faint, fontSize: 10 },
-
-  emptyChat: { paddingTop: space.xxl, alignItems: 'center', gap: 6 },
-  emptyChatTitle: { color: colors.text, fontSize: 17, fontWeight: '600' },
-  emptyChatText: { color: colors.faint, fontSize: 12 },
-
-  composer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: space.sm,
-    padding: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-  },
-  input: {
-    flex: 1,
-    maxHeight: 120,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    paddingHorizontal: space.md,
-    paddingVertical: 10,
-    color: colors.text,
-    fontSize: 15,
-  },
-  send: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.gold,
+  composerBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendText: { color: '#1A1408', fontSize: 16, fontWeight: '700' },
+  composerBtnText: { color: colors.textDim, fontSize: 20, marginTop: -2 },
+  input: {
+    flex: 1,
+    minHeight: 34,
+    maxHeight: 120,
+    paddingVertical: 8,
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  sendBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.blue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendGlyph: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.lg, paddingBottom: 6 },
 });
