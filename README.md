@@ -48,7 +48,10 @@
 
 ## 跑起来
 
-需要 Node 20+。当前是**阶段 0**：引擎是 mock 的，UI 是真的。
+需要 **Node 22.13+**（React Native 0.88 的要求）。当前是**阶段 0**：引擎是 mock 的，UI 是真的。
+
+> 国内网络建议先 
+pm config set registry https://registry.npmmirror.com，否则装依赖会很慢。
 
 ```bash
 npm install        # 根目录依赖（引擎 + 测试）
