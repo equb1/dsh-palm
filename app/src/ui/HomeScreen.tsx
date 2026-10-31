@@ -74,7 +74,7 @@ export function HomeScreen(): React.ReactElement {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.header}>
         <View style={styles.brandMark}>
           <Text style={styles.brandGlyph}>锦</Text>

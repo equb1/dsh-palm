@@ -212,7 +212,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.header}>
         <IconButton glyph="‹" label="返回会话列表" onPress={() => store.closeSession()} />

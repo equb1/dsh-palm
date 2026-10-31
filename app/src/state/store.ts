@@ -113,8 +113,16 @@ export class Store {
       });
       await this.refreshSessions();
     } catch (err) {
-      this.patch({ conn: 'closed' });
-      this.fail(err);
+      // 第一次就连不上：别假装在重连，直接报错并停掉重试循环
+      client.close();
+      const raw = err instanceof Error ? err.message : String(err);
+      const friendly =
+        raw.includes('需要配对码')
+          ? '配对码不对。看电脑上桥的终端里打印的那六位。'
+          : '连不上 ' +
+            target +
+            '。检查三件事：手机和电脑在同一个 Wi-Fi、地址里的 IP 是电脑的（不是 localhost）、Windows 防火墙放行 8787/8788 端口。';
+      this.patch({ conn: 'closed', error: friendly });
     }
   }
 
