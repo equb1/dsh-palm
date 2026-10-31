@@ -182,7 +182,51 @@ cookie 名字里的 <hash> 每次启动都不同，不要硬编码。
 
 **下一步该做的**：在真 UI 里发一条消息、触发一次审批，把 WS 帧全抓下来。这一步做完，适配器就能写了。
 
-## 六、可复现的验证脚本
+## 六、适配器已实现（只读路径）
+
+桥在 `engine/src/real/`，对外说我们的协议，对内调真 dsh。**App 不用改一行代码就能连它。**
+
+```bash
+# 先起真 dsh（见开头），拿到带 token 的 URL
+node --import tsx engine/src/real/main.ts http://127.0.0.1:8899 <token> 8788
+# 然后在 App 里把引擎地址填成 ws://<你的电脑IP>:8788/ws
+```
+
+![真引擎](assets/real-drawer.png)
+
+已经打通的：
+
+| 我们的方法 | 映射到 |
+|---|---|
+| `capabilities.get` | `agentPresets/list` → 4 个宿主预设（standard / ptc / minimal / cordis） |
+| `sessions.list` | `session/list` → 摊平 `projections.values` |
+| `sessions.get` | `session/follow` 首帧 snapshot → 取 header 里的 `agentPreset` |
+
+**没打通的**：`sessions.send` / `steer` / `stop` / `approvals.*` 明确返回 `unsupported`，界面上会报错，而不是假装成功。
+
+### 为什么没打通发送
+
+隔离实例没有凭据（`credentials/describe` 里 `DEEPSEEK_API_KEY.configured = false`，`modelCatalog.routableProviders = []`），真 UI 的输入框被"请选择模型"挡住，回车发不出去，所以**抓不到发送和流式帧**。
+
+要补这一段，必须有一个配好模型的实例：
+
+1. 用官方账号登录后手动发一条消息，同时抓帧（会动到用户凭据）
+2. 在测试环境配一个便宜的 provider，跑一次真实额度
+
+**在拿到真实帧之前，不要猜 `session/send` 长什么样。**
+
+### 消息投影什么时候能做
+
+`snapshot.records` 是事件流（`{type:'event', event:{type, seq, time, data}}`），要投影成我们的 `Turn/Block`，得先知道这几类事件的形状：
+
+- 用户 / 助手消息事件
+- 工具调用开始与结束
+- 审批请求
+- `assistantStream` 的增量修订
+
+这四个都卡在"没有一次真实运行"上。
+
+## 七、可复现的验证脚本
 
 仓库里有两个一次性的探针（不进产品代码）：
 
@@ -195,4 +239,7 @@ node --import tsx scripts/probe-real-api.ts "<带 token 的 url>"
 
 # 最小客户端：登录 → RPC → WS 开流拿快照
 node --import tsx scripts/probe-real-client.ts http://127.0.0.1:8899 <token>
+
+# 桥的端到端验证：起桥 → 用 EngineClient 读真实会话
+node --import tsx scripts/test-real-bridge.ts http://127.0.0.1:8899 <token>
 ```

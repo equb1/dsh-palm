@@ -84,6 +84,19 @@ npm test           # 7 条端到端用例：握手 / 流式 / 审批 / 拒绝 / 
 npm run typecheck
 ```
 
+## 连真引擎（只读）
+
+Mock 引擎之后，有一个能连**真 dsh** 的桥：`engine/src/real/`。
+
+```bash
+# 真 dsh 启动后会打印 http://127.0.0.1:8899/?token=xxx
+node --import tsx engine/src/real/main.ts http://127.0.0.1:8899 <token> 8788
+```
+
+App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，就能看到真宿主上的会话、预设（standard / ptc / minimal / cordis）和宿主版本。
+
+发送、流式、审批还没通——卡在"隔离实例没有模型凭据，抓不到真实帧"，原因写在 [docs/10-dsh-api.md](docs/10-dsh-api.md) 第六节。
+
 ## 现在已经有的
 
 | 模块 | 位置 | 状态 |
