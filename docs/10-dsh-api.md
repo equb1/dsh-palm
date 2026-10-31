@@ -171,18 +171,82 @@ cookie 名字里的 <hash> 每次启动都不同，不要硬编码。
 2. **权限模型比我们想的粗** —— 官方三档，我们要的"这个工作区只能用文档工具"需要自己在上层做工具裁剪。
 3. **消息不是消息，是事件** —— 我们后端的 `Turn/Block` 模型必须在适配层里由事件流投影出来，不能 1:1 映射。
 
-## 五、还差什么
+## 五、事件表（从会话日志读出来的）
 
-| 缺口 | 卡在哪 |
+抓包卡在"没有凭据发不出消息"，但**日志能直接读**。
+
+位置：`$DSH_HOME/sessions/<workspace 路径转义>/session.v4.jsonl.zstd`
+
+格式：**多个 zstd 帧拼接**，每帧一行 JSON。Node 的 `zstdDecompressSync` 只解第一帧，必须按 magic
+（`28 B5 2F FD`）切帧后逐帧解。实测 2.1MB 的文件切成 1549 帧。
+
+一次真实会话（34 条用户消息 / 334 步）的事件分布：
+
+| 次数 | 事件 |
 |---|---|
-| 发消息 | 没抓到 `session/send` 之类的方法；可能在 `session/control` 流里，也可能在 `$events` 上 |
-| 流式文本 | `assistantStream` 的增量格式没验 |
-| 审批 | 事件名和载荷没验 |
-| 工具卡片 | 事件里的 tool 类型没验 |
+| 352 / 351 | `tool/call` / `tool/result` |
+| 334 / 333 | `step/start` / `step/end` |
+| 334 | `assistant/message` |
+| 335 | `session-log-deepseek/delivery-accepted` |
+| 170 / 169 | `job/registered` / `job/settled` |
+| 44 | `agent/inbox/spliced` |
+| 34 | `user/message` |
+| 20 / 19 | `turn/start` / `turn/end` |
+| 7 | `workspace/changes` |
+| 6 | `deliverables/presented` |
+| 3 | `todo/write` |
+| 2 | `session/title`、`permission/preset`、`sandbox/mode`、`approval/policy` |
+
+### 关键形状（已脱敏）
+
+```
+turn/start    { turn }
+turn/end      { turn, reason:{ kind:'completed' } }
+step/start    { turn, step }
+step/end      { turn, step }
+
+user/message  { content:[{type:'text', text}], role:'user', id,
+                source:{ kind:'user' | 'user-approval' } }   surfaceOp:'append'
+
+assistant/message
+              { turn, step,
+                message:{ role:'assistant', content:[…], id,
+                          source:{ kind:'model', provider, model } },
+                usage:{ inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens },
+                stream:[{ type:'chunk', time, chunk }] }      surfaceOp:'append'
+
+tool/call     { turn, step, callId, name, arguments }
+tool/result   { turn, step,
+                message:{ role:'tool', toolCallId, content, isError, id },
+                error?:{ name, code },
+                sourceEventSeqs:[…] }                          surfaceOp:'append'
+
+session/title { title, messageSeqs:[…], source:{ kind } }
+model/selection { provider, model, reasoningEffort }
+approval/policy { policy:'ask' }
+permission/preset { preset:'workspace-write' }
+sandbox/mode  { mode }
+```
+
+### 三个能直接指导实现的发现
+
+1. **`surfaceOp:'append'`** —— 消息类事件自带"往界面上追加"的语义，说明服务端已经在帮客户端做投影，我们照着 append 就行。
+2. **审批不是独立事件** —— 日志里只有 `approval/policy`（策略声明）和 `source:{kind:'user-approval'}` 的用户消息，**没有** `approval/requested`。说明审批请求可能是运行时态（走 mux 流，不落日志），只在被回答时留下痕迹。这一条决定了：**审批必须在线抓，日志补不了。**
+3. **`stream` 数组在 assistant/message 里** —— 流式 chunk 是随最终消息一起落盘的，实时增量还得从 mux 流拿。
+
+## 六、还差什么
+
+| 缺口 | 卡在哪 | 靠日志能补吗 |
+|---|---|---|
+| 消息投影 | 事件形状已拿到 | ✅ 能 |
+| 发消息 | 没抓到发送方法 | ❌ 不能 |
+| 流式增量 | `assistantStream` 的修订格式 | ❌ 不能（日志里是整体） |
+| 审批请求 | 运行时态，不落日志 | ❌ 不能 |
+| 工具卡片 | `tool/call` 的 `arguments` 是 JSON 字符串 | ✅ 能 |
 
 **下一步该做的**：在真 UI 里发一条消息、触发一次审批，把 WS 帧全抓下来。这一步做完，适配器就能写了。
 
-## 六、适配器已实现（只读路径）
+## 七、适配器已实现（只读路径）
 
 桥在 `engine/src/real/`，对外说我们的协议，对内调真 dsh。**App 不用改一行代码就能连它。**
 
@@ -226,7 +290,7 @@ node --import tsx engine/src/real/main.ts http://127.0.0.1:8899 <token> 8788
 
 这四个都卡在"没有一次真实运行"上。
 
-## 七、可复现的验证脚本
+## 八、可复现的验证脚本
 
 仓库里有两个一次性的探针（不进产品代码）：
 
@@ -242,4 +306,7 @@ node --import tsx scripts/probe-real-client.ts http://127.0.0.1:8899 <token>
 
 # 桥的端到端验证：起桥 → 用 EngineClient 读真实会话
 node --import tsx scripts/test-real-bridge.ts http://127.0.0.1:8899 <token>
+
+# 只读分析会话日志（多帧 zstd，输出事件类型与脱敏结构）
+node --import tsx scripts/analyze-session-log.ts <session.v4.jsonl.zstd>
 ```
