@@ -50,3 +50,11 @@
 ## 一句话记住我们和别人的区别
 
 别人做的是「在手机上也能用你的 agent」，我们做的是「**手机上有一个属于你的 agent，它还有一台电脑可以叫**」。
+
+---
+
+## 许可
+
+[AGPL-3.0](LICENSE)。
+
+社区项目，与 DeepSeek 官方无关。基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 构建，"DeepSeek" 名称与标识归其所有者所有。
