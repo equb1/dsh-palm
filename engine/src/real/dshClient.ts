@@ -77,7 +77,7 @@ export class DshRealClient {
     });
     if (!res.ok) throw new Error(`${method} -> HTTP ${res.status}`);
     const body = (await res.json()) as RpcEnvelope;
-    if (!body.result.ok) throw new Error(`${method} -> ${JSON.stringify(body.result).slice(0, 200)}`);
+    if (!body.result.ok) throw new Error(`${method} -> ${describeRpcError(body.result)}`);
     return body.result.value as T;
   }
 
@@ -89,7 +89,6 @@ export class DshRealClient {
     return this.rpc('agentPresets/list');
   }
 
-  /** 开 session/follow 流，拿第一帧 snapshot 后关掉 */
   snapshot(sessionId: string, timeoutMs = 4000): Promise<RealSnapshot | null> {
     const wsUrl = this.baseUrl.replace(/^http/, 'ws') + '/api/remote.mux';
     return new Promise((resolve) => {
@@ -145,3 +144,20 @@ export class DshRealClient {
     });
   }
 }
+
+/** 把网关错误压成一行可读文本（保留 code / message / issues 的字段名） */
+function describeRpcError(result: unknown): string {
+  const r = result as {
+    error?: { code?: string; message?: string; details?: { issues?: Array<{ path?: unknown[]; message?: string; code?: string }> } };
+  };
+  const err = r.error;
+  if (!err) return JSON.stringify(result).slice(0, 400);
+  const parts = [err.code ?? 'error', err.message ?? ''].filter(Boolean);
+  const issues = err.details?.issues ?? [];
+  for (const issue of issues.slice(0, 6)) {
+    const path = Array.isArray(issue.path) ? issue.path.join('.') : '';
+    parts.push(((path || '(root)') + ': ' + (issue.code ?? '') + ' ' + (issue.message ?? '')).trim());
+  }
+  return parts.join(' | ').slice(0, 600);
+}
+

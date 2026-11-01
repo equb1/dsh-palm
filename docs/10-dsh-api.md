@@ -238,11 +238,72 @@ sandbox/mode  { mode }
 
 | 缺口 | 卡在哪 | 靠日志能补吗 |
 |---|---|---|
-| 消息投影 | 事件形状已拿到 | ✅ 能 |
-| 发消息 | 没抓到发送方法 | ❌ 不能 |
+| 消息投影 | 事件形状已拿到 | ✅ 能（已实现） |
+| **发消息** | 找到 `session/prompt` | ✅ 已实现并验证（见第七节） |
 | 流式增量 | `assistantStream` 的修订格式 | ❌ 不能（日志里是整体） |
 | 审批请求 | 运行时态，不落日志 | ❌ 不能 |
-| 工具卡片 | `tool/call` 的 `arguments` 是 JSON 字符串 | ✅ 能 |
+| 工具卡片 | `tool/call` 的 `arguments` 是 JSON 字符串 | ✅ 能（已实现） |
+
+### 发消息的接口：`session/prompt`
+
+不是猜的，是从装好的包里读出来的类型定义
+（`@deepseek-ai/dsh-api-session-controller/lib/types/types.d.ts`）：
+
+```ts
+export interface SessionPromptRequest {
+  requestId: SessionRequestId;      // 客户端生成，落在被接受的那条 user/message 上
+  sessionId: SessionId;
+  mode: 'queue' | 'steer';          // 排队 / 插进当前回合
+  content: readonly PromptContentPart[];   // 至少一段非空白文本或附件
+  clientTimeZone?: string;
+}
+export interface SessionPromptValue { readonly accepted: true; }
+```
+
+`PromptContentPart` 三种：
+
+```ts
+{ type: 'text', text: string }
+{ type: 'image', mediaType, data, name? }
+{ type: 'file', receiptId }        // 先走 fileUploads/upload 拿回执
+```
+
+**实测**（隔离实例，无模型凭据）：
+
+```
+sessions.create → session-ae34a671-…
+sessions.send   → {"accepted": true}
+sessions.get    → 用户回合里出现了我们发的那句话
+```
+
+提示被接纳了，但没有模型凭据，所以 `assistant/attempt` 之后直接 `turn/end`——
+**回合没跑完，但发送链路是通的。**
+
+### 建会话：先拿工作区
+
+```ts
+// 1. 拿默认工作区
+workspace/initializeDefault {} → { workspace: { workspaceId, path, title } }
+
+// 2. 提交一个客户端生成的 sessionId
+session/create { request: { workspaceId, sessionId, agentPreset } }
+```
+
+### 投影必须过滤框架注入的 user/message
+
+真引擎会把「运行上下文 / 技能提醒 / 时间快照」也记成 `user/message`。
+一次真实对话里，**3 条注入 + 1 条真人**。
+
+区分靠 `source.kind`：
+
+| source.kind | 是不是人说的 |
+|---|---|
+| `user` | ✅ |
+| `user-approval` | ✅（审批回答） |
+| `runtime-context` / `time-context` / 其他 | ❌ 框架注入 |
+
+照单全收的话，界面上会把「Current runtime context. This snapshot supersedes…」当成用户消息显示出来。
+
 
 **下一步该做的**：在真 UI 里发一条消息、触发一次审批，把 WS 帧全抓下来。这一步做完，适配器就能写了。
 

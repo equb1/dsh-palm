@@ -66,6 +66,20 @@ assert.ok(turns.length > 0, '应当至少折出一个回合');
 assert.ok(users.length > 0, '应当有用户回合');
 assert.ok(assistants.length > 0, '应当有助手回合');
 assert.ok(thinking.length > 0, '应当有思考块');
+// 框架注入的上下文（source.kind = runtime-context / time-context / …）不能出现在用户回合里
+const injectedMarkers = ['Current runtime context', '<system-reminder>', 'Time sampled while'];
+for (const turn of users) {
+  for (const block of turn.blocks) {
+    if (block.kind !== 'text') continue;
+    for (const marker of injectedMarkers) {
+      assert.ok(
+        !block.text.includes(marker),
+        '用户回合里混进了框架注入内容：' + marker,
+      );
+    }
+  }
+}
+console.log('  框架注入内容已过滤: ✓');
 assert.ok(toolBlocks.length > 0, '应当有工具卡片');
 assert.ok(
   running.length <= 2,

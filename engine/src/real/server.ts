@@ -166,9 +166,55 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { session: detail };
     },
 
-    'sessions.create': async () => unsupported('sessions.create'),
-    'sessions.send': async () => unsupported('sessions.send'),
-    'sessions.steer': async () => unsupported('sessions.steer'),
+    // 真引擎建会话：先拿默认工作区，再提交一个客户端生成的 sessionId
+    'sessions.create': async ({ presetId, title }) => {
+      const ws = await client.rpc<{ workspace: { workspaceId: string; title?: string } }>(
+        'workspace/initializeDefault',
+        {},
+      );
+      const sessionId = 'session-' + crypto.randomUUID();
+      await client.rpc('session/create', {
+        request: { workspaceId: ws.workspace.workspaceId, sessionId, agentPreset: presetId },
+      });
+      const session: SessionSummary = {
+        id: sessionId,
+        title: title ?? '新会话',
+        presetId,
+        workspaceId: ws.workspace.title ?? ws.workspace.workspaceId,
+        hostId: HOST_ID,
+        status: 'idle',
+        updatedAt: Date.now(),
+        unread: 0,
+        preview: '',
+      };
+      broadcast('session.created', { session });
+      return { session };
+    },
+
+    // 真引擎的发消息：session/prompt。mode=queue 排队，steer 立刻插入当前回合。
+    'sessions.send': async ({ sessionId, text }) => {
+      await client.rpc('session/prompt', {
+        request: {
+          requestId: crypto.randomUUID(),
+          sessionId,
+          mode: 'queue',
+          content: [{ type: 'text', text }],
+        },
+      });
+      return { accepted: true as const, runId: crypto.randomUUID() };
+    },
+
+    'sessions.steer': async ({ sessionId, text }) => {
+      await client.rpc('session/prompt', {
+        request: {
+          requestId: crypto.randomUUID(),
+          sessionId,
+          mode: 'steer',
+          content: [{ type: 'text', text }],
+        },
+      });
+      return { accepted: true as const };
+    },
     'sessions.stop': async () => unsupported('sessions.stop'),
     'sessions.setPreset': async () => unsupported('sessions.setPreset'),
     'approvals.list': async () => ({ approvals: [] }),
