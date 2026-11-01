@@ -10,6 +10,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type {
   Capabilities,
   Method,
+  Approval,
   Block,
   Preset,
   ProtocolError,
@@ -102,6 +103,123 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   const client = new DshRealClient(options.baseUrl, options.token);
   await client.login();
 
+  type PendingEvent = {
+    eventId: string;
+    agentId: string;
+    sessionId: string;
+    kind: 'approval' | 'question';
+    /** 一次提问可能带多个问题，作答时必须每个都给一条 */
+    questionIds?: string[];
+  };
+  /** 等待本客户端作答的 waterfall 事件，key 用 eventId（同时也是 Approval.id） */
+  const pendingEvents = new Map<string, PendingEvent>();
+  let eventClientId = '';
+  let eventsDispose: (() => void) | null = null;
+
+  /**
+   * 把 $events 流里的 waterfall 帧翻成我们协议里的 approval.requested。
+   * 只有这个通道能在"等待窗口内"作答；userQuestions/answer 只能补答超时后的。
+   */
+  function startEvents(): void {
+    eventsDispose = client.openEvents((frame) => {
+      const type = String(frame.type ?? '');
+      if (type === 'ready') {
+        eventClientId = String(frame.clientId ?? '');
+        return;
+      }
+      if (type !== 'waterfall') return;
+
+      const eventId = String(frame.eventId ?? '');
+      const agentId = String(frame.agentId ?? '');
+      const event = String(frame.event ?? '');
+      const request = (frame.request ?? {}) as Record<string, unknown>;
+      if (!eventId) return;
+
+      if (event === 'user-questions/request') {
+        const list = Array.isArray(request.questions) ? (request.questions as Array<Record<string, any>>) : [];
+        const q = list[0] ?? {};
+        const options = Array.isArray(q.options)
+          ? (q.options as Array<Record<string, any>>)
+              .map((o) => ({
+                label: String(o.label ?? ''),
+                description: typeof o.description === 'string' ? o.description : undefined,
+              }))
+              .filter((o) => o.label.length > 0)
+          : [];
+        pendingEvents.set(eventId, {
+          eventId,
+          agentId,
+          sessionId: agentId,
+          kind: 'question',
+          questionIds: list.map((item) => String(item.id ?? '')),
+        });
+        const approval: Approval = {
+          id: eventId,
+          sessionId: agentId,
+          runId: '',
+          createdAt: Date.now(),
+          kind: 'question',
+          title: typeof q.header === 'string' && q.header.length > 0 ? q.header : '需要你选一下',
+          summary: String(q.question ?? ''),
+          risk: 'low',
+          actions: [],
+          options,
+          multiSelect: q.multiSelect === true,
+          questionId: String(q.id ?? ''),
+          ...(q.intent && typeof q.intent === 'object'
+            ? {
+                intent: {
+                  kind: String((q.intent as Record<string, unknown>).kind ?? ''),
+                  approve: String((q.intent as Record<string, unknown>).approve ?? ''),
+                },
+              }
+            : {}),
+          ...(typeof q.detail === 'string' ? { detail: q.detail } : {}),
+        };
+        broadcast('approval.requested', { approval });
+        return;
+      }
+
+      if (event === 'approval/request') {
+        // 实测字段：{ toolName, callId?, reason?: string, displayReason?: { zh?, en? } }
+        const toolName = String(request.toolName ?? 'tool');
+        const rawReason = typeof request.reason === 'string' ? request.reason : '';
+        const display = (request.displayReason ?? {}) as Record<string, unknown>;
+        const summary =
+          (typeof display.zh === 'string' && display.zh) ||
+          (typeof display.en === 'string' && display.en) ||
+          rawReason ||
+          '这个操作需要你确认';
+        pendingEvents.set(eventId, { eventId, agentId, sessionId: agentId, kind: 'approval' });
+        const approval: Approval = {
+          id: eventId,
+          sessionId: agentId,
+          runId: '',
+          createdAt: Date.now(),
+          kind: 'approval',
+          title: '要执行：' + toolName,
+          command: rawReason || undefined,
+          risk: 'medium',
+          summary,
+          actions: ['approve', 'reject'],
+        };
+        broadcast('approval.requested', { approval });
+      }
+    });
+  }
+
+  /** 回答一个 waterfall 事件 */
+  async function answerEvent(approvalId: string, outcome: { kind: 'result'; value?: unknown } | { kind: 'next' }): Promise<boolean> {
+    const pending = pendingEvents.get(approvalId);
+    if (!pending) return false;
+    await client.submitEventResult({ clientId: eventClientId, eventId: pending.eventId, outcome });
+    pendingEvents.delete(approvalId);
+    broadcast('approval.resolved', { sessionId: pending.sessionId, approvalId });
+    return true;
+  }
+
+  startEvents();
+
   const [presetList, sessionList] = await Promise.all([
     client.listAgentPresets().catch(() => ({ presets: [] as Array<{ id: string; isDefault?: boolean }> })),
     client.listSessions().catch(() => ({ items: [] as RealSessionListItem[] })),
@@ -138,6 +256,47 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   let liveTurn: Turn | null = null;
   let liveRunId = '';
   const blockIdByIndex = new Map<number, string>();
+  /** 还没回答的 ask_user_question，按工具调用 id 存 */
+  const pendingQuestions = new Map<string, Approval>();
+  /** 每个待回答问题的 attachWait 流，回答后要关掉 */
+  const waitStreams = new Map<string, () => void>();
+
+  /**
+   * 把 ask_user_question 的工具调用翻成一张"请选择"卡片。
+   * 参数形状（实测）：
+   *   { questions: [{ id, header?, question, options?: [{label, description?}], multi_select? }] }
+   * 目前只取第一个问题——绝大多数场景就是一个问题。
+   */
+  function questionFromToolCall(sessionId: string, callId: string, argsJson: string): Approval | null {
+    let args: Record<string, unknown>;
+    try {
+      args = JSON.parse(argsJson) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+    const list = Array.isArray(args.questions) ? (args.questions as Array<Record<string, unknown>>) : [];
+    const q = list[0];
+    if (!q) return null;
+    const options = Array.isArray(q.options)
+      ? (q.options as Array<Record<string, unknown>>)
+          .map((o) => ({ label: String(o.label ?? ''), description: typeof o.description === 'string' ? o.description : undefined }))
+          .filter((o) => o.label.length > 0)
+      : [];
+    return {
+      id: callId,
+      sessionId,
+      runId: liveRunId,
+      createdAt: Date.now(),
+      kind: 'question',
+      title: typeof q.header === 'string' && q.header.length > 0 ? q.header : '需要你选一下',
+      summary: String(q.question ?? ''),
+      risk: 'low',
+      actions: [],
+      options,
+      multiSelect: q.multi_select === true,
+      questionId: String(q.id ?? ''),
+    };
+  }
 
   function startFollow(sessionId: string): void {
     if (followSessionId === sessionId) return;
@@ -157,16 +316,31 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   }
 
   function handleFollowValue(sessionId: string, value: Record<string, unknown>): void {
+    if (process.env.DSH_PALM_DEBUG) {
+      const evType = (value as { event?: { type?: string } }).event?.type;
+      console.error('[follow]', String(value.type), evType ?? '');
+    }
     // 真引擎的事件（turn/end 之类）
     if (value.type === 'event') {
       const ev = (value as { event?: { type?: string; data?: Record<string, unknown> } }).event;
       if (ev?.type === 'turn/end' && liveTurn) {
-        liveTurn.status = 'done';
+        // 真引擎的收尾原因：completed / aborted（用户中断）/ stopped
+        const reason = (ev.data?.reason ?? {}) as Record<string, unknown>;
+        const kind = typeof reason.kind === 'string' ? reason.kind : '';
+        const cancelled = kind === 'aborted' || kind === 'stopped';
+        liveTurn.status = cancelled ? 'stopped' : 'done';
         liveTurn.meta = { steps: liveTurn.blocks.length };
         broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
-        broadcast('run.finished', { sessionId, runId: liveRunId, reason: 'done', usage: liveTurn.usage });
+        broadcast('run.finished', {
+          sessionId,
+          runId: liveRunId,
+          reason: cancelled ? 'stopped' : 'done',
+          usage: liveTurn.usage,
+        });
         liveTurn = null;
       }
+
+
       return;
     }
 
@@ -243,6 +417,25 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     broadcast('block.appended', { sessionId, runId: 'pending', turn });
   }
 
+  /** 从会话记录里捞出"提了问但还没回答"的调用（重开会话时用） */
+  function seedPendingQuestions(sessionId: string, records: RealRecord[]): void {
+    const asked = new Map<string, string>(); // callId -> arguments
+    const answered = new Set<string>();
+    for (const rec of records) {
+      const ev = rec?.event as { type?: string; data?: Record<string, unknown> } | undefined;
+      if (!ev?.type || !ev.data) continue;
+      if (ev.type === 'tool/call' && String(ev.data.name ?? '') === 'ask_user_question') {
+        asked.set(String(ev.data.callId ?? ''), String(ev.data.arguments ?? ''));
+      }
+      if (ev.type === 'tool/result') answered.add(String(ev.data.toolCallId ?? ''));
+    }
+    for (const [callId, argsJson] of asked) {
+      if (answered.has(callId) || pendingQuestions.has(callId)) continue;
+      const approval = questionFromToolCall(sessionId, callId, argsJson);
+      if (approval) pendingQuestions.set(callId, approval);
+    }
+  }
+
   type Handler<M extends Method> = (params: RequestParams[M]) => Promise<unknown>;
   const unsupported = (name: string): never => {
     throw Object.assign(new Error(`${name} 在真引擎桥上还没实现`), {
@@ -277,6 +470,9 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       };
       if (snap?.header?.agentPreset) detail.presetId = snap.header.agentPreset;
       if (proj.title) detail.title = proj.title;
+
+      // 重新打开会话时，把还没回答的提问找回来（客户端会调 approvals.list）
+      seedPendingQuestions(sessionId, records);
 
       // 打开（或切换）这个会话的实时流，之后的新回合会以事件形式推给客户端
       startFollow(sessionId);
@@ -334,10 +530,50 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       });
       return { accepted: true as const };
     },
-    'sessions.stop': async () => unsupported('sessions.stop'),
+    // 中断当前回合：session/cancel
+    'sessions.stop': async ({ sessionId }) => {
+      await client.rpc('session/cancel', { request: { sessionId } });
+      return { accepted: true as const };
+    },
     'sessions.setPreset': async () => unsupported('sessions.setPreset'),
-    'approvals.list': async () => ({ approvals: [] }),
-    'approvals.resolve': async () => unsupported('approvals.resolve'),
+    'approvals.list': async () => ({ approvals: [...pendingQuestions.values()] }),
+
+    // 回答 ask_user_question：回执会被 steer 进 agent，成为一条 user 消息。
+    //
+    // 时序（实测）：真引擎的提问在「等待窗口内」只接受宿主进程内的 waterfall 处理器作答，
+    // 远端客户端拿不到；窗口结束、工具返回 pending 之后，问题变成 continued，才能用
+    // userQuestions/answer 补答。所以这里先乐观返回，真正的交付在后台重试。
+    // 回答提问：优先走 $events 的 waterfall 通道（窗口内立即生效）。
+    // 只有那张卡片已经不在了（比如过了很久才点）才退回 userQuestions/answer 补答。
+    'questions.answer': async ({ sessionId, callId, answers }) => {
+      pendingQuestions.delete(callId);
+      // 一次提问可能带多个问题：缺的那些补一个空回答，否则引擎会 BAD_ANSWER 拒掉整批
+      const pending = pendingEvents.get(callId);
+      const allIds = pending?.questionIds ?? [];
+      const complete = allIds.length > 1 ? allIds.map((id) => answers.find((a) => a.id === id) ?? { id, selected: [] as string[] }) : answers;
+      const viaEvent = await answerEvent(callId, { kind: 'result', value: { answers: complete } }).catch(() => false);
+      if (viaEvent) return { accepted: true as const };
+
+      await client.rpc<boolean>('userQuestions/answer', {
+        agentId: sessionId,
+        callId,
+        answer: { answers },
+      });
+      broadcast('approval.resolved', { sessionId, approvalId: callId });
+      return { accepted: true as const };
+    },
+
+    // 审批：同样走 $events，真引擎只接受 'allowed-once' 这一种批准
+    'approvals.resolve': async ({ approvalId, decision }) => {
+      const viaEvent = await answerEvent(approvalId, {
+        kind: 'result',
+        value: decision === 'approve' ? 'allowed-once' : 'rejected',
+      }).catch(() => false);
+      if (!viaEvent) {
+        throw Object.assign(new Error('这条审批已经失效'), { code: 'not_found' satisfies ProtocolError['code'] });
+      }
+      return { accepted: true as const };
+    },
     'presets.list': async () => ({ presets }),
 
     'credentials.describe': async ({ refs }) => {
@@ -444,6 +680,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     port,
     close: () =>
       new Promise<void>((resolve) => {
+        eventsDispose?.();
         followDispose?.();
         followDispose = null;
         for (const ws of clients) ws.close();

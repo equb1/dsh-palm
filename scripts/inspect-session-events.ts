@@ -43,6 +43,12 @@ async function main(): Promise<void> {
       clearTimeout(timer);
       const records = msg.value.records ?? [];
       console.log('会话:', sid, '| 记录数:', records.length);
+      const byType = new Map<string, number>();
+      for (const r of records) {
+        const t = String(r?.event?.type ?? '?');
+        byType.set(t, (byType.get(t) ?? 0) + 1);
+      }
+      console.log('事件类型:', [...byType.entries()].map(([k, v]) => k + 'x' + v).join(' '));
       for (const rec of records.slice(-10)) {
         const ev = rec.event ?? {};
         const d = ev.data ?? {};

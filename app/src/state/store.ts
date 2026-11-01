@@ -142,6 +142,11 @@ export class Store {
     try {
       const { session } = await this.client.request('sessions.get', { sessionId: id });
       this.patch({ detail: session, currentId: id, busy: false });
+      // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
+      const { approvals } = await this.client.request('approvals.list', { sessionId: id });
+      const map: Record<string, Approval> = {};
+      for (const a of approvals) map[a.id] = a;
+      this.patch({ approvals: map });
     } catch (err) {
       this.fail(err);
     }
@@ -227,7 +232,11 @@ export class Store {
     try {
       if (running) await this.client.request('sessions.steer', { sessionId: currentId, text });
       else await this.client.request('sessions.send', { sessionId: currentId, text });
-      this.patch({ busy: false });
+      // 提交成功后立刻置为 running：停止按钮要马上出现，
+      // 下一条消息也要走 steer（插话）而不是再排一个回合。
+      const { detail: latest } = this.state;
+      if (latest) this.patch({ busy: false, detail: { ...latest, status: 'running' } });
+      else this.patch({ busy: false });
     } catch (err) {
       this.fail(err);
     }
@@ -260,6 +269,27 @@ export class Store {
       await this.client.request('approvals.resolve', { approvalId, decision });
       const next = { ...this.state.approvals };
       delete next[approvalId];
+      this.patch({ approvals: next });
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  /**
+   * 回答 ask_user_question。
+   * selected 是选中的选项文案；custom 是"自己说"的自由文本（两者可以同时有）。
+   */
+  async answerQuestion(callId: string, questionId: string, selected: string[], custom?: string): Promise<void> {
+    const { currentId } = this.state;
+    if (!this.client || !currentId) return;
+    try {
+      await this.client.request('questions.answer', {
+        sessionId: currentId,
+        callId,
+        answers: [{ id: questionId, selected, ...(custom ? { custom } : {}) }],
+      });
+      const next = { ...this.state.approvals };
+      delete next[callId];
       this.patch({ approvals: next });
     } catch (err) {
       this.fail(err);
@@ -328,7 +358,39 @@ export class Store {
 
       case 'approval.requested': {
         const approval = data.approval as Approval;
-        this.patch({ approvals: { ...this.state.approvals, [approval.id]: approval } });
+        const nextApprovals = { ...this.state.approvals, [approval.id]: approval };
+        const d = this.state.detail;
+
+        // 卡片是挂在回合的 block 上渲染的，所以必须往时间线里插一个 block，
+        // 否则 approvals 里有数据、界面上却什么都不画（这就是"一直没有卡片"）。
+        if (!d) {
+          this.patch({ approvals: nextApprovals });
+          return;
+        }
+        const block: Block = { kind: 'approval', id: 'ap-' + approval.id, approvalId: approval.id };
+        const turns = d.turns.slice();
+        let placed = false;
+        for (let i = turns.length - 1; i >= 0; i--) {
+          const t = turns[i]!;
+          if (t.role !== 'assistant') continue;
+          if (t.blocks.some((b) => b.kind === 'approval' && b.approvalId === approval.id)) {
+            placed = true;
+            break;
+          }
+          turns[i] = { ...t, blocks: [...t.blocks, block] };
+          placed = true;
+          break;
+        }
+        if (!placed) {
+          turns.push({
+            id: 'turn-ap-' + approval.id,
+            role: 'assistant',
+            createdAt: Date.now(),
+            status: 'streaming',
+            blocks: [block],
+          });
+        }
+        this.patch({ approvals: nextApprovals, detail: { ...d, turns } });
         return;
       }
 
@@ -339,8 +401,19 @@ export class Store {
         return;
       }
 
+      case 'run.started': {
+        // 回合开始：界面要变成"生成中"，发送键变成停止键
+        const d = this.state.detail;
+        if (d && data.sessionId === currentId) this.patch({ detail: { ...d, status: 'running' }, busy: true });
+        return;
+      }
+
       case 'run.finished': {
-        this.patch({ busy: false });
+        const d = this.state.detail;
+        this.patch({
+          busy: false,
+          ...(d && data.sessionId === currentId ? { detail: { ...d, status: 'idle' as const } } : {}),
+        });
         return;
       }
 

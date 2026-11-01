@@ -467,6 +467,11 @@ const handlers: { [M in Method]: Handler<M> } = {
     return { approvals: list };
   },
 
+  'questions.answer': ({ callId }) => {
+    pendingApprovals.delete(callId);
+    return { accepted: true as const };
+  },
+
   'approvals.resolve': ({ approvalId, decision }) => {
     const entry = pendingApprovals.get(approvalId);
     if (!entry) {

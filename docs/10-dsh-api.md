@@ -320,6 +320,76 @@ sessions.get    → 用户回合里出现了我们发的那句话
 → 拼出 317 字的完整回复，3 秒出第一段
 ```
 
+### 提问与审批：`$events` 远程事件通道（唯一能"窗口内作答"的路）
+
+**先说结论**：真引擎把 `approval/request` 和 `user-questions/request` 这两个 waterfall
+**转发给远程客户端**，客户端通过 `$events` 流接收、通过 `$events/result` 作答。
+这是 dsh 自己的网页版用的通道，也是唯一能在"等待窗口内"回答的路。
+
+#### 协议
+
+```
+ws /api/remote.mux
+  → {type:'open', streamId, endpoint:'$events', payload:{args:{}}}
+
+第一帧： {type:'ready', clientId, host}
+随后：   {type:'waterfall', event:'user-questions/request'|'approval/request',
+                       eventId, agentId, request}
+         {type:'emit', event, args}          // 只是通知，不用答
+
+作答（HTTP RPC）：
+POST /api/$events/result
+{type:'client-request', rpcId, method:'$events/result',
+ payload:{args:{ clientId, eventId, outcome }}}
+
+outcome: {kind:'result', value}   // 结束，value 交回 waterfall
+         {kind:'next'}            // 交给下一个处理器
+```
+
+`value` 的形状按事件分：
+
+| 事件 | request | value |
+|---|---|---|
+| `user-questions/request` | `{questions:[{id,question,header?,options?,multiSelect?}], wait?}` | `{answers:[{id, selected:[label], custom?}]}` |
+| `approval/request` | `{toolName, callId?, reason?}` | `'allowed-once'`（唯一的批准）/ `'rejected'` / `'cancelled'` |
+
+**实测**（隔离实例，直接开 `$events`）：
+
+```
+ready: clientId = e44011cc-…
+>>> waterfall: user-questions/request  eventId=6e7d9a7a…
+POST /api/$events/result {"kind":"result","value":{"answers":[{"id":"today_task","selected":["写代码"]}]}}
+→ 200 {"ok":true}
+→ tool/result 立刻返回 {"answers":[{"id":"today_task","selected":["写代码"]}]}
+```
+
+**当场就返回了，不用等超时。**
+
+#### 那 `userQuestions/answer` 是干什么的
+
+它是"问题已经过了等待窗口、工具返回 pending 之后"的**补答**接口。
+`answer()` 里有一句硬判断：
+
+```js
+const question = this.continued(agent).find((item) => item.callId === callId);
+if (question === void 0) return false;
+```
+
+`continued()` 只收 `state === 'continued'` 的问题，而这个状态**在工具返回 pending 之后才出现**。
+所以窗口内调 `answer` 永远返回 `false`。
+
+`userQuestions/attachWait` 是个流，作用是"客户端占住这次等待"（暂停宿主的超时计时器），
+在 `$events` 方案里不再需要。
+
+#### 顺带记两个坑（做 profile 裁剪时会踩）
+
+1. **`tool-ask-user` 默认是 legacy（阻塞式）**，配置项：`{mode:'legacy'|'timed', timeout}`。
+   走 `$events` 的话两种模式都能答，但 `timed` 多一层超时兜底，推荐开。
+2. **它是嵌套条目**（在 `preset-*/config/plugins` 里），根级 `--patch` 够不着，报
+   `entry "tool-ask-user" not found`；要整块替换 preset 的 config，脚本见
+   [`scripts/make-timed-patch.ts`](../scripts/make-timed-patch.ts)。
+3. 模型有时会给 `timeout` 传 `-1`（无限等待），可以在 persona 里约束成正整数。
+
 ### 建会话：先拿工作区
 
 ```ts

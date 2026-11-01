@@ -174,15 +174,28 @@ export function projectRecords(records: RealRecord[]): Projection {
           currentTurnNo = typeof d.turn === 'number' ? d.turn : -1;
         }
         blockSeq += 1;
+        const callName = str(d.name) || 'tool';
+        const callId = typeof d.callId === 'string' ? d.callId : '';
+
+        // ask_user_question 不是普通工具行，它要渲染成一张"请选择"卡片
+        if (callName === 'ask_user_question' && callId) {
+          const block: Extract<Block, { kind: 'approval' }> = {
+            kind: 'approval',
+            id: `ask-${blockSeq}`,
+            approvalId: callId,
+          };
+          current.blocks.push(block);
+          break;
+        }
+
         const block: Extract<Block, { kind: 'tool' }> = {
           kind: 'tool',
           id: `tool-${blockSeq}`,
-          name: str(d.name) || 'tool',
+          name: callName,
           summary: summarizeArgs(d.arguments),
           state: 'running',
         };
         current.blocks.push(block);
-        const callId = typeof d.callId === 'string' ? d.callId : '';
         if (callId) toolIndex.set(callId, block);
         break;
       }
@@ -205,7 +218,9 @@ export function projectRecords(records: RealRecord[]): Projection {
         if (current && current.role === 'assistant') {
           const reason = (d.reason ?? {}) as Record<string, unknown>;
           const kind = str(reason.kind);
-          current.status = kind === 'completed' ? 'done' : kind === 'stopped' ? 'stopped' : 'error';
+          // 真引擎的取值：completed | aborted（用户中断，带嵌套 reason.kind = 'user'）| stopped
+          current.status =
+            kind === 'completed' ? 'done' : kind === 'stopped' || kind === 'aborted' ? 'stopped' : 'error';
           current.meta = { steps: current.blocks.length };
         }
         current = null;

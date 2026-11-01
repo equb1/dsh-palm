@@ -154,6 +154,11 @@ export interface Approval {
   sessionId: string;
   runId: string;
   createdAt: number;
+  /**
+   * 'approval'（默认）= 危险操作要批准；'question' = Agent 在问用户选哪个。
+   * 两者走同一个展示位，但回答方式不同：前者是 allow/deny，后者是选选项。
+   */
+  kind?: 'approval' | 'question';
   /** 一句话说清要发生什么 */
   title: string;
   /** 将要执行的原文（命令 / 工具名 + 参数） */
@@ -165,6 +170,19 @@ export interface Approval {
   diff?: string;
   actions: ApprovalDecision[];
   expiresAt?: number;
+  /** kind === 'question' 时的可选项 */
+  options?: Array<{ label: string; description?: string }>;
+  /** 能不能多选 */
+  multiSelect?: boolean;
+  /** 选项所属的问题 id，回答时要带回去 */
+  questionId?: string;
+  /**
+   * 确认型提问（引擎带 intent）才有：approve 是"批准"那个选项的文案。
+   * 普通提问没有这个字段，界面就不该标推荐。
+   */
+  intent?: { kind: string; approve: string };
+  /** 这次要审阅的内容（确认型提问会带） */
+  detail?: string;
 }
 
 /* ------------------------------------------------------------------ *
@@ -230,6 +248,14 @@ export interface RequestParams {
   'sessions.setPreset': { sessionId: string; presetId: string };
   'approvals.list': { sessionId?: string };
   'approvals.resolve': { approvalId: string; decision: ApprovalDecision };
+  /** 回答 ask_user_question（Agent 在问用户选哪个） */
+  'questions.answer': {
+    sessionId: string;
+    /** 工具调用 id，也就是 Approval.id */
+    callId: string;
+    /** 每个问题一条，selected 是选中的选项 label */
+    answers: Array<{ id: string; selected: string[]; custom?: string }>;
+  };
   'presets.list': Record<string, never>;
   'workspaces.list': Record<string, never>;
   /** 模型凭据：查状态 / 写入（存在宿主上，手机不留） */
@@ -250,6 +276,7 @@ export interface RequestResults {
   'sessions.setPreset': { session: SessionDetail };
   'approvals.list': { approvals: Approval[] };
   'approvals.resolve': { accepted: true };
+  'questions.answer': { accepted: true };
   'presets.list': { presets: Preset[] };
   'workspaces.list': { workspaces: Workspace[] };
   'credentials.describe': { credentials: Record<string, { configured: boolean; writable: boolean }> };

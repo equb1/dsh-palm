@@ -114,7 +114,10 @@ export class DshRealClient {
           type?: string;
           value?: Record<string, unknown>;
         };
-        if (msg.streamId !== streamId || msg.type !== 'item' || !msg.value) return;
+        // 多路流里既有 type='item'（assistant-stream），也有别种信封（事件），
+        // 一律按 streamId 过滤，别按 type 过滤——否则 tool/call 这类事件会被丢掉。
+        if (msg.streamId !== streamId || !msg.value) return;
+
         onValue(msg.value);
       } catch {
         /* ignore */
@@ -129,6 +132,86 @@ export class DshRealClient {
     };
   }
 
+  /**
+   * 挂住一个待回答的提问（userQuestions/attachWait 是个流端点）。
+   * 不挂的话，answer 会返回 false —— 问题不在 "continued" 集合里。
+   * 返回关闭函数，回答完就关。
+   */
+  attachWait(sessionId: string, callId: string): () => void {
+    const ws = new WebSocket(this.baseUrl.replace(/^http/, 'ws') + '/api/remote.mux', {
+      headers: { cookie: this.cookie },
+    } as never);
+    const streamId = crypto.randomUUID();
+    ws.onopen = () => {
+      ws.send(
+        JSON.stringify({
+          type: 'open',
+          streamId,
+          endpoint: 'userQuestions/attachWait',
+          payload: { args: { agentId: sessionId, callId } },
+        }),
+      );
+    };
+    // 流里的内容我们暂时不消费，挂着就行
+    ws.onmessage = () => undefined;
+    return () => {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+    };
+  }
+  /**
+   * 打开 $events 远程事件流。
+   * 第一帧是 {type:'ready', clientId}，之后会有：
+   *   {type:'waterfall', event, eventId, agentId, request}  需要客户端作答
+   *   {type:'emit', event, args}                            只是通知
+   */
+  openEvents(onFrame: (frame: Record<string, unknown>) => void): () => void {
+    const ws = new WebSocket(this.baseUrl.replace(/^http/, 'ws') + '/api/remote.mux', {
+      headers: { cookie: this.cookie },
+    } as never);
+    const streamId = crypto.randomUUID();
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'open', streamId, endpoint: '$events', payload: { args: {} } }));
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(String((ev as MessageEvent).data)) as { streamId?: string; value?: Record<string, unknown> };
+        if (msg.streamId !== streamId || !msg.value) return;
+        onFrame(msg.value);
+      } catch {
+        /* ignore */
+      }
+    };
+    return () => {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+    };
+  }
+
+  /** 回答一个 waterfall 事件（这是唯一能"窗口内作答"的通道） */
+  async submitEventResult(input: {
+    clientId: string;
+    eventId: string;
+    outcome: { kind: 'result'; value?: unknown } | { kind: 'next' };
+  }): Promise<void> {
+    const res = await fetch(this.baseUrl + '/api/$events/result', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: this.cookie },
+      body: JSON.stringify({
+        type: 'client-request',
+        rpcId: crypto.randomUUID(),
+        method: '$events/result',
+        payload: { args: input },
+      }),
+    });
+    if (!res.ok) throw new Error('$events/result -> HTTP ' + String(res.status));
+  }
   snapshot(sessionId: string, timeoutMs = 4000): Promise<RealSnapshot | null> {
     const wsUrl = this.baseUrl.replace(/^http/, 'ws') + '/api/remote.mux';
     return new Promise((resolve) => {
@@ -174,7 +257,9 @@ export class DshRealClient {
             type?: string;
             value?: RealSnapshot;
           };
-          if (msg.streamId !== streamId || msg.type !== 'item' || !msg.value) return;
+          // 多路流里既有 type='item'（assistant-stream），也有别种信封（事件），
+        // 一律按 streamId 过滤，别按 type 过滤——否则 tool/call 这类事件会被丢掉。
+        if (msg.streamId !== streamId || !msg.value) return;
           if (msg.value.header) finish(msg.value);
         } catch {
           /* ignore */
