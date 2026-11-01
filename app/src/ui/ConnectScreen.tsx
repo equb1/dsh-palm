@@ -38,18 +38,27 @@ export function ConnectScreen(): React.ReactElement {
             </View>
 
             <Text style={styles.label}>配对码</Text>
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={styles.input}
-                value={state.pairCode}
-                onChangeText={(t) => store.setPairCode(t)}
-                placeholder="6 位数字，宿主启动时会打印"
-                placeholderTextColor={colors.textFaint}
-                keyboardType="number-pad"
-                maxLength={6}
-                accessibilityLabel="配对码"
-              />
-            </View>
+            {state.deviceKey ? (
+              <View style={styles.pairedRow}>
+                <Text style={styles.pairedText}>这台设备已配对，不用再输配对码</Text>
+                <Pressable accessibilityRole="button" onPress={() => void store.forgetDevice()}>
+                  <Text style={styles.pairedAction}>忘记这台设备</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.inputWrap}>
+                <TextInput
+                  style={styles.input}
+                  value={state.pairCode}
+                  onChangeText={(t) => store.setPairCode(t)}
+                  placeholder="6 位数字，宿主启动时会打印"
+                  placeholderTextColor={colors.textFaint}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  accessibilityLabel="配对码"
+                />
+              </View>
+            )}
 
             {Boolean(state.error) ? (
               <Pressable onPress={() => store.clearError()}>
@@ -63,6 +72,14 @@ export function ConnectScreen(): React.ReactElement {
               disabled={state.conn === 'connecting'}
               style={styles.submit}
             />
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => store.openSettings()}
+              style={styles.settingsRow}
+            >
+              <Text style={styles.settingsText}>设置 · 本机引擎 / 凭据</Text>
+            </Pressable>
 
             <View style={styles.hintBox}>
               <Text style={styles.hintTitle}>先把引擎跑起来</Text>
@@ -110,6 +127,10 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   spacer: { height: space.xl },
+  pairedRow: { gap: 6, paddingVertical: 4 },
+  pairedText: { color: colors.textDim, fontSize: 13 },
+  pairedAction: { color: colors.blue, fontSize: 13 },
+
   label: { color: colors.textDim, fontSize: 12, marginBottom: 6, letterSpacing: 0.5 },
   inputWrap: {
     backgroundColor: colors.glass,
@@ -122,6 +143,8 @@ const styles = StyleSheet.create({
   },
   input: { color: colors.text, fontSize: 14, padding: 0 },
   submit: { marginTop: space.sm },
+  settingsRow: { alignItems: 'center', paddingVertical: 10 },
+  settingsText: { color: colors.textDim, fontSize: 12.5 },
   error: { color: colors.danger, fontSize: 12, textAlign: 'center', marginBottom: space.sm },
   hintBox: {
     marginTop: space.xxl,

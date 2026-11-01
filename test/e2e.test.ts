@@ -177,6 +177,69 @@ test('会话内升级预设：契约跟着换', async () => {
   assert.ok(after.session.contract.tools.includes('docs.write'));
 });
 
+test('模型：列目录 + 切模型写回会话', async () => {
+  const { models, default: fallback } = await client.request('models.list', {});
+  assert.ok(models.length > 0, '至少要有一个模型');
+  assert.ok(models.every((m) => m.provider && m.id), '每个模型都要有 provider 和 id');
+  assert.ok(fallback, '要给出宿主默认模型');
+
+  const { session } = await client.request('sessions.create', { presetId: 'standard' });
+  const target = models.find((m) => m.id !== fallback?.model) ?? models[0]!;
+  const { session: updated } = await client.request('sessions.setModel', {
+    sessionId: session.id,
+    provider: target.provider,
+    model: target.id,
+    reasoningEffort: target.defaultEffort,
+  });
+  assert.equal(updated.model?.provider, target.provider);
+  assert.equal(updated.model?.model, target.id);
+});
+test('权限：列预设 + 切预设写回会话', async () => {
+  const { options, default: fallback } = await client.request('permissions.list', {});
+  assert.ok(options.length >= 3, '至少三档权限');
+  assert.ok(options.some((o) => o.value === 'read-only'));
+  assert.ok(fallback, '要给出宿主默认权限');
+
+  const { session } = await client.request('sessions.create', { presetId: 'standard' });
+  const target = 'danger-full-access';
+  const { session: updated } = await client.request('sessions.setPermission', {
+    sessionId: session.id,
+    preset: target,
+  });
+  assert.equal(updated.permission, target);
+
+  const again = await client.request('sessions.get', { sessionId: session.id });
+  assert.equal(again.session.permission, target, '切完要能读回来');
+});
+test('附件：上传拿到回执，能带进 sessions.send', async () => {
+  const { session } = await client.request('sessions.create', { presetId: 'standard' });
+  const data = Buffer.from('hello attachment', 'utf8').toString('base64');
+  const uploaded = await client.request('attachments.upload', { sessionId: session.id, data, name: 'a.txt' });
+  assert.ok(uploaded.receiptId.length > 0, '要返回回执');
+
+  const res = await client.request('sessions.send', {
+    sessionId: session.id,
+    text: '带附件的一条',
+    attachments: [uploaded.receiptId],
+  });
+  assert.equal(res.accepted, true);
+});
+
+test('工作区：列出现有工作区，能在指定工作区建会话', async () => {
+  const { workspaces } = await client.request('workspaces.list', {});
+  assert.ok(workspaces.length > 0, '至少一个工作区');
+  assert.ok(workspaces[0]!.root.length > 0, '工作区要有真实路径');
+
+  const target = workspaces[0]!;
+  const { session } = await client.request('sessions.create', {
+    presetId: 'standard',
+    workspaceId: target.id,
+  });
+  assert.ok(session.workspaceId.length > 0);
+
+  const created = await client.request('workspaces.create', { path: target.root });
+  assert.equal(created.workspace.root, target.root);
+});
 test('错误路径：未知方法给出可读错误', async () => {
   await assert.rejects(
     () => (client.request as unknown as (m: string, p: unknown) => Promise<unknown>)('nope.nope', {}),

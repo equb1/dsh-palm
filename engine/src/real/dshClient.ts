@@ -21,6 +21,11 @@ export interface RealSessionListItem {
       permissions?: { currentValue?: string };
       workingDirectory?: string;
       sessionStats?: { turns?: number; steps?: number };
+    /** 会话当前选的模型（next 是下一轮要用的，lastUsed 是上轮用过的） */
+    modelSelection?: {
+      lastUsed?: { provider?: string; model?: string; reasoningEffort?: string } | null;
+      next?: { provider?: string; model?: string; reasoningEffort?: string } | null;
+    };
     };
   };
 }
@@ -181,6 +186,39 @@ export class DshRealClient {
         const msg = JSON.parse(String((ev as MessageEvent).data)) as { streamId?: string; value?: Record<string, unknown> };
         if (msg.streamId !== streamId || !msg.value) return;
         onFrame(msg.value);
+      } catch {
+        /* ignore */
+      }
+    };
+    return () => {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+    };
+  }
+
+  /** 开任意 mux 流，回调每个 value；返回关闭函数 */
+  openStream(endpoint: string, args: Record<string, unknown>, onValue: (value: Record<string, unknown>) => void): () => void {
+    const ws = new WebSocket(this.baseUrl.replace(/^http/, 'ws') + '/api/remote.mux', {
+      headers: { cookie: this.cookie },
+    } as never);
+    const streamId = crypto.randomUUID();
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'open', streamId, endpoint, payload: { args } }));
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(String((ev as MessageEvent).data)) as {
+          streamId?: string;
+          type?: string;
+          value?: Record<string, unknown>;
+          error?: unknown;
+        };
+        if (msg.streamId !== streamId) return;
+        if (msg.type === 'error') return;
+        if (msg.value) onValue(msg.value);
       } catch {
         /* ignore */
       }

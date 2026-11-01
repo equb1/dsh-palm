@@ -4,7 +4,8 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { store, useStore } from './useStore';
 import { Btn, IconButton, Pill } from './parts';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
-import { colors, radius, space, topInset } from './theme';
+import { colors, font, radius, space, topInset } from './theme';
+import { hostAvailable } from '../lib/host';
 
 const REF = 'DEEPSEEK_API_KEY';
 
@@ -19,6 +20,27 @@ export function SettingsScreen(): React.ReactElement {
   const status = state.credentials[REF];
   const configured = status?.configured === true;
   const preset = state.caps?.presets.find((p) => p.id === state.draftPresetId) ?? state.caps?.presets[0];
+
+  // 本机引擎状态：进设置页就每 2 秒拉一次
+  const host = state.host;
+  const hostReady = host?.engine === 'ready' && host?.bridge === 'ready';
+  const hostLabel = !hostAvailable
+    ? '不支持'
+    : hostReady
+      ? '运行中'
+      : host?.engine === 'failed' || host?.bridge === 'failed'
+        ? '出错'
+        : host?.engine === 'starting'
+          ? '启动中'
+          : '已停止';
+
+  React.useEffect(() => {
+    if (!hostAvailable) return;
+    void store.refreshHost();
+    void store.loadHostCommands();
+    const timer = setInterval(() => void store.refreshHost(), 2000);
+    return () => clearInterval(timer);
+  }, []);
 
   const save = async (value: string): Promise<void> => {
     const ok = await store.saveCredential(REF, value);
@@ -82,6 +104,92 @@ export function SettingsScreen(): React.ReactElement {
           </View>
 
           <View style={styles.card}>
+            <View style={styles.rowTop}>
+              <Text style={styles.cardTitle}>本机引擎</Text>
+              <Pill>
+                <Text style={[styles.status, hostReady && { color: colors.ok }]}>{hostLabel}</Text>
+              </Pill>
+            </View>
+            <Text style={styles.hint}>
+              在这台手机上直接起引擎（原生服务）。启动后 App 连 ws://127.0.0.1:8788/ws 就是本机模式。
+            </Text>
+
+            {hostAvailable ? (
+              <>
+                <View style={styles.kv}>
+                  <Text style={styles.k}>引擎</Text>
+                  <Text style={styles.v}>{state.host?.engine ?? 'stopped'}</Text>
+                </View>
+                <View style={styles.kv}>
+                  <Text style={styles.k}>桥</Text>
+                  <Text style={styles.v}>
+                    {(state.host?.bridge ?? 'stopped') + ' · :' + String(state.host?.port ?? 8788)}
+                  </Text>
+                </View>
+                {state.host?.error ? <Text style={styles.error}>{state.host.error}</Text> : null}
+
+                <View style={styles.actions}>
+                  <Btn label="启动" onPress={() => void store.startLocalHost()} style={{ flex: 1 }} />
+                  <Btn
+                    label="停止"
+                    kind="ghost"
+                    onPress={() => void store.stopLocalHost()}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+
+                <Text style={styles.hint}>启动命令（留空用默认：proot 里的 dsh + node 桥）</Text>
+                <TextInput
+                  style={styles.input}
+                  value={state.hostEngineCmd}
+                  onChangeText={(t) => store.setHostCommands(t, state.hostBridgeCmd)}
+                  placeholder="引擎命令，例如 sh /data/local/tmp/engine.sh"
+                  placeholderTextColor={colors.textFaint}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  accessibilityLabel="引擎启动命令"
+                />
+                <TextInput
+                  style={styles.input}
+                  value={state.hostBridgeCmd}
+                  onChangeText={(t) => store.setHostCommands(state.hostEngineCmd, t)}
+                  placeholder="桥命令，可用 {token} 和 {port} 占位符"
+                  placeholderTextColor={colors.textFaint}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  accessibilityLabel="桥启动命令"
+                />
+                <View style={styles.actions}>
+                  <Btn
+                    label="刷新状态"
+                    kind="ghost"
+                    onPress={() => void store.refreshHost()}
+                    style={{ flex: 1 }}
+                  />
+                  <Btn
+                    label="看日志"
+                    kind="ghost"
+                    onPress={() => void store.refreshHostLogs()}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+
+                {state.hostLogs.length > 0 ? (
+                  <View style={styles.logBox}>
+                    {state.hostLogs.slice(-14).map((line, i) => (
+                      <Text key={i} style={styles.logLine} numberOfLines={2}>
+                        {line}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <Text style={styles.hint}>当前是 Expo Go / web，起不了本机引擎；需要装原生构建的 APK。</Text>
+            )}
+          </View>
+
+          <View style={styles.card}>
             <Text style={styles.cardTitle}>宿主</Text>
             <View style={styles.kv}>
               <Text style={styles.k}>名称</Text>
@@ -117,6 +225,16 @@ export function SettingsScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  logBox: {
+    marginTop: 8,
+    backgroundColor: colors.bgElevated,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  logLine: { color: colors.textDim, fontSize: 10.5, fontFamily: font.mono },
+
   root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
   bodyWrap: { flex: 1 },
   header: {

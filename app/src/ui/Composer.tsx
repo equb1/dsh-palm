@@ -18,6 +18,9 @@ export function Composer({
   presets,
   activePresetId,
   onPickPreset,
+  attachments = [],
+  onAttach,
+  onRemoveAttachment,
 }: {
   draft: string;
   onChangeDraft: (t: string) => void;
@@ -28,6 +31,9 @@ export function Composer({
   presets: Preset[];
   activePresetId: string | null;
   onPickPreset: (id: string) => void;
+  attachments?: Array<{ receiptId: string; name: string }>;
+  onAttach?: () => void;
+  onRemoveAttachment?: (receiptId: string) => void;
 }): React.ReactElement {
   const hasText = draft.trim().length > 0;
   const showStop = running && !hasText;
@@ -45,7 +51,34 @@ export function Composer({
   return (
     <View style={styles.wrap}>
       <View style={styles.box}>
+        {attachments.length > 0 ? (
+          <View style={styles.attachRow}>
+            {attachments.map((a) => (
+              <Pressable
+                key={a.receiptId}
+                accessibilityRole="button"
+                accessibilityLabel={'移除附件 ' + a.name}
+                onPress={() => onRemoveAttachment?.(a.receiptId)}
+                style={styles.attachChip}
+              >
+                <Text style={styles.attachChipText} numberOfLines={1}>
+                  {a.name}
+                </Text>
+                <Text style={styles.attachChipClose}>×</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
         <View style={styles.inputRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="添加附件"
+            onPress={onAttach}
+            style={({ pressed }) => [styles.attachBtn, pressed && { opacity: 0.6 }]}
+          >
+            <Text style={styles.attachGlyph}>＋</Text>
+          </Pressable>
           <TextInput
             style={[styles.input, { height: clampedHeight }]}
             value={draft}
@@ -142,7 +175,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendGlyph: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 10, paddingTop: 8 },
+  attachChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 200,
+    backgroundColor: colors.glassStrong,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  attachChipText: { color: colors.textDim, fontSize: 12 },
+  attachChipClose: { color: colors.textFaint, fontSize: 13 },
+  attachBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+  attachGlyph: { color: colors.textDim, fontSize: 16, fontWeight: '600' },  sendGlyph: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   chipRow: { gap: 6, paddingRight: space.sm },
   chip: {
     flexDirection: 'row',

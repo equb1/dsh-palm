@@ -7,9 +7,33 @@ import { HomeScreen } from './src/ui/HomeScreen';
 import { SettingsScreen } from './src/ui/SettingsScreen';
 import { store, useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
+import { hostAvailable } from './src/lib/host';
 
 export default function App(): React.ReactElement {
   const state = useStore();
+
+  // 本机宿主：App 一起来就把引擎/桥拉起来（已经跑着的话服务会忽略重复启动）
+  const autoStartHost = React.useRef(false);
+  React.useEffect(() => {
+    if (!hostAvailable || autoStartHost.current) return;
+    autoStartHost.current = true;
+    void store.startLocalHost().catch(() => undefined);
+  }, []);
+
+  // 引擎/桥就绪后自动连一次（配对码从桥日志里读），连上了就不用再轮询
+  React.useEffect(() => {
+    if (!hostAvailable || state.caps) return;
+    const tick = (): void => {
+      void store
+        .refreshHost()
+        .then(() => store.maybeAutoConnect())
+        .catch(() => undefined);
+    };
+    tick();
+    const timer = setInterval(tick, 2000);
+    return () => clearInterval(timer);
+  }, [state.caps]);
+
 
   React.useEffect(() => {
     const onBackPress = (): boolean => {
@@ -31,15 +55,17 @@ export default function App(): React.ReactElement {
     return () => sub.remove();
   }, [state.view, state.detail]);
 
-  const screen = !state.caps ? (
-    <ConnectScreen />
-  ) : state.view === 'settings' ? (
-    <SettingsScreen />
-  ) : state.detail ? (
-    <ChatScreen session={state.detail} />
-  ) : (
-    <HomeScreen />
-  );
+  // 设置页优先：没连上也要能进去（本机引擎不需要连接）
+  const screen =
+    state.view === 'settings' ? (
+      <SettingsScreen />
+    ) : !state.caps ? (
+      <ConnectScreen />
+    ) : state.detail ? (
+      <ChatScreen session={state.detail} />
+    ) : (
+      <HomeScreen />
+    );
 
   // web 上收成一列手机宽度，两边留黑，看起来才像手机
   if (Platform.OS === 'web') {

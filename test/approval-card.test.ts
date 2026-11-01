@@ -96,3 +96,14 @@ test('approval.resolved 之后卡片数据被清掉', () => {
   feed('approval.resolved', { sessionId: 'session-1', approvalId: 'ev-4' });
   assert.equal(store.getSnapshot().approvals['ev-4'], undefined);
 });
+
+test('device.paired 会记住设备密钥（下次不用再输配对码）', async () => {
+  const { store, feed } = makeStore();
+  feed('device.paired', { key: 'deadbeefdeadbeef' });
+  assert.equal(store.getSnapshot().deviceKey, 'deadbeefdeadbeef');
+
+  const { loadDeviceKey, clearDeviceKey } = await import('../app/src/lib/deviceKey');
+  assert.equal(await loadDeviceKey(), 'deadbeefdeadbeef');
+  await clearDeviceKey();
+  assert.equal(await loadDeviceKey(), null);
+});

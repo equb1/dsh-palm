@@ -1,0 +1,5 @@
+# 手机 rootfs 里没有 xdg-user-dir（dsh 用它查系统“文档”目录）。
+# 这里直接告诉 workspace-controller 文档目录在哪，绕开这次外部命令。
+- id: workspace-controller
+  config:
+    documentsDirectory: /root/Documents

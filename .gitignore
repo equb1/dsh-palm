@@ -13,8 +13,19 @@ out/
 .expo/
 .expo-shared/
 web-build/
-android/
 ios/
+# 原生工程：纳入版本管理（原生层代码在这里，不是生成物）
+app/android/.gradle/
+app/android/local.properties
+app/android/app/build/
+app/android/build/
+app/android/.cxx/
+app/android/app/.cxx/
+app/android/.kotlin/
+# 运行时镜像（150MB+，走制品/发布，不进仓库）
+app/android/app/src/main/assets/rootfs.bin
+app/android/app/src/main/assets/payload.bin
+
 *.jks
 *.keystore
 *.p8
@@ -66,6 +77,10 @@ coverage/
 Thumbs.db
 desktop.ini
 
-# ���ع���������֤����
+# 调试脚手架：脚本留着，截图/层级 dump 不留
+scratch/*.png
+scratch/*.xml
+
+# 本地工具与验证产物
 tools/
 artifacts/

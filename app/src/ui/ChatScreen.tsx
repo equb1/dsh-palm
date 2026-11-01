@@ -15,6 +15,8 @@ import { Btn, Dot, IconButton, Pill } from './parts';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { MarkdownView } from './MarkdownView';
+import { ModelSheet } from './ModelSheet';
+import { pickImage } from '../lib/pickImage';
 import { colors, font, radius, riskTone, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
@@ -312,6 +314,14 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const running = session.status === 'running' || session.status === 'waiting_approval';
   const hasText = draft.trim().length > 0;
 
+  // 头部模型徽标：优先会话自己选的，其次宿主默认；名字太长就把 DeepSeek- 前缀砍掉
+  const activeModel = session.model ?? state.defaultModel;
+  const shortModelName = React.useMemo(() => {
+    if (!activeModel) return null;
+    const found = state.models.find((m) => m.provider === activeModel.provider && m.id === activeModel.model);
+    return (found?.name ?? activeModel.model).replace(/^DeepSeek-?/i, '') || activeModel.model;
+  }, [activeModel, state.models]);
+
   React.useEffect(() => {
     const onShow = (): void => {
       if (nearBottom.current) {
@@ -360,6 +370,11 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         <Pill style={styles.presetPill}>
           <Text style={styles.presetText} numberOfLines={1}>
             {preset?.glyph ?? '·'} {preset?.name ?? session.presetId}
+          </Text>
+        </Pill>
+        <Pill onPress={() => store.openModelSheet()} style={styles.presetPill}>
+          <Text style={styles.presetText} numberOfLines={1}>
+            {shortModelName ?? '模型'}
           </Text>
         </Pill>
         <View style={{ flex: 1 }} />
@@ -419,6 +434,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           </Pressable>
         ) : null}
 
+        <ModelSheet />
         <Composer
           draft={draft}
           onChangeDraft={setDraft}
@@ -429,6 +445,18 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           presets={state.caps?.presets ?? []}
           activePresetId={session.presetId}
           onPickPreset={(id) => void store.setPreset(id)}
+          attachments={state.pendingAttachments}
+          onRemoveAttachment={(id) => store.removeAttachment(id)}
+          onAttach={() => {
+            void (async () => {
+              try {
+                const picked = await pickImage();
+                if (picked) await store.uploadAttachment(picked.base64, picked.name);
+              } catch (err) {
+                store.setError(err instanceof Error ? err.message : String(err));
+              }
+            })();
+          }}
         />
       </SmoothKeyboardAvoid>
     </View>

@@ -12,16 +12,19 @@ import type {
   Method,
   Approval,
   Block,
+  ModelOption,
   Preset,
   ProtocolError,
   RequestParams,
   SessionDetail,
   SessionSummary,
   Turn,
+  Workspace,
 } from '../../../app/src/protocol';
 import { PROTOCOL_VERSION } from '../../../app/src/protocol';
 import { DshRealClient, type RealSessionListItem } from './dshClient';
 import { projectRecords, type RealRecord } from './project';
+import { DeviceStore } from './devices';
 
 export interface RealBridgeOptions {
   /** 真 dsh 的根地址，例如 http://127.0.0.1:8899 */
@@ -29,8 +32,10 @@ export interface RealBridgeOptions {
   /** 启动时打印的那个 token */
   token: string;
   port?: number;
-  /** 手机配对码；传空字符串表示关闭鉴权（只在本机调试时用） */
+  /** 配对码；传空字符串表示关闭鉴权（只在本机调试时用） */
   pairCode?: string;
+  /** 设备密钥文件路径；不给就不发设备密钥，只认配对码 */
+  devicesFile?: string;
 }
 
 const HOST_ID = 'host-real-dsh';
@@ -470,6 +475,17 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       };
       if (snap?.header?.agentPreset) detail.presetId = snap.header.agentPreset;
       if (proj.title) detail.title = proj.title;
+      const currentPermission = item.projections?.values?.permissions?.currentValue;
+      if (typeof currentPermission === 'string') detail.permission = currentPermission;
+      const modelSel = item.projections?.values?.modelSelection;
+      const chosen = modelSel?.next ?? modelSel?.lastUsed;
+      if (chosen?.provider && chosen?.model) {
+        detail.model = {
+          provider: String(chosen.provider),
+          model: String(chosen.model),
+          ...(typeof chosen.reasoningEffort === 'string' ? { reasoningEffort: chosen.reasoningEffort } : {}),
+        };
+      }
 
       // 重新打开会话时，把还没回答的提问找回来（客户端会调 approvals.list）
       seedPendingQuestions(sessionId, records);
@@ -505,14 +521,16 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     },
 
     // 真引擎的发消息：session/prompt。mode=queue 排队，steer 立刻插入当前回合。
-    'sessions.send': async ({ sessionId, text }) => {
+    'sessions.send': async ({ sessionId, text, attachments }) => {
       broadcastUserTurn(sessionId, text);
+      const parts: Array<Record<string, unknown>> = [{ type: 'text', text }];
+      for (const receiptId of attachments ?? []) parts.push({ type: 'file', receiptId });
       await client.rpc('session/prompt', {
         request: {
           requestId: crypto.randomUUID(),
           sessionId,
           mode: 'queue',
-          content: [{ type: 'text', text }],
+          content: parts,
         },
       });
       return { accepted: true as const, runId: crypto.randomUUID() };
@@ -536,6 +554,150 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { accepted: true as const };
     },
     'sessions.setPreset': async () => unsupported('sessions.setPreset'),
+
+    'workspaces.list': async () => {
+      // workspace/follow 的第一帧是 baseline，里面就是工作区清单
+      type WorkspaceView = { workspaceId?: string; path?: string; title?: string };
+      const items = await new Promise<WorkspaceView[]>((resolve) => {
+        let done = false;
+        const finish = (list: WorkspaceView[]): void => {
+          if (done) return;
+          done = true;
+          resolve(list);
+        };
+        const dispose = client.openStream('workspace/follow', {}, (value) => {
+          const v = value as { type?: string; value?: { items?: WorkspaceView[] } };
+          if (v.type === 'baseline') finish(v.value?.items ?? []);
+        });
+        setTimeout(() => {
+          dispose();
+          finish([]);
+        }, 4000);
+      });
+      const workspaces: Workspace[] = items
+        .map((item) => ({
+          id: String(item.workspaceId ?? ''),
+          name: String(item.title ?? item.path ?? ''),
+          root: String(item.path ?? ''),
+          presetIds: [],
+        }))
+        .filter((w) => w.id.length > 0);
+      return { workspaces };
+    },
+
+    'workspaces.create': async ({ path }) => {
+      const created = await client.rpc<{ workspace?: { workspaceId?: string; path?: string; title?: string } }>(
+        'workspace/create',
+        { request: { path } },
+      );
+      const w = created.workspace ?? {};
+      const workspace: Workspace = {
+        id: String(w.workspaceId ?? ''),
+        name: String(w.title ?? w.path ?? path),
+        root: String(w.path ?? path),
+        presetIds: [],
+      };
+      return { workspace };
+    },
+    'attachments.upload': async ({ sessionId, data, name }) => {
+      const value = await client.rpc<{ receiptId?: string; file?: { name?: string } }>('fileUploads/upload', {
+        agentId: sessionId,
+        request: { data, ...(name ? { name } : {}) },
+      });
+      const receiptId = String(value.receiptId ?? '');
+      if (!receiptId) throw Object.assign(new Error('宿主没有返回上传回执'), { code: 'internal' satisfies ProtocolError['code'] });
+      return { receiptId, ...(value.file?.name ? { name: value.file.name } : name ? { name } : {}) };
+    },
+
+    'permissions.list': async () => {
+      const catalog = await client.rpc<{
+        options?: Array<{ value?: string; name?: string; description?: string }>;
+        defaultPreset?: string;
+      }>('permissionPresets/catalog', {});
+      const options = (catalog.options ?? [])
+        .map((o) => ({
+          value: String(o.value ?? ''),
+          name: String(o.name ?? o.value ?? ''),
+          ...(typeof o.description === 'string' ? { description: o.description } : {}),
+        }))
+        .filter((o) => o.value.length > 0);
+      return { options, default: catalog.defaultPreset };
+    },
+
+    'sessions.setPermission': async ({ sessionId, preset }) => {
+      // 真引擎用 /permission 命令切换（沙箱模式 + 审批策略一起换，并且写进会话事件）
+      await client.rpc('commands/execute', {
+        agentId: sessionId,
+        line: '/permission ' + preset,
+        submittedAttachments: [],
+      });
+      const { items } = await client.listSessions();
+      const item = items.find((s) => s.sessionId === sessionId);
+      if (!item) throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
+      const snap = await client.snapshot(sessionId);
+      const proj = projectRecords((snap?.records ?? []) as RealRecord[]);
+      const detail: SessionDetail = { ...toSummary(item), turns: proj.turns, contract: { tools: [], net: 'allow' } };
+      detail.permission = preset;
+      return { session: detail };
+    },
+
+    'models.list': async () => {
+      type Catalog = {
+        default?: { provider?: string; model?: string; reasoningEffort?: string };
+        groups?: Array<{
+          id?: string;
+          name?: string;
+          models?: Array<{
+            id?: string;
+            name?: string;
+            description?: string;
+            reasoning?: { efforts?: Array<{ id?: string; name?: string; description?: string }>; defaultEffort?: string };
+          }>;
+        }>;
+      };
+      const catalog = await client.rpc<Catalog>('session/modelCatalog', {});
+      const models: ModelOption[] = [];
+      for (const group of catalog.groups ?? []) {
+        for (const item of group.models ?? []) {
+          models.push({
+            provider: String(group.id ?? ''),
+            providerName: String(group.name ?? group.id ?? ''),
+            id: String(item.id ?? ''),
+            name: String(item.name ?? item.id ?? ''),
+            description: typeof item.description === 'string' ? item.description : undefined,
+            efforts: (item.reasoning?.efforts ?? [])
+              .map((e) => ({
+                id: String(e.id ?? ''),
+                name: String(e.name ?? e.id ?? ''),
+                description: typeof e.description === 'string' ? e.description : undefined,
+              }))
+              .filter((e) => e.id.length > 0),
+            defaultEffort: typeof item.reasoning?.defaultEffort === 'string' ? item.reasoning.defaultEffort : undefined,
+          });
+        }
+      }
+      const fallback = catalog.default;
+      const defaultChoice =
+        fallback?.provider && fallback.model
+          ? { provider: fallback.provider, model: fallback.model, reasoningEffort: fallback.reasoningEffort }
+          : undefined;
+      return { models, default: defaultChoice };
+    },
+
+    'sessions.setModel': async ({ sessionId, provider, model, reasoningEffort }) => {
+      await client.rpc('session/selectModel', {
+        request: { sessionId, provider, model, ...(reasoningEffort ? { reasoningEffort } : {}) },
+      });
+      // 回一个刷新过的会话详情，界面直接换状态
+      const { items } = await client.listSessions();
+      const item = items.find((s) => s.sessionId === sessionId);
+      if (!item) throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
+      const snap = await client.snapshot(sessionId);
+      const proj = projectRecords((snap?.records ?? []) as RealRecord[]);
+      const detail: SessionDetail = { ...toSummary(item), turns: proj.turns, contract: { tools: [], net: 'allow' } };
+      detail.model = { provider, model, ...(reasoningEffort ? { reasoningEffort } : {}) };
+      return { session: detail };
+    },
     'approvals.list': async () => ({ approvals: [...pendingQuestions.values()] }),
 
     // 回答 ask_user_question：回执会被 steer 进 agent，成为一条 user 消息。
@@ -602,7 +764,6 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       await client.rpc('credentials/unset', { ref });
       return { ok: true as const };
     },
-    'workspaces.list': async () => ({ workspaces: [] }),
   };
 
   const http = createServer((req, res) => {
@@ -617,21 +778,37 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
   const wss = new WebSocketServer({ server: http, path: '/ws' });
 
+  // 注意：只有配了配对码才启用设备密钥。否则 DSH_PALM_NO_PAIR=1 会形同虚设——
+  // 设备存储一存在，下面的鉴权分支就会强制要求密钥。
+  const deviceStore =
+    options.devicesFile && (options.pairCode ?? '').length > 0 ? new DeviceStore(options.devicesFile) : null;
+
   wss.on('connection', (ws, req) => {
-    // 配对：/ws?pair=123456
-    // MVP 只认配对码；正式版要改成「一次配对换设备密钥，之后每设备一把」
+    // 鉴权顺序：
+    //   1) ?key=<设备密钥> 命中 -> 直接放行（之后都不用再输配对码）
+    //   2) ?pair=<配对码> 命中 -> 放行，并发一把新设备密钥给客户端存下来
+    //   3) 两个都不对 -> 4001
     const url = new URL(req.url ?? '/ws', 'http://localhost');
     const expected = options.pairCode ?? '';
-    if (expected.length > 0) {
+    let issuedKey: string | null = null;
+    if (expected.length > 0 || deviceStore) {
+      const key = url.searchParams.get('key') ?? '';
       const pair = url.searchParams.get('pair') ?? '';
-      if (pair !== expected) {
+      const knownDevice = key.length > 0 && deviceStore ? deviceStore.verify(key) : null;
+      const pairOk = expected.length > 0 && pair === expected;
+      if (!knownDevice && !pairOk) {
         ws.close(4001, '需要配对码');
         return;
       }
+      if (!knownDevice && pairOk && deviceStore) issuedKey = deviceStore.issue().key;
     }
 
     clients.add(ws);
     ws.on('close', () => clients.delete(ws));
+    if (issuedKey) {
+      // 客户端收到后自己存起来，下次用 ?key= 连
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'event', event: 'device.paired', data: { key: issuedKey } }));
+    }
     broadcast('engine.status', { state: 'ready' });
 
     ws.on('message', (raw) => {

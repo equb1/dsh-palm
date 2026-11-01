@@ -1,12 +1,19 @@
 import { EngineClient, type ConnectionState } from '../lib/client';
+import { clearDeviceKey, loadDeviceKey, saveDeviceKey } from '../lib/deviceKey';
+import { hostAvailable, hostLogs, hostStatus, startHost, stopHost, type HostStatus } from '../lib/host';
+import { loadHostCommands, saveHostCommands } from '../lib/hostCmd';
 import type {
   Approval,
   ApprovalDecision,
   Block,
   Capabilities,
+  ModelChoice,
+  ModelOption,
+  PermissionOption,
   SessionDetail,
   SessionSummary,
   Turn,
+  Workspace,
 } from '../protocol';
 
 export interface AppState {
@@ -30,9 +37,38 @@ export interface AppState {
   view: 'main' | 'settings';
   /** 模型凭据状态（ref -> 是否已配置） */
   credentials: Record<string, { configured: boolean; writable: boolean }>;
+  /** 宿主可用的模型 */
+  models: ModelOption[];
+  /** 宿主的默认模型（会话没选过时用它） */
+  defaultModel?: ModelChoice;
+  /** 模型选择面板是否打开 */
+  modelSheetOpen: boolean;
+  /** 宿主支持的权限预设 */
+  permissions: PermissionOption[];
+  /** 宿主默认权限预设 */
+  defaultPermission?: string;
+  /** 这台设备的配对密钥（配对成功后自动存下来） */
+  deviceKey: string | null;
+  /** 宿主注册过的工作区 */
+  workspaces: Workspace[];
+  /** 已上传、等着跟下一条消息一起发的附件 */
+  pendingAttachments: Array<{ receiptId: string; name: string }>;
+  /** 本机引擎（原生宿主服务）的状态；null 表示这台设备不支持 */
+  host: HostStatus | null;
+  /** 本机引擎最近日志 */
+  hostLogs: string[];
+  /** 覆盖用的启动命令（空 = 用 Kotlin 里的默认值） */
+  hostEngineCmd: string;
+  hostBridgeCmd: string;
 }
 
-const DEFAULT_URL = 'ws://192.168.1.3:8788/ws';
+/**
+ * 默认连哪儿。
+ *
+ * 这台设备自己能起引擎（原生构建）时，桥就在本机 8788——开机即用的那条路；
+ * Expo Go / web 没有本机宿主，退回电脑上跑桥的局域网地址。
+ */
+const DEFAULT_URL = hostAvailable ? 'ws://127.0.0.1:8788/ws' : 'ws://192.168.1.3:8788/ws';
 
 type Listener = () => void;
 
@@ -52,6 +88,18 @@ export class Store {
     draftPresetId: null,
     view: 'main',
     credentials: {},
+    models: [],
+    defaultModel: undefined,
+    permissions: [],
+    defaultPermission: undefined,
+    deviceKey: null,
+    workspaces: [],
+    pendingAttachments: [],
+    host: null,
+    hostLogs: [],
+    hostEngineCmd: '',
+    hostBridgeCmd: '',
+    modelSheetOpen: false,
   };
 
   private listeners = new Set<Listener>();
@@ -86,6 +134,13 @@ export class Store {
     this.patch({ pairCode });
   }
 
+  /** 忘掉这台设备的配对（宿主那边需要手动删，或者下次从列表里撤） */
+  async forgetDevice(): Promise<void> {
+    await clearDeviceKey();
+    this.patch({ deviceKey: null, conn: 'idle', error: null });
+    this.client?.close();
+  }
+
   async connect(url?: string): Promise<void> {
     const target = (url ?? this.state.url).trim();
     const code = this.state.pairCode.trim();
@@ -112,6 +167,10 @@ export class Store {
         draftPresetId: this.state.draftPresetId ?? caps.presets[0]?.id ?? null,
       });
       await this.refreshSessions();
+      // 连上就把模型/权限/工作区拉到本地：头部徽标和新会话要立刻可用
+      void this.refreshModels();
+      void this.refreshPermissions();
+      void this.refreshWorkspaces();
     } catch (err) {
       this.patch({ conn: 'closed' });
       this.fail(err);
@@ -156,11 +215,14 @@ export class Store {
     this.patch({ detail: null, currentId: null });
   }
 
-  async createSession(presetId: string): Promise<void> {
+  async createSession(presetId: string, workspaceId?: string): Promise<void> {
     if (!this.client) return;
     this.patch({ busy: true, error: null });
     try {
-      const { session } = await this.client.request('sessions.create', { presetId });
+      const { session } = await this.client.request('sessions.create', {
+        presetId,
+        ...(workspaceId ? { workspaceId } : {}),
+      });
       await this.openSession(session.id);
     } catch (err) {
       this.fail(err);
@@ -263,6 +325,99 @@ export class Store {
     }
   }
 
+  /* ---------------------------- 模型 ---------------------------- */
+
+  /** 上传一个附件，成功后挂进待发送列表 */
+  async uploadAttachment(base64: string, name: string): Promise<void> {
+    const { currentId } = this.state;
+    if (!this.client || !currentId) return;
+    this.patch({ busy: true, error: null });
+    try {
+      const res = await this.client.request('attachments.upload', { sessionId: currentId, data: base64, name });
+      this.patch({
+        busy: false,
+        pendingAttachments: [...this.state.pendingAttachments, { receiptId: res.receiptId, name: res.name ?? name }],
+      });
+    } catch (err) {
+      this.fail(err);
+      this.patch({ busy: false });
+    }
+  }
+
+  removeAttachment(receiptId: string): void {
+    this.patch({ pendingAttachments: this.state.pendingAttachments.filter((a) => a.receiptId !== receiptId) });
+  }
+
+  /** 拉一次宿主可用模型；打开面板前调用，失败不打扰用户 */
+  async refreshModels(): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { models, default: fallback } = await this.client.request('models.list', {});
+      this.patch({ models, defaultModel: fallback });
+    } catch {
+      /* 宿主没实现就当没有模型可选 */
+    }
+  }
+
+  openModelSheet(): void {
+    this.patch({ modelSheetOpen: true });
+    void this.refreshModels();
+  }
+
+  closeModelSheet(): void {
+    this.patch({ modelSheetOpen: false });
+  }
+
+  /** 拉一次权限预设目录 */
+  async refreshPermissions(): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { options, default: fallback } = await this.client.request('permissions.list', {});
+      this.patch({ permissions: options, defaultPermission: fallback });
+    } catch {
+      /* 宿主没实现就不显示 */
+    }
+  }
+
+  async refreshWorkspaces(): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { workspaces } = await this.client.request('workspaces.list', {});
+      this.patch({ workspaces });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** 切当前会话的权限（沙箱 + 审批策略一起换） */
+  async setPermission(preset: string): Promise<void> {
+    const { currentId } = this.state;
+    if (!this.client || !currentId) return;
+    try {
+      const { session } = await this.client.request('sessions.setPermission', { sessionId: currentId, preset });
+      this.patch({ detail: session });
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  /** 切当前会话的模型（写进会话事件，换设备/重开都一样） */
+  async setModel(provider: string, model: string, reasoningEffort?: string): Promise<void> {
+    const { currentId } = this.state;
+    if (!this.client || !currentId) return;
+    try {
+      const { session } = await this.client.request('sessions.setModel', {
+        sessionId: currentId,
+        provider,
+        model,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+      });
+      this.patch({ detail: session, modelSheetOpen: false });
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
   async resolveApproval(approvalId: string, decision: ApprovalDecision): Promise<void> {
     if (!this.client) return;
     try {
@@ -294,6 +449,82 @@ export class Store {
     } catch (err) {
       this.fail(err);
     }
+  }
+
+  /* ------------------------ 本机引擎 ------------------------ */
+
+  /** 拉一次宿主服务状态（设置页每 2 秒调一次） */
+  async refreshHost(): Promise<void> {
+    if (!hostAvailable) return;
+    const status = await hostStatus();
+    if (status) this.patch({ host: status });
+  }
+
+  /** 自动连接只赌一次：冷启动时本机引擎就绪后连一次，失败就交回给用户 */
+  private autoConnectTried = false;
+
+  /**
+   * 本机模式的一键连接。
+   *
+   * 引擎和桥都是 App 自己拉起来的：地址是本机 127.0.0.1，配对码就打在桥的启动日志里。
+   * 让用户再手抄一遍六位数字没有道理——桥 ready 后自动填码并连一次。
+   */
+  async maybeAutoConnect(): Promise<void> {
+    if (!hostAvailable || this.autoConnectTried) return;
+    const host = this.state.host;
+    if (!host || host.engine !== 'ready' || host.bridge !== 'ready') return;
+    if (this.state.caps || this.state.conn === 'connecting') return;
+    this.autoConnectTried = true;
+
+    if (!this.state.deviceKey && !this.state.pairCode.trim()) {
+      try {
+        const logs = await hostLogs();
+        const found = logs.join('\n').match(/配对码\s+(\d{6})/);
+        if (found) this.patch({ pairCode: found[1] });
+      } catch {
+        // 日志读不到就退回手输
+      }
+    }
+    await this.connect();
+  }
+
+  /** 读一次自定义启动命令（进设置页时调） */
+  async loadHostCommands(): Promise<void> {
+    const cmds = await loadHostCommands();
+    this.patch({ hostEngineCmd: cmds.engineCmd, hostBridgeCmd: cmds.bridgeCmd });
+  }
+
+  setHostCommands(engineCmd: string, bridgeCmd: string): void {
+    this.patch({ hostEngineCmd: engineCmd, hostBridgeCmd: bridgeCmd });
+    void saveHostCommands({ engineCmd, bridgeCmd });
+  }
+
+  async startLocalHost(): Promise<void> {
+    if (!hostAvailable) {
+      this.setError('这台设备不支持本机引擎（需要原生构建，Expo Go 不行）');
+      return;
+    }
+    await startHost({
+      engineCmd: this.state.hostEngineCmd.trim() || undefined,
+      bridgeCmd: this.state.hostBridgeCmd.trim() || undefined,
+    });
+    await this.refreshHost();
+  }
+
+  async stopLocalHost(): Promise<void> {
+    if (!hostAvailable) return;
+    await stopHost();
+    await this.refreshHost();
+  }
+
+  async refreshHostLogs(): Promise<void> {
+    if (!hostAvailable) return;
+    this.patch({ hostLogs: await hostLogs() });
+  }
+
+  /** 让界面层也能报一个可读错误（例如图片太大） */
+  setError(message: string): void {
+    this.patch({ error: message, busy: false });
   }
 
   clearError(): void {
@@ -398,6 +629,15 @@ export class Store {
         const next = { ...this.state.approvals };
         delete next[data.approvalId as string];
         this.patch({ approvals: next });
+        return;
+      }
+
+      case 'device.paired': {
+        const key = String((data as { key?: string }).key ?? '');
+        if (key) {
+          this.patch({ deviceKey: key });
+          void saveDeviceKey(key);
+        }
         return;
       }
 

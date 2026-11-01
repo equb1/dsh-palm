@@ -136,8 +136,36 @@ export interface Turn {
   meta?: { durationMs?: number; steps?: number };
 }
 
+export interface ModelChoice {
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+}
+
+export interface ModelOption {
+  provider: string;
+  /** provider 的显示名，例如 DeepSeek */
+  providerName: string;
+  id: string;
+  name: string;
+  description?: string;
+  /** 这个模型支持哪些思考档位；空表示不支持 */
+  efforts?: Array<{ id: string; name: string; description?: string }>;
+  defaultEffort?: string;
+}
+
+export interface PermissionOption {
+  value: string;
+  name: string;
+  description?: string;
+}
+
 export interface SessionDetail extends SessionSummary {
   turns: Turn[];
+  /** 当前会话选的模型；没选过就是宿主默认 */
+  model?: ModelChoice;
+  /** 当前权限预设：read-only / workspace-write / danger-full-access / auto / custom */
+  permission?: string;
   /** 会话当前的契约（可能被「会话内升级」改过） */
   contract: CapabilityContract;
 }
@@ -246,6 +274,18 @@ export interface RequestParams {
   'sessions.steer': { sessionId: string; text: string };
   'sessions.stop': { sessionId: string };
   'sessions.setPreset': { sessionId: string; presetId: string };
+  /** 列出宿主机上可用的模型 */
+  'models.list': Record<string, never>;
+  /** 注册/新建一个工作区（path 必须在宿主上存在） */
+  'workspaces.create': { path: string };
+  /** 上传一个附件，拿到回执后可以带进 sessions.send */
+  'attachments.upload': { sessionId: string; data: string; name?: string };
+  /** 宿主支持的权限预设 */
+  'permissions.list': Record<string, never>;
+  /** 切会话的权限预设（沙箱 + 审批策略一起换） */
+  'sessions.setPermission': { sessionId: string; preset: string };
+  /** 切会话的模型（写进会话事件，持久） */
+  'sessions.setModel': { sessionId: string; provider: string; model: string; reasoningEffort?: string };
   'approvals.list': { sessionId?: string };
   'approvals.resolve': { approvalId: string; decision: ApprovalDecision };
   /** 回答 ask_user_question（Agent 在问用户选哪个） */
@@ -274,6 +314,12 @@ export interface RequestResults {
   'sessions.steer': { accepted: true };
   'sessions.stop': { accepted: true };
   'sessions.setPreset': { session: SessionDetail };
+  'models.list': { models: ModelOption[]; default?: ModelChoice };
+  'sessions.setModel': { session: SessionDetail };
+  'permissions.list': { options: PermissionOption[]; default?: string };
+  'attachments.upload': { receiptId: string; name?: string };
+  'workspaces.create': { workspace: Workspace };
+  'sessions.setPermission': { session: SessionDetail };
   'approvals.list': { approvals: Approval[] };
   'approvals.resolve': { accepted: true };
   'questions.answer': { accepted: true };

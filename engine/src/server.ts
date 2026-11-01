@@ -27,6 +27,10 @@ interface SessionState {
   summary: SessionSummary;
   turns: Turn[];
   contract: CapabilityContract;
+  /** 会话级权限预设（mock 里只是记住，不做实际拦截） */
+  permission?: string;
+  /** 会话级模型选择 */
+  model?: { provider: string; model: string; reasoningEffort?: string };
 }
 
 const HOST_ID = 'host-mock-phone';
@@ -376,7 +380,13 @@ const handlers: { [M in Method]: Handler<M> } = {
 
   'sessions.get': ({ sessionId }) => {
     const s = requireSession(sessionId);
-    const detail: SessionDetail = { ...s.summary, turns: s.turns, contract: s.contract };
+    const detail: SessionDetail = {
+      ...s.summary,
+      turns: s.turns,
+      contract: s.contract,
+      ...(s.permission ? { permission: s.permission } : {}),
+      ...(s.model ? { model: s.model } : {}),
+    };
     return { session: detail };
   },
 
@@ -457,6 +467,76 @@ const handlers: { [M in Method]: Handler<M> } = {
     s.summary = { ...s.summary, presetId: preset.id, updatedAt: Date.now() };
     broadcast('session.updated', { session: s.summary });
     const detail: SessionDetail = { ...s.summary, turns: s.turns, contract: s.contract };
+    return { session: detail };
+  },
+
+  'workspaces.create': ({ path }) => ({
+    workspace: { id: 'ws-' + Math.random().toString(36).slice(2, 8), name: path.split(/[\\/]/).pop() ?? path, root: path, presetIds: [] },
+  }),
+
+  'attachments.upload': ({ data, name }) => ({
+    receiptId: 'receipt-' + Math.random().toString(36).slice(2, 10),
+    ...(name ? { name } : {}),
+    // mock 只是记一下，不真的落盘
+    ...(data.length >= 0 ? {} : {}),
+  }),
+
+  'permissions.list': () => ({
+    options: [
+      { value: 'read-only', name: 'read-only', description: '只能读，不能改' },
+      { value: 'workspace-write', name: 'workspace-write', description: '只能改工作区' },
+      { value: 'danger-full-access', name: 'danger-full-access', description: '完全放行' },
+    ],
+    default: 'workspace-write',
+  }),
+
+  'sessions.setPermission': ({ sessionId, preset }) => {
+    const s = requireSession(sessionId);
+    s.permission = preset;
+    const detail: SessionDetail = { ...s.summary, turns: s.turns, contract: s.contract, permission: preset };
+    return { session: detail };
+  },
+
+  'models.list': () => ({
+    models: [
+      {
+        provider: 'deepseek-official',
+        providerName: 'DeepSeek',
+        id: 'deepseek-flash',
+        name: 'DeepSeek-V4.1-Flash',
+        efforts: [
+          { id: 'off', name: 'Off' },
+          { id: 'low', name: 'Low' },
+          { id: 'high', name: 'High' },
+          { id: 'max', name: 'Max' },
+        ],
+        defaultEffort: 'high',
+      },
+      {
+        provider: 'deepseek-official',
+        providerName: 'DeepSeek',
+        id: 'deepseek-v4-pro',
+        name: 'DeepSeek-V4-Pro',
+        description: '更强，适合复杂任务',
+        efforts: [
+          { id: 'off', name: 'Off' },
+          { id: 'high', name: 'High' },
+        ],
+        defaultEffort: 'high',
+      },
+    ],
+    default: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high' },
+  }),
+
+  'sessions.setModel': ({ sessionId, provider, model, reasoningEffort }) => {
+    const s = requireSession(sessionId);
+    s.model = { provider, model, ...(reasoningEffort ? { reasoningEffort } : {}) };
+    const detail: SessionDetail = {
+      ...s.summary,
+      turns: s.turns,
+      contract: s.contract,
+      model: { provider, model, ...(reasoningEffort ? { reasoningEffort } : {}) },
+    };
     return { session: detail };
   },
 
