@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -239,6 +240,21 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const running = session.status === 'running' || session.status === 'waiting_approval';
   const hasText = draft.trim().length > 0;
 
+  React.useEffect(() => {
+    const onShow = (): void => {
+      if (nearBottom.current) {
+        // 零延迟瞬间对齐到底部，跟随外层平滑动画同步上推，绝不慢半拍
+        scrollRef.current?.scrollToEnd({ animated: false });
+      }
+    };
+    const willShowSub = Keyboard.addListener('keyboardWillShow', onShow);
+    const didShowSub = Keyboard.addListener('keyboardDidShow', onShow);
+    return () => {
+      willShowSub.remove();
+      didShowSub.remove();
+    };
+  }, []);
+
   const handleToggleThinking = (): void => {
     userInteracting.current = true;
     setTimeout(() => {
@@ -292,6 +308,12 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             nearBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 140;
           }}
           scrollEventThrottle={64}
+          onLayout={() => {
+            if (nearBottom.current && !userInteracting.current) {
+              // 伴随视口高度压缩实时定位，与输入框同帧贴合上移
+              scrollRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
           onContentSizeChange={() => {
             if (nearBottom.current && !userInteracting.current) {
               scrollRef.current?.scrollToEnd({ animated: false });
