@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { store, useStore } from './useStore';
 import { Btn, IconButton, Pill } from './parts';
@@ -35,6 +35,12 @@ export function SettingsScreen(): React.ReactElement {
         <Text style={styles.title}>模型与凭据</Text>
         <View style={{ width: 36 }} />
       </View>
+
+      <KeyboardAvoidingView
+        style={styles.bodyWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? topInset + 48 : 0}
+      >
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.card}>
@@ -109,12 +115,14 @@ export function SettingsScreen(): React.ReactElement {
           </Pressable>
         ) : null}
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+  bodyWrap: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

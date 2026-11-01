@@ -7,7 +7,9 @@
     "scheme": "dshpalm",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0B0D10",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "cool.cnb.dshpalm"
@@ -16,7 +18,8 @@
       "package": "cool.cnb.dshpalm",
       "adaptiveIcon": {
         "backgroundColor": "#0B0D10"
-      }
+      },
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "bundler": "metro"

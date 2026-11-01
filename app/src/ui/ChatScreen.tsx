@@ -210,10 +210,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={styles.root}>
       <View style={styles.header}>
         <IconButton glyph="‹" label="返回会话列表" onPress={() => store.closeSession()} />
         <Pill style={styles.titlePill}>
@@ -238,12 +235,19 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         />
       </View>
 
+      <KeyboardAvoidingView
+        style={styles.bodyWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? topInset + 52 : 0}
+      >
+
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollOuter}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         <View style={styles.scroll}>
           {session.turns.length === 0 ? (
@@ -273,12 +277,15 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         presets={state.caps?.presets ?? []}
         activePresetId={session.presetId}
         onPickPreset={(id) => void store.setPreset(id)}
-      />    </KeyboardAvoidingView>
+      />
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+  bodyWrap: { flex: 1 },
 
   header: {
     flexDirection: 'row',

@@ -74,7 +74,7 @@ export function HomeScreen(): React.ReactElement {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.root}>
       <View style={styles.header}>
         <View style={styles.brandMark}>
           <Text style={styles.brandGlyph}>锦</Text>
@@ -89,10 +89,17 @@ export function HomeScreen(): React.ReactElement {
         <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
       </View>
 
+      <KeyboardAvoidingView
+        style={styles.bodyWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? topInset + 56 : 0}
+      >
+
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollOuter}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -162,14 +169,17 @@ export function HomeScreen(): React.ReactElement {
         onPickPreset={(id) => store.setDraftPreset(id)}
       />
 
+      </KeyboardAvoidingView>
+
       {/* 抽屉必须在最后一个子节点：后渲染的兄弟节点画在上层 */}
       <SessionDrawer visible={drawer} onClose={() => setDrawer(false)} />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+  bodyWrap: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -9,7 +9,7 @@ export function ConnectScreen(): React.ReactElement {
   const state = useStore();
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollOuter} keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
           <View style={styles.mark}>
