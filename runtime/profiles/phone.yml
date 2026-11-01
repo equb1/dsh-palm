@@ -93,14 +93,6 @@
 - id: ui-schedule
   disabled: true
 
-# 插件市场/清单（手机端先不做）
-- id: plugin-manager
-  disabled: true
-- id: ui-plugin-manager
-  disabled: true
-- id: plugin-inventory
-  disabled: true
-- id: ui-settings-plugin-inventory
-  disabled: true
-- id: plugin-package-inventory-deepseek
-  disabled: true
+# 注意：plugin-manager / ui-plugin-manager / plugin-inventory 这几个不能单独关，
+# 因为 dsh-client-ui-entry-customization 依赖它们提供的 pluginNavigation 服务，
+# 关掉会报 web boot: 1 entry did not activate。要关必须连消费者一起关。
