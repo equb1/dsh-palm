@@ -50,44 +50,43 @@
 | [docs/11-pairing.md](docs/11-pairing.md) | 配对：手机怎么证明自己是主人 | 动连接逻辑前 |
 | [docs/12-model-login.md](docs/12-model-login.md) | 模型登录：绑 Key 已接，账号 OAuth 没有导出端点 | 做登录页前 |
 | [docs/13-local-engine.md](docs/13-local-engine.md) | 本机引擎落地清单（阶段 1，未实现） | 上真机前 |
+| [docs/17-handoff.md](docs/17-handoff.md) | 交接：真机运行时的现状、踩过的坑、下一步 | 接手真机部分时 |
+| [docs/18-run-on-new-machine.md](docs/18-run-on-new-machine.md) | **新电脑怎么跑**：看界面 / 连真 dsh / 打安卓包 | 刚 clone 下来时 |
 
 ## 跑起来
 
-需要 **Node 22.13+**（React Native 0.88 的要求）。当前是**阶段 0**：引擎是 mock 的，UI 是真的。
+需要 **Node 22.13+**。完整清单（真引擎、打安卓包、大文件下载）见
+[docs/18-run-on-new-machine.md](docs/18-run-on-new-machine.md)，下面是三分钟版。
 
-> 国内网络建议先 
-pm config set registry https://registry.npmmirror.com，否则装依赖会很慢。
+> 国内网络建议先 `npm config set registry https://registry.npmmirror.com`，否则装依赖会很慢。
 
 ```bash
-npm install        # 根目录依赖（引擎 + 测试）
-npm run engine     # 起 mock 引擎
+git clone -b develop https://cnb.cool/debaox3.0/test-new-technology/dsh-palm
+cd dsh-palm
+npm install                # 根依赖（引擎 + 测试）
+npm --prefix app install   # App 依赖（Expo / RN）
+
+npm run engine             # mock 引擎，:8787
+npm --prefix app run web   # 浏览器 http://localhost:8081
 ```
 
-终端会打印：
+`npm run engine` 会打印：
 
 ```
+HTTP   http://localhost:8787/health
 WS     ws://localhost:8787/ws
 LAN    ws://192.168.x.x:8787/ws   <- 手机里填这个
 ```
 
-另开一个终端起 App：
-
-```bash
-cd app
-npm install
-npx expo start     # 手机装 Expo Go 扫码，或按 w 在浏览器里开
-```
-
-App 里把上面那串 LAN 地址填进去，点「连接」。
+手机上看界面：`npm --prefix app start`（Expo Go 扫码）。
 
 ### 验证协议层（不需要手机）
 
 ```bash
-npm test           # 7 条端到端用例：握手 / 流式 / 审批 / 拒绝 / 预设切换 / 错误路径
-npm run typecheck
+npm run verify     # typecheck + 11 条端到端用例
 ```
 
-## 连真引擎（只读）
+## 连真引擎
 
 Mock 引擎之后，有一个能连**真 dsh** 的桥：`engine/src/real/`。
 
@@ -98,9 +97,10 @@ node --import tsx engine/src/real/main.ts http://127.0.0.1:8899 <token> 8788
 
 App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六位配对码**，就能看到真宿主上的会话、预设（standard / ptc / minimal / cordis），以及完整对话——真引擎没有"消息列表"，只有事件流，回合是 `engine/src/real/project.ts` 折出来的。
 
-配对怎么设计的、为什么不做账号登录，见 [docs/11-pairing.md](docs/11-pairing.md)。
+同一份桥也能打成单文件 `dist/dsh-palm-bridge.cjs`，在手机里和 dsh 一起跑（本机模式，见
+[docs/17-handoff.md](docs/17-handoff.md)）。
 
-发送、流式、审批还没通——卡在"隔离实例没有模型凭据，抓不到真实帧"，原因写在 [docs/10-dsh-api.md](docs/10-dsh-api.md) 第六节。
+配对怎么设计的、为什么不做账号登录，见 [docs/11-pairing.md](docs/11-pairing.md)。
 
 ## 现在已经有的
 
@@ -109,20 +109,22 @@ App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六
 | 协议契约 | `app/src/protocol/` | 消息信封、能力协商、事件表、预设与能力契约 |
 | 引擎客户端 | `app/src/lib/client.ts` | 请求关联、事件订阅、超时、指数退避重连 |
 | Mock 引擎 | `engine/` | 能力协商、流式块、工具调用、审批、预设切换 |
-| 端到端测试 | `test/e2e.test.ts` | 7/7 通过 |
-| App 界面 | `app/src/ui/` | 连接页、会话列表、聊天流式、审批卡、会话内换预设 |
+| 真引擎桥 | `engine/src/real/` + `dist/dsh-palm-bridge.cjs` | 连真 dsh：会话 / 模型 / 审批 / 提问 / 流式 / 配对鉴权 |
+| 端到端测试 | `test/e2e.test.ts` | 11/11 通过 |
+| App 界面 | `app/src/ui/` | 连接页、会话列表、聊天流式、审批卡、提问卡、会话内换预设 |
+| Android 宿主 | `app/android/` | 前台服务 + proot + 自带 rootfs/node/dsh，真机跑通 |
 
 ## 现在还没有的
 
-- 真 dsh 引擎接入（mock 的协议是按 dsh 的形状设计的，但没对接过）
-- 本机 rootfs / Node 运行时（阶段 1，见 [08-verification](docs/08-verification.md)）
-- 拍照 / OCR / 分享菜单（阶段 1）
-- iOS 遥控器（阶段 2）
+- iOS 本机引擎（物理上不可能，没有 fork/exec）和 iOS 遥控器（阶段 2）
+- 手机端模型账号 OAuth 登录（现在填 API Key，见 [12-model-login](docs/12-model-login.md)）
+- 工作区还在 rootfs 里，用户在文件管理器里看不到（见 [17-handoff](docs/17-handoff.md) 的下一步）
+- 拍照 / OCR / 分享菜单
 - 推送、插件市场、桌宠、皮肤
 
 ## 当前状态
 
-**阶段 0 完成，阶段 1 待开工。**
+**阶段 1 完成：手机自带运行时 + 真引擎对话，真机跑通。**
 
 - [x] 产品定位与场景取舍
 - [x] 命名
@@ -130,7 +132,10 @@ App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六
 - [x] 运行时与打包策略
 - [x] 路线与验收标准
 - [x] 阶段 0：协议契约 + mock 引擎 + UI 骨架
-- [ ] 阶段 1：Android 宿主（先做 [08-verification](docs/08-verification.md) 的真机验证）
+- [x] 阶段 1：Android 宿主（proot + rootfs + node + dsh，真机 PLR110 / Android 16 验证）
+- [x] 真引擎桥：会话 / 流式 / 审批 / 提问 / 配对
+- [x] 本机一键启动：自动配对、自动连接、引擎日志落盘
+- [ ] 阶段 2：跨设备（委派、通知、iOS 遥控器）
 
 ## 一句话记住我们和别人的区别
 
