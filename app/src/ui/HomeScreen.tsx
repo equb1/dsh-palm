@@ -1,7 +1,5 @@
 import React from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,6 +13,7 @@ import { store, useStore } from './useStore';
 import { Dot, IconButton } from './parts';
 import { SessionDrawer } from './SessionDrawer';
 import { Composer } from './Composer';
+import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { colors, radius, space, topInset } from './theme';
 
 function relTime(ts: number): string {
@@ -89,89 +88,82 @@ export function HomeScreen(): React.ReactElement {
         <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.bodyWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? topInset + 56 : 0}
-      >
-
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={styles.scrollOuter}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            tintColor={colors.textDim}
-            onRefresh={() => {
-              setRefreshing(true);
-              void store.refreshSessions().finally(() => setRefreshing(false));
-            }}
-          />
-        }
-      >
-        <View style={styles.greeting}>
-          <Text style={styles.greetingTitle}>需要我做点什么？</Text>
-          <Text style={styles.greetingSub}>下面选一个锦囊，或者直接说</Text>
-        </View>
-
-        {state.sessions.length > 0 ? (
-          <View style={styles.list}>
-            <Text style={styles.sectionTitle}>最近</Text>
-            {state.sessions.slice(0, 8).map((s) => {
-              const p = presets.find((x) => x.id === s.presetId);
-              return (
-                <Pressable
-                  key={s.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${s.title}${s.preview ? '，' + s.preview : ''}`}
-                  onPress={() => void store.openSession(s.id)}
-                  style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.glassPressed }]}
-                >
-                  <View style={styles.glyph}>
-                    <Text style={styles.glyphText}>{p?.glyph ?? '·'}</Text>
-                  </View>
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <View style={styles.rowTop}>
-                      <Text style={styles.rowTitle} numberOfLines={1}>
-                        {s.title}
-                      </Text>
-                      <Text style={styles.rowTime}>{relTime(s.updatedAt)}</Text>
-                    </View>
-                    <View style={styles.rowBottom}>
-                      <Text style={styles.rowPreview} numberOfLines={1}>
-                        {s.preview || p?.name || ''}
-                      </Text>
-                      <StatusTag s={s} />
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
+      <SmoothKeyboardAvoid style={styles.bodyWrap}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scrollOuter}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              tintColor={colors.textDim}
+              onRefresh={() => {
+                setRefreshing(true);
+                void store.refreshSessions().finally(() => setRefreshing(false));
+              }}
+            />
+          }
+        >
+          <View style={styles.greeting}>
+            <Text style={styles.greetingTitle}>需要我做点什么？</Text>
+            <Text style={styles.greetingSub}>下面选一个锦囊，或者直接说</Text>
           </View>
-        ) : null}
 
-        {state.error ? (
-          <Pressable onPress={() => store.clearError()}>
-            <Text style={styles.error}>{state.error}</Text>
-          </Pressable>
-        ) : null}
-      </ScrollView>
+          {state.sessions.length > 0 ? (
+            <View style={styles.list}>
+              <Text style={styles.sectionTitle}>最近</Text>
+              {state.sessions.slice(0, 8).map((s) => {
+                const p = presets.find((x) => x.id === s.presetId);
+                return (
+                  <Pressable
+                    key={s.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${s.title}${s.preview ? '，' + s.preview : ''}`}
+                    onPress={() => void store.openSession(s.id)}
+                    style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.glassPressed }]}
+                  >
+                    <View style={styles.glyph}>
+                      <Text style={styles.glyphText}>{p?.glyph ?? '·'}</Text>
+                    </View>
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <View style={styles.rowTop}>
+                        <Text style={styles.rowTitle} numberOfLines={1}>
+                          {s.title}
+                        </Text>
+                        <Text style={styles.rowTime}>{relTime(s.updatedAt)}</Text>
+                      </View>
+                      <View style={styles.rowBottom}>
+                        <Text style={styles.rowPreview} numberOfLines={1}>
+                          {s.preview || p?.name || ''}
+                        </Text>
+                        <StatusTag s={s} />
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
 
-      <Composer
-        draft={draft}
-        onChangeDraft={setDraft}
-        onSend={send}
-        placeholder="给锦囊发消息…"
-        presets={presets}
-        activePresetId={state.draftPresetId}
-        onPickPreset={(id) => store.setDraftPreset(id)}
-      />
+          {Boolean(state.error) ? (
+            <Pressable onPress={() => store.clearError()}>
+              <Text style={styles.error}>{state.error}</Text>
+            </Pressable>
+          ) : null}
+        </ScrollView>
 
-      </KeyboardAvoidingView>
+        <Composer
+          draft={draft}
+          onChangeDraft={setDraft}
+          onSend={send}
+          placeholder="给锦囊发消息…"
+          presets={presets}
+          activePresetId={state.draftPresetId}
+          onPickPreset={(id) => store.setDraftPreset(id)}
+        />
+      </SmoothKeyboardAvoid>
 
-      {/* 抽屉必须在最后一个子节点：后渲染的兄弟节点画在上层 */}
       <SessionDrawer visible={drawer} onClose={() => setDrawer(false)} />
     </View>
   );

@@ -1,7 +1,5 @@
 import React from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +11,7 @@ import type { Approval, Block, SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
 import { Btn, Dot, IconButton, Pill } from './parts';
 import { Composer } from './Composer';
+import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { colors, font, radius, riskTone, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
@@ -174,13 +173,14 @@ function TurnView({ turn, approvals }: { turn: Turn; approvals: Record<string, A
     );
   }
 
+  const hasDoneDuration = Boolean(turn.status === 'done' && turn.meta?.durationMs);
   return (
     <View style={styles.assistant}>
       {turn.blocks.map((b) => renderBlock(b, approvals))}
       {turn.status === 'stopped' ? <Text style={styles.turnMeta}>已停止</Text> : null}
-      {turn.status === 'done' && turn.meta?.durationMs ? (
+      {hasDoneDuration ? (
         <Text style={styles.turnMeta}>
-          {(turn.meta.durationMs / 1000).toFixed(0)} 秒 · {turn.meta.steps} 步
+          {(turn.meta!.durationMs! / 1000).toFixed(0)} 秒 · {turn.meta?.steps ?? 1} 步
         </Text>
       ) : null}
     </View>
@@ -235,50 +235,45 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         />
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.bodyWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? topInset + 52 : 0}
-      >
+      <SmoothKeyboardAvoid style={styles.bodyWrap}>
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scrollOuter}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <View style={styles.scroll}>
+            {session.turns.length === 0 ? (
+              <View style={styles.emptyChat}>
+                <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
+                <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
+              </View>
+            ) : (
+              session.turns.map((t) => <TurnView key={t.id} turn={t} approvals={state.approvals} />)
+            )}
+          </View>
+        </ScrollView>
 
-      <ScrollView
-        ref={scrollRef}
-        style={{ flex: 1 }}
-        contentContainerStyle={styles.scrollOuter}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-      >
-        <View style={styles.scroll}>
-          {session.turns.length === 0 ? (
-            <View style={styles.emptyChat}>
-              <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
-              <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
-            </View>
-          ) : (
-            session.turns.map((t) => <TurnView key={t.id} turn={t} approvals={state.approvals} />)
-          )}
-        </View>
-      </ScrollView>
+        {Boolean(state.error) ? (
+          <Pressable onPress={() => store.clearError()}>
+            <Text style={styles.error}>{state.error}</Text>
+          </Pressable>
+        ) : null}
 
-      {state.error ? (
-        <Pressable onPress={() => store.clearError()}>
-          <Text style={styles.error}>{state.error}</Text>
-        </Pressable>
-      ) : null}
-
-      <Composer
-        draft={draft}
-        onChangeDraft={setDraft}
-        onSend={send}
-        onStop={() => void store.stop()}
-        running={running}
-        placeholder={running ? '生成中 · 可直接插话' : '给锦囊发消息…'}
-        presets={state.caps?.presets ?? []}
-        activePresetId={session.presetId}
-        onPickPreset={(id) => void store.setPreset(id)}
-      />
-      </KeyboardAvoidingView>
+        <Composer
+          draft={draft}
+          onChangeDraft={setDraft}
+          onSend={send}
+          onStop={() => void store.stop()}
+          running={running}
+          placeholder={running ? '生成中 · 可直接插话' : '给锦囊发消息…'}
+          presets={state.caps?.presets ?? []}
+          activePresetId={session.presetId}
+          onPickPreset={(id) => void store.setPreset(id)}
+        />
+      </SmoothKeyboardAvoid>
     </View>
   );
 }

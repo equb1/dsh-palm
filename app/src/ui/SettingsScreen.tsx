@@ -1,8 +1,9 @@
 import React from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { store, useStore } from './useStore';
 import { Btn, IconButton, Pill } from './parts';
+import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { colors, radius, space, topInset } from './theme';
 
 const REF = 'DEEPSEEK_API_KEY';
@@ -36,86 +37,81 @@ export function SettingsScreen(): React.ReactElement {
         <View style={{ width: 36 }} />
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.bodyWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? topInset + 48 : 0}
-      >
+      <SmoothKeyboardAvoid style={styles.bodyWrap}>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <View style={styles.card}>
+            <View style={styles.rowTop}>
+              <Text style={styles.cardTitle}>DeepSeek API Key</Text>
+              <Pill>
+                <Text style={[styles.status, configured && { color: colors.ok }]}>
+                  {configured ? '已配置' : '未配置'}
+                </Text>
+              </Pill>
+            </View>
+            <Text style={styles.hint}>
+              Key 存在宿主上（连电脑时存在电脑，本机模式下存在这台手机），App 不会保存。
+            </Text>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.card}>
-          <View style={styles.rowTop}>
-            <Text style={styles.cardTitle}>DeepSeek API Key</Text>
-            <Pill>
-              <Text style={[styles.status, configured && { color: colors.ok }]}>
-                {configured ? '已配置' : '未配置'}
-              </Text>
-            </Pill>
+            <TextInput
+              style={styles.input}
+              value={key}
+              onChangeText={setKey}
+              placeholder={configured ? '已配置 · 粘贴新 Key 可覆盖' : 'sk-…'}
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              accessibilityLabel="API Key"
+            />
+
+            <View style={styles.actions}>
+              <Btn
+                label={saved ? '已保存' : '保存'}
+                onPress={() => void save(key)}
+                disabled={key.trim().length === 0}
+                style={{ flex: 1 }}
+              />
+              <Btn
+                label="清除"
+                kind="ghost"
+                onPress={() => void save('')}
+                disabled={!configured}
+                style={{ flex: 1 }}
+              />
+            </View>
           </View>
-          <Text style={styles.hint}>
-            Key 存在宿主上（连电脑时存在电脑，本机模式下存在这台手机），App 不会保存。
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>宿主</Text>
+            <View style={styles.kv}>
+              <Text style={styles.k}>名称</Text>
+              <Text style={styles.v}>{state.caps?.host.name ?? '—'}</Text>
+            </View>
+            <View style={styles.kv}>
+              <Text style={styles.k}>类型</Text>
+              <Text style={styles.v}>{state.caps?.host.kind ?? '—'}</Text>
+            </View>
+            <View style={styles.kv}>
+              <Text style={styles.k}>版本</Text>
+              <Text style={styles.v}>{state.caps?.host.engineVersion ?? '—'}</Text>
+            </View>
+            <View style={styles.kv}>
+              <Text style={styles.k}>当前锦囊</Text>
+              <Text style={styles.v}>{preset?.name ?? '—'}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.footnote}>
+            账号登录（OAuth）还没接。它也在宿主的流端点里，不在 HTTP 接口上。
           </Text>
 
-          <TextInput
-            style={styles.input}
-            value={key}
-            onChangeText={setKey}
-            placeholder={configured ? '已配置 · 粘贴新 Key 可覆盖' : 'sk-…'}
-            placeholderTextColor={colors.textFaint}
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry
-            accessibilityLabel="API Key"
-          />
-
-          <View style={styles.actions}>
-            <Btn
-              label={saved ? '已保存' : '保存'}
-              onPress={() => void save(key)}
-              disabled={key.trim().length === 0}
-              style={{ flex: 1 }}
-            />
-            <Btn
-              label="清除"
-              kind="ghost"
-              onPress={() => void save('')}
-              disabled={!configured}
-              style={{ flex: 1 }}
-            />
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>宿主</Text>
-          <View style={styles.kv}>
-            <Text style={styles.k}>名称</Text>
-            <Text style={styles.v}>{state.caps?.host.name ?? '—'}</Text>
-          </View>
-          <View style={styles.kv}>
-            <Text style={styles.k}>类型</Text>
-            <Text style={styles.v}>{state.caps?.host.kind ?? '—'}</Text>
-          </View>
-          <View style={styles.kv}>
-            <Text style={styles.k}>版本</Text>
-            <Text style={styles.v}>{state.caps?.host.engineVersion ?? '—'}</Text>
-          </View>
-          <View style={styles.kv}>
-            <Text style={styles.k}>当前锦囊</Text>
-            <Text style={styles.v}>{preset?.name ?? '—'}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.footnote}>
-          账号登录（OAuth）还没接。它也在宿主的流端点里，不在 HTTP 接口上。
-        </Text>
-
-        {state.error ? (
-          <Pressable onPress={() => store.clearError()}>
-            <Text style={styles.error}>{state.error}</Text>
-          </Pressable>
-        ) : null}
-      </ScrollView>
-      </KeyboardAvoidingView>
+          {Boolean(state.error) ? (
+            <Pressable onPress={() => store.clearError()}>
+              <Text style={styles.error}>{state.error}</Text>
+            </Pressable>
+          ) : null}
+        </ScrollView>
+      </SmoothKeyboardAvoid>
     </View>
   );
 }
@@ -137,25 +133,27 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    padding: 14,
-    gap: 10,
+    padding: space.md,
+    gap: space.sm,
   },
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardTitle: { color: colors.text, fontSize: 14.5, fontWeight: '600' },
+  cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
   status: { color: colors.textFaint, fontSize: 11 },
-  hint: { color: colors.textFaint, fontSize: 11.5, lineHeight: 17 },
+  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
   input: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: radius.sm,
-    paddingHorizontal: 10,
+    backgroundColor: colors.glassStrong,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,
-    fontSize: 13.5,
+    fontSize: 13,
   },
-  actions: { flexDirection: 'row', gap: 8 },
-  kv: { flexDirection: 'row', justifyContent: 'space-between' },
-  k: { color: colors.textFaint, fontSize: 12.5 },
-  v: { color: colors.textDim, fontSize: 12.5 },
-  footnote: { color: colors.textFaint, fontSize: 11, lineHeight: 17, marginTop: 4 },
-  error: { color: colors.danger, fontSize: 12, marginTop: 8 },
+  actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
+  kv: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  k: { color: colors.textDim, fontSize: 13 },
+  v: { color: colors.text, fontSize: 13, fontWeight: '500' },
+  footnote: { color: colors.textFaint, fontSize: 11.5, lineHeight: 17, paddingHorizontal: space.xs },
+  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.xs },
 });
