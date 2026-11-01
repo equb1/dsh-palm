@@ -1,22 +1,25 @@
 # 手机端 profile 裁剪
 #
-# 用途：引擎跑在手机上时，只加载必要的插件。
-# 用法：dsh --profile web --patch runtime/profiles/phone.yml --host 127.0.0.1 --port 8787 --no-open
+# 用途：引擎跑在手机上时只加载必要的插件（砍掉桌面才需要的一批）。
+# 用法：dsh --profile web --patch <本文件> --host 127.0.0.1 --port 8787 --no-open
 #
-# 实测（Windows 基线，scripts/measure-boot.ts，三次均值）：
+# 实测一：Windows 基线（scripts/measure-boot.ts，三次均值）
 #   不裁剪  3418 ms
 #   本文件  2626 ms   (-23%)
 #
-# 分组贡献（单独启用时）：
-#   遥测/开发工具  -327 ms   ← 最大的一块
-#   杂项（反馈/定时/插件市场） -111 ms
-#   office/终端侧栏、web 工具、workflow   ≈ 0（噪声内）
-#   全部 ui-* （52 个）          ≈ 0（网页前端几乎不耗时）
+# 实测二：Android / Termux + proot Ubuntu / arm64
+#   不裁剪  13736 ms
+#   本文件  11385 ms  (-17%)
 #
-# 注意：这个文件只验证到"能起 + 快 23%"。手机上还需要再测一次，
-# 因为 proot 会把模块加载放大 4 倍，裁剪的收益可能更明显。
-# 手机端 profile 裁剪：先砍掉"桌面才需要"的一批插件
-# 用法: dsh web --patch phone.yml
+# 分组贡献（Windows 上单独启用时）
+#   遥测/开发工具  -327 ms   <- 最大的一块
+#   杂项（反馈/定时/插件市场） -111 ms
+#   office/终端侧栏、web 工具、workflow  ≈ 0（噪声内）
+#   全部 ui-*（52 个）                 ≈ 0（前端只是静态注册）
+#
+# 结论：手机上收益比 Windows 小（-17% vs -23%），说明 proot 有一部分固定开销
+# 不随模块数线性变化。裁剪能省约 2 秒，但到不了 5 秒目标。
+# 首版按「引擎常驻」做（决策 D27），见 docs/08-verification.md。
 
 # 开发期工具
 - id: hmr
