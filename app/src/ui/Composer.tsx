@@ -31,19 +31,34 @@ export function Composer({
 }): React.ReactElement {
   const hasText = draft.trim().length > 0;
   const showStop = running && !hasText;
+  const [contentHeight, setContentHeight] = React.useState(26);
+
+  // 当内容被清空（发送后），高度自动重置为单行初始高度
+  React.useEffect(() => {
+    if (!draft) {
+      setContentHeight(26);
+    }
+  }, [draft]);
+
+  const clampedHeight = Math.max(26, Math.min(120, contentHeight));
 
   return (
     <View style={styles.wrap}>
       <View style={styles.box}>
         <View style={styles.inputRow}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { height: clampedHeight }]}
             value={draft}
             onChangeText={onChangeDraft}
             placeholder={placeholder}
             placeholderTextColor={colors.textFaint}
             multiline
-            numberOfLines={1}
+            textAlignVertical="center"
+            scrollEnabled={contentHeight >= 120}
+            onContentSizeChange={(e) => {
+              const h = e.nativeEvent.contentSize.height;
+              if (h > 0) setContentHeight(h);
+            }}
             accessibilityLabel="输入框"
           />
           <Pressable

@@ -14,6 +14,7 @@ import { store, useStore } from './useStore';
 import { Btn, Dot, IconButton, Pill } from './parts';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
+import { MarkdownView } from './MarkdownView';
 import { colors, font, radius, riskTone, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
@@ -217,7 +218,7 @@ function ThinkingRow({ text, onToggle }: { text: string; onToggle?: () => void }
         <View style={{ flex: 1 }} />
         <Text style={styles.chevron}>▴</Text>
       </View>
-      <Text style={styles.thinkingBody}>{text}</Text>
+      <MarkdownView text={text} />
     </Pressable>
   );
 }
@@ -250,7 +251,7 @@ function renderBlock(
     case 'tool':
       return <ToolRow key={block.id} block={block} />;
     case 'text':
-      return <Inline key={block.id} text={block.text} style={styles.body} />;
+      return <MarkdownView key={block.id} text={block.text} />;
     case 'approval': {
       const approval = approvals[block.approvalId];
       return approval ? <ApprovalCard key={block.id} approval={approval} /> : null;
