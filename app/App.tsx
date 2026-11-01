@@ -1,15 +1,35 @@
 import React from 'react';
-import { Platform, StatusBar, StyleSheet, View } from 'react-native';
+import { BackHandler, Platform, StatusBar, StyleSheet, View } from 'react-native';
 
 import { ChatScreen } from './src/ui/ChatScreen';
 import { ConnectScreen } from './src/ui/ConnectScreen';
 import { HomeScreen } from './src/ui/HomeScreen';
 import { SettingsScreen } from './src/ui/SettingsScreen';
-import { useStore } from './src/ui/useStore';
+import { store, useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
 
 export default function App(): React.ReactElement {
   const state = useStore();
+
+  React.useEffect(() => {
+    const onBackPress = (): boolean => {
+      // 1. 如果在设置页，返回首页
+      if (state.view === 'settings') {
+        store.closeSettings();
+        return true;
+      }
+      // 2. 如果在会话详情页，返回会话列表（首页）
+      if (state.detail) {
+        store.closeSession();
+        return true;
+      }
+      // 3. 在首页时，交由系统默认退出 App
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [state.view, state.detail]);
 
   const screen = !state.caps ? (
     <ConnectScreen />

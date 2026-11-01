@@ -32,7 +32,7 @@ export interface AppState {
   credentials: Record<string, { configured: boolean; writable: boolean }>;
 }
 
-const DEFAULT_URL = 'ws://192.168.1.100:8787/ws';
+const DEFAULT_URL = 'ws://192.168.1.3:8788/ws';
 
 type Listener = () => void;
 

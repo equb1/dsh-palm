@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  BackHandler,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -49,6 +50,16 @@ export function HomeScreen(): React.ReactElement {
   const [draft, setDraft] = React.useState('');
   const [refreshing, setRefreshing] = React.useState(false);
   const [drawer, setDrawer] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!drawer) return;
+    const onBackPress = (): boolean => {
+      setDrawer(false);
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [drawer]);
 
   const presets = state.caps?.presets ?? [];
   const preset = presets.find((p) => p.id === state.draftPresetId) ?? presets[0];
