@@ -105,7 +105,7 @@ function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement 
  * 块
  * ------------------------------------------------------------------ */
 
-function ThinkingRow({ text }: { text: string }): React.ReactElement {
+function ThinkingRow({ text, streaming }: { text: string; streaming?: boolean }): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const firstLine = text.split('\n')[0] ?? '';
   return (
@@ -142,10 +142,10 @@ function ToolRow({ block }: { block: Extract<Block, { kind: 'tool' }> }): React.
   );
 }
 
-function renderBlock(block: Block, approvals: Record<string, Approval>): React.ReactElement | null {
+function renderBlock(block: Block, approvals: Record<string, Approval>, streaming = false): React.ReactElement | null {
   switch (block.kind) {
     case 'thinking':
-      return <ThinkingRow key={block.id} text={block.text} />;
+      return <ThinkingRow key={block.id} text={block.text} streaming={streaming} />;
     case 'tool':
       return <ToolRow key={block.id} block={block} />;
     case 'text':
@@ -176,7 +176,7 @@ function TurnView({ turn, approvals }: { turn: Turn; approvals: Record<string, A
 
   return (
     <View style={styles.assistant}>
-      {turn.blocks.map((b) => renderBlock(b, approvals))}
+      {turn.blocks.map((b) => renderBlock(b, approvals, turn.status === 'streaming'))}
       {turn.status === 'stopped' ? <Text style={styles.turnMeta}>已停止</Text> : null}
       {turn.status === 'done' && turn.meta?.durationMs ? (
         <Text style={styles.turnMeta}>
@@ -212,7 +212,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior="padding"
     >
       <View style={styles.header}>
         <IconButton glyph="‹" label="返回会话列表" onPress={() => store.closeSession()} />

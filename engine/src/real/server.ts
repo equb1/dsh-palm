@@ -231,6 +231,18 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     }
   }
 
+  /** 把用户刚发的话立刻推给客户端（真引擎的 user/message 不走 assistant-stream 那套） */
+  function broadcastUserTurn(sessionId: string, text: string): void {
+    const turn: Turn = {
+      id: 'u-' + crypto.randomUUID(),
+      role: 'user',
+      createdAt: Date.now(),
+      status: 'done',
+      blocks: [{ kind: 'text', id: 'b-' + crypto.randomUUID(), text }],
+    };
+    broadcast('block.appended', { sessionId, runId: 'pending', turn });
+  }
+
   type Handler<M extends Method> = (params: RequestParams[M]) => Promise<unknown>;
   const unsupported = (name: string): never => {
     throw Object.assign(new Error(`${name} 在真引擎桥上还没实现`), {
@@ -298,6 +310,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
     // 真引擎的发消息：session/prompt。mode=queue 排队，steer 立刻插入当前回合。
     'sessions.send': async ({ sessionId, text }) => {
+      broadcastUserTurn(sessionId, text);
       await client.rpc('session/prompt', {
         request: {
           requestId: crypto.randomUUID(),
@@ -310,6 +323,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     },
 
     'sessions.steer': async ({ sessionId, text }) => {
+      broadcastUserTurn(sessionId, text);
       await client.rpc('session/prompt', {
         request: {
           requestId: crypto.randomUUID(),
