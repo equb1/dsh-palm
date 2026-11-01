@@ -15,12 +15,27 @@
 真 dsh 有一个凭据网关：
 
 ```
-POST /api/credentials/set     { ref: 'DEEPSEEK_API_KEY', value: 'sk-…' }
+POST /api/credentials/set      { ref: 'DEEPSEEK_API_KEY', value: 'sk-…' }   → { ok: true }
+POST /api/credentials/unset    { ref: 'DEEPSEEK_API_KEY' }                  → 无返回值
 POST /api/credentials/describe { refs: ['DEEPSEEK_API_KEY'] }
-→ { "DEEPSEEK_API_KEY": { "configured": true, "source": "file", "writable": true } }
+   → { "DEEPSEEK_API_KEY": { "configured": true, "source": "file", "writable": true } }
 ```
 
-实测：写进去之后 `describe` 立刻变成 `configured: true`。
+实测（真引擎 + 我们的桥，端到端）：
+
+```
+写入前: {"configured":false}
+set     → {"ok":true}
+写入后: {"configured":true}
+unset   → {"ok":true}
+清除后: {"configured":false}
+```
+
+**两个坑：**
+
+1. **`credentials/set` 不接受空值**——schema 要求 `value` 至少 1 个字符，传 `''` 会被 `gateway/bad-request` 拒绝。
+   要删除必须用 **`credentials/unset`**（`delete` / `remove` / `clear` 都是 404，只有 `unset` 存在）。
+2. 传 `' '`（一个空格）会被接受——别拿它当"清空"，它真的会把空格写成 Key。
 
 **这条很关键**：它意味着"用户在手机 App 里填 Key"这件事，实现上就是一次 RPC。
 不需要我们自己做密钥管理，也不需要用户去改配置文件。

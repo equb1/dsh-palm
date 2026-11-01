@@ -10,11 +10,13 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type {
   Capabilities,
   Method,
+  Block,
   Preset,
   ProtocolError,
   RequestParams,
   SessionDetail,
   SessionSummary,
+  Turn,
 } from '../../../app/src/protocol';
 import { PROTOCOL_VERSION } from '../../../app/src/protocol';
 import { DshRealClient, type RealSessionListItem } from './dshClient';
@@ -129,6 +131,118 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     };
   }
 
+  /* ---------------- 实时流：把 assistant-stream 帧翻成我们的事件 ---------------- */
+
+  let followDispose: (() => void) | null = null;
+  let followSessionId: string | null = null;
+  let liveTurn: Turn | null = null;
+  let liveRunId = '';
+  const blockIdByIndex = new Map<number, string>();
+
+  function startFollow(sessionId: string): void {
+    if (followSessionId === sessionId) return;
+    followDispose?.();
+    followDispose = null;
+    followSessionId = sessionId;
+    liveTurn = null;
+    blockIdByIndex.clear();
+
+    followDispose = client.follow(sessionId, (value) => {
+      try {
+        handleFollowValue(sessionId, value);
+      } catch {
+        /* 单帧出错不影响整条流 */
+      }
+    });
+  }
+
+  function handleFollowValue(sessionId: string, value: Record<string, unknown>): void {
+    // 真引擎的事件（turn/end 之类）
+    if (value.type === 'event') {
+      const ev = (value as { event?: { type?: string; data?: Record<string, unknown> } }).event;
+      if (ev?.type === 'turn/end' && liveTurn) {
+        liveTurn.status = 'done';
+        liveTurn.meta = { steps: liveTurn.blocks.length };
+        broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
+        broadcast('run.finished', { sessionId, runId: liveRunId, reason: 'done', usage: liveTurn.usage });
+        liveTurn = null;
+      }
+      return;
+    }
+
+    if (value.type !== 'assistant-stream') return;
+    const frame = (value as { frame?: Record<string, any> }).frame;
+    if (!frame) return;
+
+    if (frame.type === 'start') {
+      liveRunId = String(frame.attemptId ?? crypto.randomUUID());
+      liveTurn = {
+        id: 'turn-' + liveRunId,
+        role: 'assistant',
+        createdAt: Date.now(),
+        blocks: [],
+        status: 'streaming',
+      };
+      blockIdByIndex.clear();
+      broadcast('run.started', { sessionId, runId: liveRunId, turnId: liveTurn.id });
+      broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
+      return;
+    }
+
+    if (frame.type !== 'chunk' || !liveTurn) return;
+    const chunk = (frame.chunk ?? {}) as Record<string, any>;
+    const index = typeof chunk.index === 'number' ? chunk.index : 0;
+
+    if (chunk.type === 'block-start') {
+      const kind = chunk.blockType === 'reasoning' ? 'thinking' : 'text';
+      const id = liveRunId + '-b' + index;
+      blockIdByIndex.set(index, id);
+      liveTurn.blocks.push({ kind, id, text: '' } as Block);
+      broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
+      return;
+    }
+
+    if (chunk.type === 'reasoning-delta' || chunk.type === 'text-delta') {
+      const text = typeof chunk.text === 'string' ? chunk.text : '';
+      if (!text) return;
+      const blockId = blockIdByIndex.get(index);
+      if (!blockId) return;
+      const block = liveTurn.blocks.find((b) => b.id === blockId);
+      if (block && (block.kind === 'text' || block.kind === 'thinking')) block.text += text;
+      broadcast('block.delta', {
+        sessionId,
+        runId: liveRunId,
+        turnId: liveTurn.id,
+        blockId,
+        op: 'append',
+        text,
+      });
+      return;
+    }
+
+    if (chunk.type === 'block-end' && chunk.block) {
+      const blockId = blockIdByIndex.get(index);
+      const block = liveTurn.blocks.find((b) => b.id === blockId);
+      if (block && (block.kind === 'text' || block.kind === 'thinking')) {
+        const finalText = typeof chunk.block.text === 'string' ? chunk.block.text : '';
+        if (finalText) block.text = finalText;
+        broadcast('block.updated', { sessionId, runId: liveRunId, turnId: liveTurn.id, block });
+      }
+    }
+  }
+
+  /** 把用户刚发的话立刻推给客户端（真引擎的 user/message 不走 assistant-stream 那套） */
+  function broadcastUserTurn(sessionId: string, text: string): void {
+    const turn: Turn = {
+      id: 'u-' + crypto.randomUUID(),
+      role: 'user',
+      createdAt: Date.now(),
+      status: 'done',
+      blocks: [{ kind: 'text', id: 'b-' + crypto.randomUUID(), text }],
+    };
+    broadcast('block.appended', { sessionId, runId: 'pending', turn });
+  }
+
   type Handler<M extends Method> = (params: RequestParams[M]) => Promise<unknown>;
   const unsupported = (name: string): never => {
     throw Object.assign(new Error(`${name} 在真引擎桥上还没实现`), {
@@ -163,12 +277,63 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       };
       if (snap?.header?.agentPreset) detail.presetId = snap.header.agentPreset;
       if (proj.title) detail.title = proj.title;
+
+      // 打开（或切换）这个会话的实时流，之后的新回合会以事件形式推给客户端
+      startFollow(sessionId);
       return { session: detail };
     },
 
-    'sessions.create': async () => unsupported('sessions.create'),
-    'sessions.send': async () => unsupported('sessions.send'),
-    'sessions.steer': async () => unsupported('sessions.steer'),
+    // 真引擎建会话：先拿默认工作区，再提交一个客户端生成的 sessionId
+    'sessions.create': async ({ presetId, title }) => {
+      const ws = await client.rpc<{ workspace: { workspaceId: string; title?: string } }>(
+        'workspace/initializeDefault',
+        {},
+      );
+      const sessionId = 'session-' + crypto.randomUUID();
+      await client.rpc('session/create', {
+        request: { workspaceId: ws.workspace.workspaceId, sessionId, agentPreset: presetId },
+      });
+      const session: SessionSummary = {
+        id: sessionId,
+        title: title ?? '新会话',
+        presetId,
+        workspaceId: ws.workspace.title ?? ws.workspace.workspaceId,
+        hostId: HOST_ID,
+        status: 'idle',
+        updatedAt: Date.now(),
+        unread: 0,
+        preview: '',
+      };
+      broadcast('session.created', { session });
+      return { session };
+    },
+
+    // 真引擎的发消息：session/prompt。mode=queue 排队，steer 立刻插入当前回合。
+    'sessions.send': async ({ sessionId, text }) => {
+      broadcastUserTurn(sessionId, text);
+      await client.rpc('session/prompt', {
+        request: {
+          requestId: crypto.randomUUID(),
+          sessionId,
+          mode: 'queue',
+          content: [{ type: 'text', text }],
+        },
+      });
+      return { accepted: true as const, runId: crypto.randomUUID() };
+    },
+
+    'sessions.steer': async ({ sessionId, text }) => {
+      broadcastUserTurn(sessionId, text);
+      await client.rpc('session/prompt', {
+        request: {
+          requestId: crypto.randomUUID(),
+          sessionId,
+          mode: 'steer',
+          content: [{ type: 'text', text }],
+        },
+      });
+      return { accepted: true as const };
+    },
     'sessions.stop': async () => unsupported('sessions.stop'),
     'sessions.setPreset': async () => unsupported('sessions.setPreset'),
     'approvals.list': async () => ({ approvals: [] }),
@@ -188,7 +353,17 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     },
 
     'credentials.set': async ({ ref, value }) => {
+      // 真引擎拒绝空值（schema 要求 value 至少 1 个字符），清除走 unset
+      if (value.trim().length === 0) {
+        await client.rpc('credentials/unset', { ref });
+        return { ok: true as const };
+      }
       await client.rpc('credentials/set', { ref, value });
+      return { ok: true as const };
+    },
+
+    'credentials.unset': async ({ ref }) => {
+      await client.rpc('credentials/unset', { ref });
       return { ok: true as const };
     },
     'workspaces.list': async () => ({ workspaces: [] }),
@@ -269,6 +444,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     port,
     close: () =>
       new Promise<void>((resolve) => {
+        followDispose?.();
+        followDispose = null;
         for (const ws of clients) ws.close();
         wss.close();
         http.close(() => resolve());

@@ -104,22 +104,48 @@ function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement 
  * 块
  * ------------------------------------------------------------------ */
 
-function ThinkingRow({ text }: { text: string }): React.ReactElement {
-  const [open, setOpen] = React.useState(false);
-  const firstLine = text.split('\n')[0] ?? '';
+function ThinkingRow({ text, onToggle }: { text: string; onToggle?: () => void }): React.ReactElement {
+  const [userOpen, setUserOpen] = React.useState<boolean | null>(null);
+  const open = userOpen ?? false;
+  const tail = text.slice(-120).replace(/\s+/g, ' ').trim();
+
+  const handleToggle = (): void => {
+    onToggle?.();
+    setUserOpen(!open);
+  };
+
+  if (!open) {
+    return (
+      <Pressable
+        onPress={handleToggle}
+        accessibilityRole="button"
+        accessibilityLabel="展开思考"
+        style={styles.row}
+      >
+        <Text style={styles.rowGlyph}>✳</Text>
+        <Text style={styles.thinkingLabel}>思考</Text>
+        <Text style={styles.rowText} numberOfLines={1}>
+          {tail}
+        </Text>
+        <Text style={styles.chevron}>▾</Text>
+      </Pressable>
+    );
+  }
+
   return (
     <Pressable
-      onPress={() => setOpen((v) => !v)}
+      onPress={handleToggle}
       accessibilityRole="button"
-      accessibilityLabel="展开或收起思考"
-      style={styles.row}
+      accessibilityLabel="收起思考"
+      style={styles.thinkingOpenBox}
     >
-      <Text style={styles.rowGlyph}>✳</Text>
-      <Text style={styles.thinkingLabel}>思考</Text>
-      <Text style={styles.rowText} numberOfLines={open ? undefined : 1}>
-        {open ? text : firstLine}
-      </Text>
-      <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+      <View style={styles.thinkingOpenHeader}>
+        <Text style={styles.rowGlyph}>✳</Text>
+        <Text style={styles.thinkingLabel}>思考过程</Text>
+        <View style={{ flex: 1 }} />
+        <Text style={styles.chevron}>▴</Text>
+      </View>
+      <Text style={styles.thinkingBody}>{text}</Text>
     </Pressable>
   );
 }
@@ -141,10 +167,14 @@ function ToolRow({ block }: { block: Extract<Block, { kind: 'tool' }> }): React.
   );
 }
 
-function renderBlock(block: Block, approvals: Record<string, Approval>): React.ReactElement | null {
+function renderBlock(
+  block: Block,
+  approvals: Record<string, Approval>,
+  onToggleThinking?: () => void
+): React.ReactElement | null {
   switch (block.kind) {
     case 'thinking':
-      return <ThinkingRow key={block.id} text={block.text} />;
+      return <ThinkingRow key={block.id} text={block.text} onToggle={onToggleThinking} />;
     case 'tool':
       return <ToolRow key={block.id} block={block} />;
     case 'text':
@@ -158,7 +188,15 @@ function renderBlock(block: Block, approvals: Record<string, Approval>): React.R
   }
 }
 
-function TurnView({ turn, approvals }: { turn: Turn; approvals: Record<string, Approval> }): React.ReactElement {
+function TurnView({
+  turn,
+  approvals,
+  onToggleThinking,
+}: {
+  turn: Turn;
+  approvals: Record<string, Approval>;
+  onToggleThinking?: () => void;
+}): React.ReactElement {
   if (turn.role === 'user') {
     const text = turn.blocks
       .map((b) => (b.kind === 'text' ? b.text : ''))
@@ -176,7 +214,7 @@ function TurnView({ turn, approvals }: { turn: Turn; approvals: Record<string, A
   const hasDoneDuration = Boolean(turn.status === 'done' && turn.meta?.durationMs);
   return (
     <View style={styles.assistant}>
-      {turn.blocks.map((b) => renderBlock(b, approvals))}
+      {turn.blocks.map((b) => renderBlock(b, approvals, onToggleThinking))}
       {turn.status === 'stopped' ? <Text style={styles.turnMeta}>已停止</Text> : null}
       {hasDoneDuration ? (
         <Text style={styles.turnMeta}>
@@ -195,9 +233,18 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const state = useStore();
   const [draft, setDraft] = React.useState('');
   const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const nearBottom = React.useRef(true);
+  const userInteracting = React.useRef(false);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
   const hasText = draft.trim().length > 0;
+
+  const handleToggleThinking = (): void => {
+    userInteracting.current = true;
+    setTimeout(() => {
+      userInteracting.current = false;
+    }, 400);
+  };
 
   const send = (): void => {
     if (running && !hasText) {
@@ -240,7 +287,16 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           ref={scrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollOuter}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          onScroll={(e) => {
+            const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+            nearBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 140;
+          }}
+          scrollEventThrottle={64}
+          onContentSizeChange={() => {
+            if (nearBottom.current && !userInteracting.current) {
+              scrollRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
@@ -251,7 +307,14 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
                 <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
               </View>
             ) : (
-              session.turns.map((t) => <TurnView key={t.id} turn={t} approvals={state.approvals} />)
+              session.turns.map((t) => (
+                <TurnView
+                  key={t.id}
+                  turn={t}
+                  approvals={state.approvals}
+                  onToggleThinking={handleToggleThinking}
+                />
+              ))
             )}
           </View>
         </ScrollView>
@@ -321,6 +384,25 @@ const styles = StyleSheet.create({
   toolName: { color: colors.textFaint, fontSize: 11, fontFamily: font.mono },
   rowState: { fontSize: 11 },
   chevron: { color: colors.textFaint, fontSize: 11 },
+
+  thinkingOpenBox: {
+    backgroundColor: 'rgba(255,255,255,0.035)',
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    padding: 10,
+    gap: 8,
+  },
+  thinkingOpenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  thinkingBody: {
+    color: colors.textDim,
+    fontSize: 12.5,
+    lineHeight: 19,
+  },
 
   approval: {
     backgroundColor: colors.glass,

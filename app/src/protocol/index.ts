@@ -235,6 +235,8 @@ export interface RequestParams {
   /** 模型凭据：查状态 / 写入（存在宿主上，手机不留） */
   'credentials.describe': { refs: string[] };
   'credentials.set': { ref: string; value: string };
+  /** 删除某个凭据（真引擎用 credentials/unset，set 传空值会被拒） */
+  'credentials.unset': { ref: string };
 }
 
 export interface RequestResults {
@@ -252,6 +254,7 @@ export interface RequestResults {
   'workspaces.list': { workspaces: Workspace[] };
   'credentials.describe': { credentials: Record<string, { configured: boolean; writable: boolean }> };
   'credentials.set': { ok: true };
+  'credentials.unset': { ok: true };
 }
 
 export type Method = keyof RequestParams;

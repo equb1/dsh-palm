@@ -135,6 +135,12 @@ export function projectRecords(records: RealRecord[]): Projection {
 
     switch (ev.type) {
       case 'user/message': {
+        // 真引擎会把「运行上下文 / 技能提醒 / 时间快照」也记成 user/message，
+        // 用 source.kind 区分：只有 user（和审批回答）才是人类说的话。
+        const src = (d.source ?? {}) as { kind?: string };
+        const kind = typeof src.kind === 'string' ? src.kind : 'user';
+        if (kind !== 'user' && kind !== 'user-approval') break;
+
         current = newTurn('user', time, typeof d.id === 'string' ? d.id : undefined);
         currentTurnNo = -1;
         current.blocks = contentToBlocks(d.content);
