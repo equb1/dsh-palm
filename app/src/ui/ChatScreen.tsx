@@ -106,7 +106,8 @@ function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement 
  * ------------------------------------------------------------------ */
 
 function ThinkingRow({ text, streaming }: { text: string; streaming?: boolean }): React.ReactElement {
-  const [open, setOpen] = React.useState(false);
+  // 默认展开：思考内容要能读完，而不是只剩第一行。用户点了才收起。
+  const [open, setOpen] = React.useState(true);
   const firstLine = text.split('\n')[0] ?? '';
   return (
     <Pressable
@@ -195,6 +196,8 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const state = useStore();
   const [draft, setDraft] = React.useState('');
   const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
+  // 用户手动往上翻时不要抢回来；停在底部时跟着流式输出走
+  const nearBottom = React.useRef(true);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
   const hasText = draft.trim().length > 0;
@@ -242,7 +245,15 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollOuter}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        onScroll={(e) => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+          nearBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 140;
+        }}
+        scrollEventThrottle={64}
+        onContentSizeChange={() => {
+          // 流式输出时时内容会一直长高；只在用户停在底部时才自动跟随
+          if (nearBottom.current) scrollRef.current?.scrollToEnd({ animated: false });
+        }}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.scroll}>
