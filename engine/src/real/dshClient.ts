@@ -89,6 +89,46 @@ export class DshRealClient {
     return this.rpc('agentPresets/list');
   }
 
+  /** 持续跟一个会话的流，回调每个 item；返回取消函数 */
+  follow(sessionId: string, onValue: (value: Record<string, unknown>) => void): () => void {
+    const ws = new WebSocket(this.baseUrl.replace(/^http/, 'ws') + '/api/remote.mux', {
+      headers: { cookie: this.cookie },
+    } as never);
+    const streamId = crypto.randomUUID();
+    ws.onopen = () => {
+      ws.send(
+        JSON.stringify({
+          type: 'open',
+          streamId,
+          endpoint: 'session/follow',
+          payload: {
+            args: { request: { address: { kind: 'session', sessionId }, assistantStream: true, maxMessages: 500 } },
+          },
+        }),
+      );
+    };
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(String((ev as MessageEvent).data)) as {
+          streamId?: string;
+          type?: string;
+          value?: Record<string, unknown>;
+        };
+        if (msg.streamId !== streamId || msg.type !== 'item' || !msg.value) return;
+        onValue(msg.value);
+      } catch {
+        /* ignore */
+      }
+    };
+    return () => {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+    };
+  }
+
   snapshot(sessionId: string, timeoutMs = 4000): Promise<RealSnapshot | null> {
     const wsUrl = this.baseUrl.replace(/^http/, 'ws') + '/api/remote.mux';
     return new Promise((resolve) => {

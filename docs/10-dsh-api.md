@@ -279,6 +279,47 @@ sessions.get    → 用户回合里出现了我们发的那句话
 提示被接纳了，但没有模型凭据，所以 `assistant/attempt` 之后直接 `turn/end`——
 **回合没跑完，但发送链路是通的。**
 
+### 流式增量：`assistant-stream` 帧
+
+`session/follow` 流里除了 `event`，还有一种 `assistant-stream` item：
+
+```json
+{"type":"assistant-stream","frame":{"type":"start","attemptId":"session-xxx:1","revision":1,"turn":1,"step":1}}
+{"type":"assistant-stream","frame":{"type":"chunk","revision":2,"index":1,"chunk":{"type":"block-start","index":0,"blockType":"reasoning"}}}
+{"type":"assistant-stream","frame":{"type":"chunk","revision":3,"index":2,"chunk":{"type":"reasoning-delta","index":0,"text":"The"}}}
+{"type":"assistant-stream","frame":{"type":"chunk","revision":4,"index":3,"chunk":{"type":"text-delta","index":0,"text":"你好"}}}
+{"type":"assistant-stream","frame":{"type":"chunk","revision":5,"index":4,"chunk":{"type":"block-end","index":0,"block":{"type":"text","text":"完整文本"}}}}
+```
+
+要点：
+
+- `frame.type`：`start` → `chunk`（多帧）
+- `chunk.type`：`block-start` / `reasoning-delta` / `text-delta` / `block-end`
+- `chunk.index` 是**消息内的块序号**，同一块的所有 delta 共用它
+- `block-end` 带完整文本，可以用来纠偏（我们拿它覆盖流式拼出来的结果）
+- `revision` 单调递增，可以当 seq 用
+
+桥里的映射：
+
+| 真引擎 | 我们的协议 |
+|---|---|
+| `frame.type = start` | `run.started` + `block.appended`（空回合） |
+| `block-start` | `block.appended`（thinking / text 块） |
+| `reasoning-delta` / `text-delta` | `block.delta`（`op:'append'`） |
+| `block-end` | `block.updated`（用完整文本覆盖） |
+| `turn/end` 事件 | `run.finished` |
+
+**实测**（真模型，deepseek-flash）：
+
+```
+112  block.delta
+  4  block.appended
+  2  block.updated
+  1  run.started
+  1  run.finished
+→ 拼出 317 字的完整回复，3 秒出第一段
+```
+
 ### 建会话：先拿工作区
 
 ```ts
