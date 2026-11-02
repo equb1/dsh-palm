@@ -186,6 +186,7 @@ relay 只见密文；文件永不离家。
 - `redirect_uri` 只认 `http://localhost|127.0.0.1|[::1]:<显式端口>/oauth/callback`；**https loopback、自定义 scheme、`127.0.0.2` 一律拒绝**；端口可随机。
 - RN 复用清单：① 用 App 内 loopback HTTP server 替换 webServer（端口 0 由系统分配）；② 保持 redirect 规则与 PKCE/state 流程；③ 替换 Node API（crypto/stream/Buffer/`Promise.withResolvers`/`AbortSignal.any`）；④ 凭据落 Keychain/Keystore；⑤ 去掉 Cordis Service 外壳；⑥ 用 `Linking.openURL` 打开授权页。
 - 遗留风险：Platform 服务端是否接受该 loopback redirect 需实测；授权完成页 302 到 platform 的 `/dsh/authorized`，外部浏览器不会自动回 App（需中间页/深链，或用 desktop 变体走 204）。
+- 另外两个源码级细节要记住：回调 handler **不处理 `error` 参数**（用户拒绝授权时会一直等到 600s 超时，而不是立刻失败）；`state`/PKCE 只存在内存，App 被杀后只能重新发起。
 
 ### 待验证（都要真机）
 
