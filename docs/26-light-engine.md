@@ -1,9 +1,9 @@
 # 26 · 轻引擎 MVP + IFileSystem 适配
 
-> 状态：**已实现，Node 侧全绿；真机自检入口已接，等一次真机结果。**
+> 状态：**已实现并真机验证（PLR110 / Android 16）。**
 > 对应 [23-requirements.md](23-requirements.md) §2/§4 与 §8 的 M1 前半，接续
 > [25-m1-spike-results.md](25-m1-spike-results.md) 里"剩下的集成工作"第 1 条。
-> 验证：`npm run verify`（typecheck + 62 条测试）。
+> 验证：`npm run verify`（typecheck + 62 条测试）+ 真机全链路（见 §6）。
 
 ## 0. 一句话
 
@@ -189,13 +189,13 @@ unsupported。
 
 ## 6. 怎么验证
 
-Node 侧（不需要手机）：
+### 6.1 Node 侧（不需要手机）
 
 ```bash
 npm run verify        # typecheck + 62 条测试
 ```
 
-打包侧（不需要手机，验证 Metro 解析与 `.native.ts` 分叉）：
+### 6.2 打包侧（不需要手机，验证 Metro 解析与 `.native.ts` 分叉）
 
 ```bash
 cd app
@@ -207,15 +207,48 @@ npx expo export --platform android --no-bytecode --output-dir .export-js
 > 手动用同一个 hermesc 编译同一个 bundle 是成功的（exit 0）。如果 CI 上复现，
 > 再决定是换 `-O` 参数还是升级 expo 的 serializer；这不是本批代码的问题。
 
-真机：
+### 6.3 真机（2026-11-02，PLR110 / Android 16）
 
-1. 打 Android 包（docs/18）；
-2. 设置 → 实验室 · M1 → **轻引擎（工作区 + 模型）**；
-3. 先点「运行自检」：7 条命令应当全部 exit 0（pwd / ls / 建文件 / 递归 grep /
-   find / sed / 删除），耗时几十到几百毫秒；
-4. 填 Base URL、模型、API Key →「连接轻引擎」；
-5. 回主界面发一条消息：流式回答；让它"在工作区建个 hello.txt"会弹审批卡，
-   批准后可以在「工作区自检」里用 `ls` 看到。
+**结果：全链路通过。** 测试包用独立 applicationId（`cool.cnb.dshpalm.m1`）安装，
+没有动手机上原有的正式包和数据；验完已卸载。
+
+自动化入口（都在 `scripts/`）：
+
+```bash
+# 1. 假模型（真 SSE、不花 Key；按工具结果推进：提问 → bash → 最终回答）
+node --import tsx scripts/mock-model-server.ts 8799
+
+# 2. 另一个终端：装包、跑自检、连引擎、发消息、答提问、批 bash、截图
+node --import tsx scripts/device-m1-check.ts <apk 路径>
+#    底层工具：scripts/device-ui.ts（dump / tap / type / key / swipe / shot / wait）
+```
+
+实测数字（logcat `[selfcheck]` / `[light]`）：
+
+| 项 | 结果 |
+|---|---|
+| 工作区路径 | `file:///data/user/0/cool.cnb.dshpalm.m1/files/workspace/`（expo 后端） |
+| 7 条自检命令 | **全部 exit 0，合计 41–47ms**：pwd 5–6ms、ls 6–7ms、mkdir+写+cat 8–10ms、grep -r 6–7ms、find 7–8ms、sed 4ms、rm -rf 3–5ms |
+| 跨进程持久化 | 重启 App 后 `ls -la` 能看到上一轮 bash 建的 `demo/` 目录 |
+| 轻引擎连接 | `[light] workspace=… files/workspace/ model=mock-model` |
+| 三跳请求（提问→bash→收尾） | mock 侧时间戳 15:47:23.7 → 15:47:28.7 → 15:47:33.7（UTC，间隔约 5s，含审批与自动化点击） |
+| bash 工具耗时 | 工具返回 `exit code: 0, 15ms`，**包含** Bash 构造成本 → 构造不是问题 |
+| 最终回答 | 流式文本里带 `bash 返回：device-e2e ok [exit code: 0, 15ms]`，证明写的是真实文件 |
+
+证据截图：
+
+| 工作区自检 | 审批卡 | 全链路完成 |
+|---|---|---|
+| ![自检](assets/m1-selfcheck.png) | ![审批](assets/m1-approval.png) | ![完成](assets/m1-chat.png) |
+
+构建注意（本机踩到的坑）：仓库在
+`C:\Users\…\Documents\deepseek-harness\default-workspace\dsh-palm`，路径太长，
+CMake/ninja 会在 `node_modules/expo-modules-core/android/.cxx` 里报
+`build.ninja still dirty` / `mkdir ... No such file or directory`。
+把工作区 robocopy 到短路径（这次用 `C:\dp`）再 `gradlew :app:assembleRelease`
+即可；`debug.keystore` 不在仓库里（`.gitignore` 忽略 `*.keystore`），需要
+`keytool` 生成一次。真机跑完要记得把临时的 `applicationId` 和
+`usesCleartextTraffic` 改回去。
 
 ## 7. 与 docs/23 · M1 的差距
 
@@ -233,18 +266,18 @@ M1 的验收是「LightEngine MVP：会话/流式/审批/提问 + 文档 JS 库 
 
 ## 8. 已知风险 / 下一步
 
-1. **XHR 增量在 RN 上的实际行为**：需要在真机上看首 token 时间与断流；如果某
-   版本不触发 `onprogress`，退路是完整引擎的 WebSocket 流（M2）。
+1. **XHR 增量在 RN 上**：真机已验证（文本和思考都按帧渲染，三段工具链之间用户
+   能正常操作、断流重启正常）。首 token 时延没有单独计时（假模型每帧 30ms，
+   量不出真实网络下的 ttft），接真模型时补一个。
 2. **expo `new File(root, ...segments)` 的路径编码**：文件名带空格/中文要靠它；
    真机自检里没覆盖特殊字符，下一批补一条。
 3. **没有 OS 级沙箱**：bash 只能在 JS 层做路径约束 + 限额。`/workspace` 之外
    的宿主文件系统本来也读不到（Hermes 没有 `node:fs`），但不要把这当成安全边界
    写进对用户的承诺。
 4. **Bash 构造成本**：现在每次 `bash` 调用新建一个解释器（避免两个会话共享
-   env/cwd 状态）。Node 上实测构造约 2–3ms（默认布局写进内存根），Hermes 上要
-   量一次；如果偏高，退路是"每个会话一个实例 + 串行执行"。轻引擎就绪
-   < 300ms 的目标（docs/23 §10）目前不受影响——引擎本身不构造 Bash，是第一次
-   调工具时才付这个钱。
+   env/cwd 状态）。真机上 bash 工具整条命令 15ms（含构造），可以接受。
+   轻引擎就绪 < 300ms 的目标（docs/23 §10）不受影响——引擎启动不构造 Bash，
+   第一次调工具时才付这个钱。
 5. **多会话并发**：目前一个会话一个 run，没有队列；M2 的调度器再统一。
 6. **文档生成**：`docx` / SheetJS / pdf-lib 都是纯 JS，能进 Hermes；但要把
    "生成 → 落盘 → 分享"串起来，等工具集和附件能力一起做。

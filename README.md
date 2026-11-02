@@ -22,6 +22,10 @@
 
 左：首页就一个输入框 · 中：会话都在抽屉里 · 右：审批卡只看一屏就能决定
 
+2026-11-02 M1 真机（PLR110 / Android 16）：轻引擎不装 proot 也能跑——
+工作区自检 7 条命令 **41–47ms**，然后走完「提问 → 审批 bash → 流式回答」，
+bash 真实写进 `files/workspace`。截图和数字见 [docs/26](docs/26-light-engine.md)。
+
 ## 它不是什么
 
 | 不是 | 为什么 |
@@ -118,7 +122,7 @@ App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六
 | Mock 引擎 | `engine/` | 能力协商、流式块、工具调用、审批、预设切换 |
 | 真引擎桥 | `engine/src/real/` + `dist/dsh-palm-bridge.cjs` | 连真 dsh：会话 / 模型 / 审批 / 提问 / 流式 / 配对鉴权 |
 | 端到端测试 | `test/e2e.test.ts` | 11/11 通过 |
-| 轻引擎 | `app/src/engine/light/` | 进程内 agent loop：会话 / 流式 / 审批 / 提问 / 工具，走同一份协议 |
+| 轻引擎 | `app/src/engine/light/` | 进程内 agent loop：会话 / 流式 / 审批 / 提问 / 工具，走同一份协议；真机全链路已验证 |
 | 文件系统适配 | `app/src/engine/fs/` | `IFileSystem` → Node / expo-file-system，真实工作区 `/workspace` |
 | Shell | `app/src/engine/shell/` | just-bash + 手机限额（30s / 24k 输出 / 循环与遍历上限） |
 | App 界面 | `app/src/ui/` | 连接页、会话列表、聊天流式、审批卡、提问卡、会话内换预设 |
