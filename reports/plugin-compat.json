@@ -1,0 +1,4979 @@
+[
+  {
+    "name": "@deepseek-ai/dsh-client-connection",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "stream"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-file-upload",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 11
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-hmr",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [
+      "fs"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-locale",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-modules",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "module",
+      "path",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-product-analytics",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [
+      "child_process",
+      "os",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-resources",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-shortcuts",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-agent-preset",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-approval",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-attachment",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-brand-official",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-chat",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-commands",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-conversation",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-cordis",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-deepseek-model-label-1017",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-deliverables",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-directory-picker-browse",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-directory-picker-native",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-entry-customization",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-goal",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-input-trigger",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-jobs",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-layout",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-message-feedback",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-model-selection",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-open-in-app",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-permission-presets",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-plan",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-plugin-manager",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-plugin-market",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-reference",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-renderer",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-schedule",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-secret-mask",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-session",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-account",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-agent-loop",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-general",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-models",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-plugin-inventory",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-plugins",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-session-log",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-shell",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-subagent",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-settings-web-search",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-shortcuts",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-sidebar",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-sidebar-browser",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-sidebar-documentpreview",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-sidebar-files",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-sidebar-right",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-sidebar-terminal",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-skill",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-subagent",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-theme",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-tool",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-trajectory",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-user-questions",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-workflow-run",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-client-ui-workspace",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-web-frontend",
+    "version": "0.2.1-rc.5",
+    "tier": "L0",
+    "reasons": [
+      "web UI 包（官方 web 前端里渲染）"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 61
+  },
+  {
+    "name": "@deepseek-ai/cordis",
+    "version": "4.0.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：url"
+    ],
+    "nodeBuiltins": [
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/cordis-plugin-group",
+    "version": "1.0.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/cordis-plugin-include",
+    "version": "1.0.10",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path, url"
+    ],
+    "nodeBuiltins": [
+      "path",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/cordis-plugin-timer",
+    "version": "1.1.7",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/cosmokit",
+    "version": "1.8.6",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-acp-app",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-agent-default-model",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-agent-preset",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-agent-preset-registry",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 11
+  },
+  {
+    "name": "@deepseek-ai/dsh-agent-tool-presentation",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-account-controller",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-job-controller",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 12
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-remote-access",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 10
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-settings-controller",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 6
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-workspace-files",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 12
+  },
+  {
+    "name": "@deepseek-ai/dsh-attachment",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：buffer"
+    ],
+    "nodeBuiltins": [
+      "buffer"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 7
+  },
+  {
+    "name": "@deepseek-ai/dsh-authorization",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-base",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-bash-sandbox",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-brand",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-chunked-list",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-cmdline",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-command-compact",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-command-feedback",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-command-goal",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-commands",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 6
+  },
+  {
+    "name": "@deepseek-ai/dsh-compaction",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 6
+  },
+  {
+    "name": "@deepseek-ai/dsh-compaction-image-offload",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-compaction-tool-result-pruner",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-config-editor",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path, util"
+    ],
+    "nodeBuiltins": [
+      "path",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-cordis-client-runner",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-credentials",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-credentials-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-deepseek-account",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-deepseek-llm-api-extensions",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-deque",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-agent-team-profile",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-api-speech-to-text",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-auto-review",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-badge-skill-bundle",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-client-ui-agent-team",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-client-ui-cot-translation",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：events"
+    ],
+    "nodeBuiltins": [
+      "events"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-client-ui-voice-input",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-cot-translation-bundle",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-inspector-profile",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-plugin-market-bundle",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-ralph-bundle",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-session-inspector",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-session-search",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-session-titles-bundle",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-speech-to-text",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-terminal-bundle",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-tool-agent-team",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-tool-worktree",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-voice-input-bundle",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-file-reference",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-file-reference-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-fs",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-fs-observation-policy",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-fs-sandbox",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-goal-round-driver",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：util"
+    ],
+    "nodeBuiltins": [
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-harness-dev-context",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：url"
+    ],
+    "nodeBuiltins": [
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-host-directory-picker",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-host-frontend-static",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-host-plugin-inventory",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-http-proxy",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-jobs",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 6
+  },
+  {
+    "name": "@deepseek-ai/dsh-launch-environment",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-llm-deepseek-account",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-llm-deepseek-api-key",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-mcp-resources",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-output-retention",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-package-manifest",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-permission-presets",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 6
+  },
+  {
+    "name": "@deepseek-ai/dsh-persona",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-plan-mode",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-plugin-market-index",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-ptc-runtime",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-sandbox-policy",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-scope",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-sdk-app",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-sdk-jsonrpc-server",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-sdk-minimal",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 11
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-checkpoint-policy",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-format",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-format-catalog",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 7
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-format-v0-to-v1",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-format-v1-to-v2",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-format-v3-to-v4",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path, util"
+    ],
+    "nodeBuiltins": [
+      "path",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-log-deepseek",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：buffer"
+    ],
+    "nodeBuiltins": [
+      "buffer"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-log-export",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-persistence",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-projection",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-projection-cache",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-query",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-reference",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 10
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-stats",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-telemetry",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-title",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-title-all-prompts-llm",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-title-first-prompt-llm",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-title-llm",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-turn-outline",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-shell",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-shell-env",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-skill",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-skill-badge",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：url"
+    ],
+    "nodeBuiltins": [
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-spill",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-spill-policy",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-storage",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-storage-domain",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-subagent-fork-in-process",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-subagent-spawn-in-process",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-system-prompt",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-time-context",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-timeout",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-token-meter",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 12
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-ask-user",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-bash",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-call-timeout-policy",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-fs",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-goal",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-jobs",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-present",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-ralph",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-schedule",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-session-query",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-str-replace-editor",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-subagent",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-subagent-control",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-todo",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-web",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-workflow",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-working-directory",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-workspace-dependencies",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tools",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 11
+  },
+  {
+    "name": "@deepseek-ai/dsh-typert-protocol",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 9
+  },
+  {
+    "name": "@deepseek-ai/dsh-typert-registry",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 7
+  },
+  {
+    "name": "@deepseek-ai/dsh-user-questions",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 7
+  },
+  {
+    "name": "@deepseek-ai/dsh-util-code-language",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-util-crypto",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-util-time",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-util-values",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-util-workspace-path",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-web",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-web-deepseek-api",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-web-search-deepseek",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-win32-process",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-workflow",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-working-directory",
+    "version": "0.2.1-rc.5",
+    "tier": "L1",
+    "reasons": [
+      "只用轻内建：path"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/schemastery",
+    "version": "3.18.5",
+    "tier": "L1",
+    "reasons": [
+      "纯 JS"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/cordis-plugin-loader",
+    "version": "1.0.6",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：module"
+    ],
+    "nodeBuiltins": [
+      "module"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-acp",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto, http"
+    ],
+    "nodeBuiltins": [
+      "buffer",
+      "crypto",
+      "http",
+      "path",
+      "stream"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-agent",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：async_hooks"
+    ],
+    "nodeBuiltins": [
+      "async_hooks"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 9
+  },
+  {
+    "name": "@deepseek-ai/dsh-agent-instructions",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：fs, crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "path",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-agent-loop",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-anonymous-user-id",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto, fs"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-gateway",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 15
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-remotes",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：os"
+    ],
+    "nodeBuiltins": [
+      "os"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 6
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-session-controller",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：os, crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "os",
+      "path",
+      "perf_hooks"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 38
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-workspace-controller",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：os"
+    ],
+    "nodeBuiltins": [
+      "os",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 14
+  },
+  {
+    "name": "@deepseek-ai/dsh-atomic-write",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-attachment-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto, fs"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-compaction-basic",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-cordis-host-runner",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：vm"
+    ],
+    "nodeBuiltins": [
+      "vm"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 10
+  },
+  {
+    "name": "@deepseek-ai/dsh-deepseek-account-platform",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto, os"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "os",
+      "stream"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 6
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-translator",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "events"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 7
+  },
+  {
+    "name": "@deepseek-ai/dsh-fs-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto, fs"
+    ],
+    "nodeBuiltins": [
+      "buffer",
+      "crypto",
+      "events",
+      "fs",
+      "path",
+      "url",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-goal",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 9
+  },
+  {
+    "name": "@deepseek-ai/dsh-headless",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-home-paths",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：os"
+    ],
+    "nodeBuiltins": [
+      "os",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-host-directory-picker-auto",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：fs"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-host-directory-picker-browse",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：os"
+    ],
+    "nodeBuiltins": [
+      "os",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-host-product-telemetry-otel",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：http"
+    ],
+    "nodeBuiltins": [
+      "http"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-host-webserver",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：http, https, net"
+    ],
+    "nodeBuiltins": [
+      "http",
+      "https",
+      "net",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-jobs-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-lazy-require",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：module"
+    ],
+    "nodeBuiltins": [
+      "module"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-llm",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：module"
+    ],
+    "nodeBuiltins": [
+      "module"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 16
+  },
+  {
+    "name": "@deepseek-ai/dsh-llm-deepseek",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-llm-pi-ai",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：os"
+    ],
+    "nodeBuiltins": [
+      "os",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-llm-retry",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/dsh-mcp-client",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-message-feedback",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "buffer",
+      "crypto",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-office-to-pdf",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto, os, fs"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "os",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 9
+  },
+  {
+    "name": "@deepseek-ai/dsh-otel",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：zlib"
+    ],
+    "nodeBuiltins": [
+      "events",
+      "zlib"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-plugin-manager",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto, fs, os"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "events",
+      "fs",
+      "os",
+      "path",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 16
+  },
+  {
+    "name": "@deepseek-ai/dsh-plugin-market",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：worker_threads"
+    ],
+    "nodeBuiltins": [
+      "worker_threads"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 12
+  },
+  {
+    "name": "@deepseek-ai/dsh-plugin-package-inventory-deepseek",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：module, fs"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "module",
+      "path",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-pwsh-sandbox",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：fs"
+    ],
+    "nodeBuiltins": [
+      "fs"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-repeat-tool-reminder",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：module"
+    ],
+    "nodeBuiltins": [
+      "module"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-sandbox",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：fs, os"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "os"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-schedule",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 11
+  },
+  {
+    "name": "@deepseek-ai/dsh-sdk-protocol",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "string_decoder"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-format-v2-to-v3",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-query-sqlite",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-telemetry-otel",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：module"
+    ],
+    "nodeBuiltins": [
+      "module"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-settings",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：fs"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-skill-filesystem",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：fs"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-skill-office",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：fs"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "path",
+      "sea",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-spill-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：os, crypto, fs"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "os",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-storage-json",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-subagent",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto, fs"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 25
+  },
+  {
+    "name": "@deepseek-ai/dsh-subprocess",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：net"
+    ],
+    "nodeBuiltins": [
+      "net"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-tmux-context",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：module"
+    ],
+    "nodeBuiltins": [
+      "module"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-skill",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-typert-loader",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：module, fs"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "module",
+      "path",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-user-approval",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-web-fetch-http",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：net"
+    ],
+    "nodeBuiltins": [
+      "net"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-workflow-ptc",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto, os, vm"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "os",
+      "vm"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-workspace",
+    "version": "0.2.1-rc.5",
+    "tier": "L2",
+    "reasons": [
+      "需要 Node 内建：crypto"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 6
+  },
+  {
+    "name": "@deepseek-ai/dsh",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "含原生扩展（.node / node-gyp）"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "path",
+      "url",
+      "util"
+    ],
+    "hasNativeAddon": true,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 7
+  },
+  {
+    "name": "@deepseek-ai/dsh-api-terminal-controller",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 17
+  },
+  {
+    "name": "@deepseek-ai/dsh-app-boot",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "含原生扩展（.node / node-gyp）"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "module",
+      "path",
+      "url",
+      "util",
+      "worker_threads"
+    ],
+    "hasNativeAddon": true,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-bash-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-agent-team",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 16
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-speech-to-text-sensevoice",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "http",
+      "module",
+      "path",
+      "stream",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-experimental-worktree",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process",
+      "调用了外部程序 \"git\""
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-hmr",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "含原生扩展（.node / node-gyp）"
+    ],
+    "nodeBuiltins": [
+      "async_hooks",
+      "buffer",
+      "fs",
+      "module",
+      "os",
+      "path",
+      "url"
+    ],
+    "hasNativeAddon": true,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-host-directory-picker-native",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "child_process",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-host-open-in-app",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "child_process",
+      "os",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 7
+  },
+  {
+    "name": "@deepseek-ai/dsh-native-command",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "child_process",
+      "os",
+      "path",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 9
+  },
+  {
+    "name": "@deepseek-ai/dsh-ptc-runtime-node",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "async_hooks",
+      "buffer",
+      "module",
+      "net",
+      "path",
+      "repl",
+      "stream",
+      "url",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-pwsh-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-sandbox-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process",
+      "含原生扩展（.node / node-gyp）"
+    ],
+    "nodeBuiltins": [
+      "child_process",
+      "fs",
+      "os",
+      "path",
+      "url"
+    ],
+    "hasNativeAddon": true,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-sandbox-windows-acl",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "fs",
+      "os",
+      "path",
+      "url"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-session-persistence-jsonl",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "含原生扩展（.node / node-gyp）"
+    ],
+    "nodeBuiltins": [
+      "buffer",
+      "crypto",
+      "fs",
+      "module",
+      "path",
+      "perf_hooks",
+      "stream",
+      "url",
+      "util",
+      "worker_threads",
+      "zlib"
+    ],
+    "hasNativeAddon": true,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/dsh-subprocess-local",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "buffer",
+      "child_process",
+      "crypto",
+      "fs",
+      "os",
+      "path",
+      "stream",
+      "url",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 5
+  },
+  {
+    "name": "@deepseek-ai/dsh-terminal",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-terminal-bash",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "buffer"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-bash-persistent",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-cordis",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": true,
+    "jsFiles": 7
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-fs-search",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "fs",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-pwsh",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-pwsh-persistent",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "crypto"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-tool-terminal",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 1
+  },
+  {
+    "name": "@deepseek-ai/dsh-web-app",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process"
+    ],
+    "nodeBuiltins": [
+      "child_process",
+      "module",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": true,
+    "jsFiles": 3
+  },
+  {
+    "name": "@deepseek-ai/dsh-workspace-changes",
+    "version": "0.2.1-rc.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process",
+      "调用了外部程序 \"git\""
+    ],
+    "nodeBuiltins": [
+      "crypto",
+      "os",
+      "path"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 9
+  },
+  {
+    "name": "@deepseek-ai/libreoffice-kit",
+    "version": "0.1.5",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process",
+      "调用了外部程序 \"libreoffice\"",
+      "engines: node >=22.19.0"
+    ],
+    "engines": ">=22.19.0",
+    "nodeBuiltins": [
+      "child_process",
+      "crypto",
+      "events",
+      "fs",
+      "module",
+      "os",
+      "path",
+      "readline",
+      "stream",
+      "url",
+      "util",
+      "worker_threads"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 4
+  },
+  {
+    "name": "@deepseek-ai/node-addon-system",
+    "version": "0.1.2",
+    "tier": "L3",
+    "reasons": [
+      "使用 child_process",
+      "engines: node >=20"
+    ],
+    "engines": ">=20",
+    "nodeBuiltins": [
+      "child_process",
+      "module",
+      "path",
+      "url",
+      "util"
+    ],
+    "hasNativeAddon": false,
+    "hasChildProcess": true,
+    "hasElectron": false,
+    "usesProcess": true,
+    "usesDynamicImport": false,
+    "jsFiles": 2
+  },
+  {
+    "name": "@deepseek-ai/node-addon-system-linux-arm64",
+    "version": "0.1.2",
+    "tier": "no-code",
+    "reasons": [
+      "无 JS 代码（数据/样式包）",
+      "engines: node >=20"
+    ],
+    "engines": ">=20",
+    "nodeBuiltins": [],
+    "hasNativeAddon": false,
+    "hasChildProcess": false,
+    "hasElectron": false,
+    "usesProcess": false,
+    "usesDynamicImport": false,
+    "jsFiles": 0
+  }
+]
