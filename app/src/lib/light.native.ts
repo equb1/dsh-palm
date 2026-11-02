@@ -39,6 +39,7 @@ export async function createLightHost(setup: LightEngineSetup): Promise<LightHos
   });
   const dataBackend = new ExpoBackend({ api: createExpoFsApi(expoDataDir()) });
   const dataFs = await createDataSandbox(dataBackend);
+  console.log('[light] workspace=' + mount.workspace.rootLabel + ' model=' + normalized.model);
 
   return new LightHost({
     workspace: mount.workspace,
@@ -91,16 +92,20 @@ export async function runWorkspaceSelfCheck(): Promise<
 
   const started = Date.now();
   const results: import('./light').SelfCheckCase[] = [];
+  console.log('[selfcheck] workspace=' + backend.rootLabel + ' kind=' + backend.kind);
   for (const command of SELF_CHECK_CASES) {
     const result = await shell.run(command, { timeoutMs: 15_000, maxOutputChars: 600 });
-    results.push({
+    const item: import('./light').SelfCheckCase = {
       command,
       ms: result.ms,
       exitCode: result.exitCode,
       out: result.stdout.trim().slice(0, 300),
       ...(result.stderr.trim() ? { error: result.stderr.trim().slice(0, 300) } : {}),
-    });
+    };
+    results.push(item);
+    console.log('[selfcheck] ' + JSON.stringify(item));
   }
+  console.log('[selfcheck] total=' + (Date.now() - started) + 'ms');
   return {
     root: backend.rootLabel,
     kind: backend.kind,
