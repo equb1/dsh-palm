@@ -24,7 +24,8 @@
 
 2026-11-02 M1 真机（PLR110 / Android 16）：轻引擎不装 proot 也能跑——
 工作区自检 7 条命令 **41–47ms**，然后走完「提问 → 审批 bash → 流式回答」，
-bash 真实写进 `files/workspace`。截图和数字见 [docs/26](docs/26-light-engine.md)。
+bash 真实写进 `files/workspace`；换成 **DeepSeek 真模型**也跑通了同一条链路。
+截图和数字见 [docs/26](docs/26-light-engine.md)。
 
 ## 它不是什么
 

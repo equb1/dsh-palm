@@ -1,9 +1,9 @@
 # 26 · 轻引擎 MVP + IFileSystem 适配
 
-> 状态：**已实现并真机验证（PLR110 / Android 16）。**
+> 状态：**已实现并真机验证（PLR110 / Android 16；假模型 + DeepSeek 真模型）。**
 > 对应 [23-requirements.md](23-requirements.md) §2/§4 与 §8 的 M1 前半，接续
 > [25-m1-spike-results.md](25-m1-spike-results.md) 里"剩下的集成工作"第 1 条。
-> 验证：`npm run verify`（typecheck + 62 条测试）+ 真机全链路（见 §6）。
+> 验证：`npm run verify`（typecheck + 67 条测试）+ 真机全链路（见 §6）。
 
 ## 0. 一句话
 
@@ -187,12 +187,22 @@ unsupported。
 **和 proot 完整引擎挂进 `/root/work` 的是同一个目录**，两种引擎之间切，
 文件是连续的。配置（Base URL / 模型 / Key）存 SecureStore。
 
+另有一条深链，用来扫码/粘贴切换本机模型渠道：
+
+```
+dshpalm://light?base=https%3A%2F%2Fapi.deepseek.com%2Fv1&model=deepseek-chat&key=sk-…&name=DeepSeek
+```
+
+冷启动或前台收到后会存好配置并直接连接（`app/src/lib/lightLink.ts`，
+单测 `test/light-link.test.ts`）。**Key 在 URL 里，只适合本机扫码/自己粘贴**，
+不要发到聊天/群里；用完换一个。
+
 ## 6. 怎么验证
 
 ### 6.1 Node 侧（不需要手机）
 
 ```bash
-npm run verify        # typecheck + 62 条测试
+npm run verify        # typecheck + 67 条测试
 ```
 
 ### 6.2 打包侧（不需要手机，验证 Metro 解析与 `.native.ts` 分叉）
@@ -250,6 +260,36 @@ CMake/ninja 会在 `node_modules/expo-modules-core/android/.cxx` 里报
 `keytool` 生成一次。真机跑完要记得把临时的 `applicationId` 和
 `usesCleartextTraffic` 改回去。
 
+#### 真模型（DeepSeek `deepseek-chat`）
+
+假模型只能证明"管线通"，不能证明"模型真的会挑工具"。所以又用真模型跑了一遍
+（`scripts/device-real-check.ts`，Key 只从环境变量读，不落盘）：
+
+```powershell
+$env:LIGHT_BASE="https://api.deepseek.com/v1"
+$env:LIGHT_MODEL="deepseek-chat"
+$env:LIGHT_KEY="sk-…"   # 一次性测试 Key
+node --import tsx scripts/device-real-check.ts <apk>
+```
+
+流程：`am start` 带 `dshpalm://light?...` 冷启动 → App 直接连上 →
+发一条英文指令（"用 bash 建 hello.txt，内容 real-model-ok，再 cat 出来"）→
+模型自己调 `bash` → 审批 → 流式回答。
+
+| 项 | 结果 |
+|---|---|
+| 深链冷启动到首页 | 17.4s（含安装；`am start` 后直接连上，`[light] model=deepseek-chat`） |
+| 发指令到审批卡 | 21.9s（含 adb 输入 + 输入法切换的自动化开销） |
+| 批准到回答结束 | 9.6s |
+| 模型选的命令 | `printf 'real-model-ok' > hello.txt && cat hello.txt` |
+| 回答 | 「已创建 `/workspace/hello.txt`，内容为：`real-model-ok`」 |
+
+| 真模型审批 | 真模型回答 |
+|---|---|
+| ![真模型审批](assets/m1-real-approval.png) | ![真模型回答](assets/m1-real-chat.png) |
+
+一次性 Key 验完即废，没有写进仓库、日志或截图。
+
 ## 7. 与 docs/23 · M1 的差距
 
 M1 的验收是「LightEngine MVP：会话/流式/审批/提问 + 文档 JS 库 + 生图」。
@@ -266,9 +306,10 @@ M1 的验收是「LightEngine MVP：会话/流式/审批/提问 + 文档 JS 库 
 
 ## 8. 已知风险 / 下一步
 
-1. **XHR 增量在 RN 上**：真机已验证（文本和思考都按帧渲染，三段工具链之间用户
-   能正常操作、断流重启正常）。首 token 时延没有单独计时（假模型每帧 30ms，
-   量不出真实网络下的 ttft），接真模型时补一个。
+1. **XHR 增量在 RN 上**：假模型和真模型都验证过（文本和思考按帧渲染，三段工具链
+   之间用户能正常操作、断流重启正常）。**首 token 时延还没单独计时**——这次只
+   记了总耗时（批准到回答结束 9.6s）。下一批在 provider 里加一个 ttft 埋点，
+   和 docs/23 §10 的"轻引擎就绪 < 300ms"分开看。
 2. **expo `new File(root, ...segments)` 的路径编码**：文件名带空格/中文要靠它；
    真机自检里没覆盖特殊字符，下一批补一条。
 3. **没有 OS 级沙箱**：bash 只能在 JS 层做路径约束 + 限额。`/workspace` 之外
