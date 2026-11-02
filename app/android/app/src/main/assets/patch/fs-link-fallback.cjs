@@ -1,19 +1,20 @@
 /**
- * Android 兼容补丁：app 私有目录里禁止硬链接，dsh 却拿 link() 做原子落盘。
+ * Android 兼容与启动加速补丁（通过 `node --require /opt/dsh/patch/fs-link-fallback.cjs` 预加载）：
  *
- * 现象（真机 PLR110 / Android 16，proot 里的 dsh 0.2.1-rc.5）：
- *   turn/end  reason:{ kind:'error',
- *     message:"EACCES: permission denied, link '…session.v4.jsonl.zstd.<tmp>' -> '…session.v4.jsonl.zstd'" }
- * 每一轮都停在落盘这一步，模型根本没被调用，App 一直显示「生成中」。
+ * 1. 开启 Node V8 编译缓存（module.enableCompileCache）：
+ *    把 dsh 543 个 ESM 模块的字节码落盘在 /root/.dsh/compile-cache，二次冷启动跳过 JS 解析。
  *
- * 官方代码在 @deepseek-ai/dsh-session-persistence-jsonl 里是
- * "写临时文件 + fsync + link() 发布"（POSIX），用 link 保证 NO-REPLACE。
- * Android 的 SELinux 不让 app 数据目录建硬链接，而同一个目录里的 rename 是允许的、也是原子的，
- * 所以这里把 link 换成「目标不存在就 rename」，语义基本等价。
- *
- * 用 `node --require /opt/dsh/patch/fs-link-fallback.cjs` 预加载：
- * 必须在 dsh 的 ESM 图加载之前打补丁，具名导入（import { link } from 'node:fs/promises'）
- * 才会拿到这里的版本。
+ * 2. 修复 Android 私有目录禁止 link() 硬链接的问题：
+ *    - @deepseek-ai/dsh-session-persistence-jsonl 用 "写临时文件 + fsync + link() + unlink(tmp)" 原子落盘
+ *    - @deepseek-ai/dsh-attachment-local 用 "stage -> link(staged, object) -> unlink(staged) -> link(object, alias)"
+ *    注意：不能把 link() 降级成 rename()！因为：
+ *      a) dsh-attachment-local 在 link(staged, target) 下一行紧接着无 catch 地调 unlink(staged)，
+ *         如果用 rename 把 staged 移走了，unlink(staged) 会直接抛 ENOENT 导致附件上传必败；
+ *      b) publishImmutableAlias 需要同时保留 objectPath 和 aliasPath 两份文件；
+ *      c) 重复上传同一文件时，dsh-attachment-local 依赖 link() 抛出 EEXIST 触发内容寻址去重。
+ *    因此这里用 `copyFile(existing, replacement, COPYFILE_EXCL)` 降级：
+ *      - 保留源文件不消失（满足后续 unlink 和二次 link）；
+ *      - 目标已存在时原子返回 EEXIST（同时满足会话落盘 NO-REPLACE 与附件库内容寻址去重）。
  */
 'use strict';
 
@@ -37,14 +38,31 @@ function exists(path) {
   );
 }
 
+function makeEexistError(existing, replacement) {
+  return Object.assign(
+    new Error(`EEXIST: file already exists, link '${existing}' -> '${replacement}'`),
+    {
+      code: 'EEXIST',
+      errno: -17,
+      syscall: 'link',
+      path: existing,
+      dest: replacement,
+    },
+  );
+}
+
 async function linkAsync(existing, replacement) {
   try {
     return await original.link(existing, replacement);
   } catch (error) {
     if (!shouldFallback(error)) throw error;
-    // 目标已存在时不能替换：保留 link 的 NO-REPLACE 语义，把原始错误抛回去
-    if (await exists(replacement)) throw error;
-    await fsp.rename(existing, replacement);
+    try {
+      await fsp.copyFile(existing, replacement, fs.constants.COPYFILE_EXCL);
+    } catch (copyErr) {
+      if (copyErr && copyErr.code === 'EEXIST') throw copyErr;
+      if (await exists(replacement)) throw makeEexistError(existing, replacement);
+      throw copyErr;
+    }
   }
 }
 
@@ -53,8 +71,13 @@ function linkSync(existing, replacement) {
     return original.linkSync(existing, replacement);
   } catch (error) {
     if (!shouldFallback(error)) throw error;
-    if (fs.existsSync(replacement)) throw error;
-    fs.renameSync(existing, replacement);
+    try {
+      fs.copyFileSync(existing, replacement, fs.constants.COPYFILE_EXCL);
+    } catch (copyErr) {
+      if (copyErr && copyErr.code === 'EEXIST') throw copyErr;
+      if (fs.existsSync(replacement)) throw makeEexistError(existing, replacement);
+      throw copyErr;
+    }
   }
 }
 

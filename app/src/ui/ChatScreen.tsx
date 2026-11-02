@@ -16,7 +16,7 @@ import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { MarkdownView } from './MarkdownView';
 import { ModelSheet } from './ModelSheet';
-import { pickImage } from '../lib/pickImage';
+import { pickAttachments } from '../lib/pickImage';
 import { colors, font, radius, riskTone, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
@@ -350,13 +350,15 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   };
 
   const send = (): void => {
-    if (running && !hasText) {
+    const hasAttachments = state.pendingAttachments.length > 0;
+    if (running && !hasText && !hasAttachments) {
       void store.stop();
       return;
     }
-    if (!hasText) return;
+    if (!hasText && !hasAttachments) return;
+    const text = draft.trim();
     setDraft('');
-    void store.send(draft.trim());
+    void store.send(text);
   };
 
   return (
@@ -462,11 +464,13 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           onPickPreset={(id) => void store.setPreset(id)}
           attachments={state.pendingAttachments}
           onRemoveAttachment={(id) => store.removeAttachment(id)}
-          onAttach={() => {
+          onPickAttachment={(kind) => {
             void (async () => {
               try {
-                const picked = await pickImage();
-                if (picked) await store.uploadAttachment(picked.base64, picked.name);
+                const list = await pickAttachments(kind);
+                for (const item of list) {
+                  await store.uploadAttachment(item.base64, item.name, item.kind ?? kind);
+                }
               } catch (err) {
                 store.setError(err instanceof Error ? err.message : String(err));
               }

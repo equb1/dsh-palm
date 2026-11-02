@@ -129,6 +129,16 @@ export function ConnectScreen(): React.ReactElement {
               <Text style={styles.settingsText}>设置 · 账号 / 引擎</Text>
             </Pressable>
 
+            {hostAvailable && state.connectModalOpen ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => store.closeConnectModal()}
+                style={styles.settingsRow}
+              >
+                <Text style={[styles.settingsText, { color: colors.blue }]}>返回首页</Text>
+              </Pressable>
+            ) : null}
+
             {!hostAvailable ? (
             <View style={styles.hintBox}>
               <Text style={styles.hintTitle}>先把引擎跑起来</Text>

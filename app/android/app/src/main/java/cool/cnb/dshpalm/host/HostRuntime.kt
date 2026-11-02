@@ -38,9 +38,12 @@ object HostRuntime {
         val phase: String = "",
         /** 0–100，配合 phase；-1 表示不确定进度 */
         val progress: Int = -1,
+        /** 桥启动时吐出的 6 位配对码（常驻内存，不被 500 行环形日志挤掉） */
+        val pairCode: String? = null,
     )
 
     private val TOKEN_RE = Regex("token=([A-Za-z0-9_\\\\-]+)")
+    private val PAIR_RE = Regex("配对码\\s+(\\d{6})")
     private const val LOG_LIMIT = 500
     private const val READY_TIMEOUT_MS = 40_000L
 
@@ -68,6 +71,8 @@ object HostRuntime {
     @Volatile private var bridgeProcess: Process? = null
     /** 桥的监督线程；同一时刻只允许一个，token 变了靠杀进程让它换参数重起 */
     @Volatile private var bridgeLoop: Thread? = null
+    /** 认领存活进程时的守护线程 */
+    @Volatile private var adoptedWatcher: Thread? = null
     @Volatile private var stopping = false
     @Volatile private var engine = "stopped"
     @Volatile private var bridge = "stopped"
@@ -78,13 +83,14 @@ object HostRuntime {
     @Volatile private var extraEnv: Map<String, String> = emptyMap()
     @Volatile private var phase = ""
     @Volatile private var progress = -1
+    @Volatile private var pairCode: String? = null
     @Volatile private var lastPublished = ""
     /** 连续启动失败次数：到 3 次就标记"下次安全模式" */
     @Volatile private var consecutiveFailures = 0
     private var appContext: Context? = null
 
     @Synchronized
-    fun status(): Status = Status(engine, bridge, port, lastError, since, phase, progress)
+    fun status(): Status = Status(engine, bridge, port, lastError, since, phase, progress, pairCode)
 
     fun logs(): List<String> = synchronized(logs) { logs.toList() }
 
@@ -100,7 +106,7 @@ object HostRuntime {
     private fun publish() {
         val s = status()
         // 状态没变就别惊动监听者（设置页 500ms 轮询一次，日志和通知都会被刷屏）
-        val key = listOf(s.engine, s.bridge, s.port, s.error, s.since, s.phase, s.progress).joinToString("|")
+        val key = listOf(s.engine, s.bridge, s.port, s.error, s.since, s.phase, s.progress, s.pairCode).joinToString("|")
         if (key == lastPublished) return
         lastPublished = key
         for (l in listeners) {
@@ -214,31 +220,62 @@ object HostRuntime {
         prepare: (() -> Boolean)? = null,
         env: Map<String, String> = emptyMap(),
     ) {
-        if (engineProcess != null) {
+        if (engineProcess != null || adoptedWatcher?.isAlive == true) {
             log("[host] 已经在跑，忽略重复启动")
+            publish()
             return
         }
         stopping = false
         lastError = null
         port = bridgePort
-        since = System.currentTimeMillis()
-        engine = "starting"
-        bridge = "stopped"
-        phase = "准备运行时"
-        progress = 0
-        publish()
-
         extraEnv = env
         attachLogFile(context)
-        reapOrphans()
-        logStartup(engineCmd, bridgeCmd, env)
-        Thread({ runEngine(engineCmd, bridgeCmd, prepare) }, "dsh-engine").start()
+
+        val worker = Thread({
+            // 在后台线程探测是否已有存活的健康引擎+桥（避免主线程 HttpURLConnection 抛 NetworkOnMainThreadException）
+            if (hasMarkedProcess(ENGINE_MARKER) && hasMarkedProcess(BRIDGE_MARKER) && healthOk()) {
+                if (pairCode.isNullOrBlank()) {
+                    pairCode = recoverPairCodeFromLogFile(context)
+                }
+                if (since == 0L) since = System.currentTimeMillis()
+                engine = "ready"
+                bridge = "ready"
+                phase = "就绪"
+                progress = 100
+                publish()
+                log("[host] 认领已存活的本机引擎与桥（port=$port pair=${pairCode ?: "none"}），0 秒复用")
+                while (!stopping) {
+                    runCatching { Thread.sleep(1500) }
+                    if (stopping) return@Thread
+                    if (!hasMarkedProcess(ENGINE_MARKER) || !hasMarkedProcess(BRIDGE_MARKER) || !healthOk()) {
+                        log("[host] 已认领的引擎或桥退出，转入完整拉起流程")
+                        break
+                    }
+                }
+                if (stopping) return@Thread
+            }
+
+            since = System.currentTimeMillis()
+            engine = "starting"
+            bridge = "stopped"
+            phase = "准备运行时"
+            progress = 0
+            publish()
+
+            reapOrphans()
+            logStartup(engineCmd, bridgeCmd, env)
+            runEngine(engineCmd, bridgeCmd, prepare)
+        }, "dsh-engine")
+        adoptedWatcher = worker
+        worker.start()
     }
 
     @Synchronized
     fun stop() {
         stopping = true
         log("[host] 正在停止")
+        adoptedWatcher?.interrupt()
+        adoptedWatcher = null
         bridgeProcess?.let { killTree(it) }
         engineProcess?.let { killTree(it) }
         bridgeProcess = null
@@ -492,6 +529,45 @@ object HostRuntime {
         runCatching { if (p.isAlive) p.destroyForcibly() }
     }
 
+    /** 检查同 uid 是否存在带 marker 的存活进程 */
+    private fun hasMarkedProcess(marker: String): Boolean {
+        val myUid = android.os.Process.myUid()
+        val myPid = android.os.Process.myPid()
+        return runCatching {
+            File("/proc").listFiles()?.any { dir ->
+                val pid = dir.name.toIntOrNull() ?: return@any false
+                if (pid == myPid) return@any false
+                val cmdline = runCatching { File(dir, "cmdline").readText() }.getOrNull().orEmpty()
+                if (!cmdline.contains(marker)) return@any false
+                val owner = runCatching {
+                    File(dir, "status").readLines()
+                        .firstOrNull { it.startsWith("Uid:") }
+                        ?.split(Regex("\\s+"))
+                        ?.getOrNull(1)
+                        ?.toIntOrNull()
+                }.getOrNull()
+                owner == myUid
+            } == true
+        }.getOrDefault(false)
+    }
+
+    /** 从落盘日志尾部找回最近一次桥输出的 6 位配对码 */
+    private fun recoverPairCodeFromLogFile(context: Context): String? {
+        return runCatching {
+            val file = File(context.filesDir, LOG_FILE)
+            if (!file.exists()) return null
+            val len = file.length()
+            val tailBytes = 64 * 1024L
+            val text = java.io.RandomAccessFile(file, "r").use { raf ->
+                if (len > tailBytes) raf.seek(len - tailBytes)
+                val buf = ByteArray(minOf(len, tailBytes).toInt())
+                raf.readFully(buf)
+                String(buf, Charsets.UTF_8)
+            }
+            PAIR_RE.findAll(text).lastOrNull()?.groupValues?.getOrNull(1)
+        }.getOrNull()
+    }
+
     /** 杀掉同 uid、命令行里带 marker 的进程（proot/node 那一层） */
     private fun killMarked(marker: String) {
         val myUid = android.os.Process.myUid()
@@ -541,7 +617,7 @@ object HostRuntime {
         while (!stopping && System.currentTimeMillis() < deadline) {
             if (!p.isAlive) return false
             if (healthOk()) return true
-            runCatching { Thread.sleep(500) }
+            runCatching { Thread.sleep(150) }
         }
         return false
     }
@@ -552,6 +628,14 @@ object HostRuntime {
                 while (true) {
                     val line = r.readLine() ?: break
                     log("[$tag] $line")
+                    if (tag == "bridge") {
+                        PAIR_RE.find(line)?.groupValues?.getOrNull(1)?.let { code ->
+                            if (pairCode != code) {
+                                pairCode = code
+                                publish()
+                            }
+                        }
+                    }
                 }
             }
         }

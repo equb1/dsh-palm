@@ -108,7 +108,6 @@ class HostService : Service() {
 
         startInForeground()
         applySafeModeIfRequested()
-        RuntimeInstaller.ensureExecutable(applicationContext)
         val runtimePaths = RuntimeInstaller.paths(applicationContext)
         HostRuntime.start(
             context = applicationContext,
@@ -121,6 +120,7 @@ class HostService : Service() {
                     { line -> HostRuntime.note(line) },
                     { label, pct -> HostRuntime.progress(label, pct) },
                 ) &&
+                    RuntimeInstaller.ensureExecutable(applicationContext) &&
                     RuntimeInstaller.ensureLayout(applicationContext) { line -> HostRuntime.note(line) } &&
                     RuntimeInstaller.ensurePatch(applicationContext) { line -> HostRuntime.note(line) } &&
                     RuntimeInstaller.ensureShims(applicationContext) { line -> HostRuntime.note(line) }

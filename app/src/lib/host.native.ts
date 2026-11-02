@@ -17,6 +17,8 @@ export interface HostStatus {
   phase?: string;
   /** 0–100，-1 表示不确定 */
   progress?: number;
+  /** 桥启动时吐出的 6 位配对码 */
+  pairCode?: string | null;
 }
 
 interface HostNativeModule {
@@ -27,6 +29,9 @@ interface HostNativeModule {
   isBatteryWhitelisted(): Promise<boolean>;
   openBatterySettings(): Promise<boolean>;
   setSafeModeNext(enabled: boolean): Promise<boolean>;
+  readUiCache?(): Promise<string | null>;
+  writeUiCache?(json: string): Promise<boolean>;
+  getInitialNotificationSession?(): Promise<string | null>;
 }
 
 const native: HostNativeModule | null =
@@ -84,4 +89,31 @@ export async function setHostSafeModeNext(enabled: boolean): Promise<boolean> {
 export async function hostLogs(): Promise<string[]> {
   if (!native) return [];
   return await native.logs();
+}
+
+export async function readHostUiCache(): Promise<string | null> {
+  if (!native?.readUiCache) return null;
+  try {
+    return await native.readUiCache();
+  } catch {
+    return null;
+  }
+}
+
+export async function writeHostUiCache(json: string): Promise<boolean> {
+  if (!native?.writeUiCache) return false;
+  try {
+    return await native.writeUiCache(json);
+  } catch {
+    return false;
+  }
+}
+
+export async function getInitialNotificationSession(): Promise<string | null> {
+  if (!native?.getInitialNotificationSession) return null;
+  try {
+    return await native.getInitialNotificationSession();
+  } catch {
+    return null;
+  }
 }

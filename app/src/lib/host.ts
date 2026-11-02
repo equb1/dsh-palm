@@ -18,6 +18,8 @@ export interface HostStatus {
   phase?: string;
   /** 0–100，-1 表示不确定 */
   progress?: number;
+  /** 桥启动时吐出的 6 位配对码 */
+  pairCode?: string | null;
 }
 
 /** 这台设备能不能自己起引擎 */
@@ -56,4 +58,34 @@ export async function openHostBatterySettings(): Promise<boolean> {
 /** 标记"下次启动用安全模式"（重置 profiles） */
 export async function setHostSafeModeNext(_enabled: boolean): Promise<boolean> {
   return false;
+}
+
+const memUiCache: { value: string | null } = { value: null };
+
+export async function readHostUiCache(): Promise<string | null> {
+  try {
+    const ls = (globalThis as { localStorage?: Storage }).localStorage;
+    if (ls) return ls.getItem('dsh-palm.ui-cache');
+  } catch {
+    /* ignore */
+  }
+  return memUiCache.value;
+}
+
+export async function writeHostUiCache(json: string): Promise<boolean> {
+  try {
+    const ls = (globalThis as { localStorage?: Storage }).localStorage;
+    if (ls) {
+      ls.setItem('dsh-palm.ui-cache', json);
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  memUiCache.value = json;
+  return true;
+}
+
+export async function getInitialNotificationSession(): Promise<string | null> {
+  return null;
 }

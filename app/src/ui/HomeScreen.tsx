@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import type { SessionSummary } from '../protocol';
+import { pickAttachments, type AttachmentKind } from '../lib/pickImage';
 import { store, useStore } from './useStore';
 import { Dot, IconButton } from './parts';
 import { SessionDrawer } from './SessionDrawer';
@@ -92,10 +93,23 @@ export function HomeScreen(): React.ReactElement {
             : '未连接';
 
   const send = (): void => {
-    if (!hasText) return;
+    if (!hasText && state.pendingAttachments.length === 0) return;
     const text = draft.trim();
     setDraft('');
     void store.startWith(text);
+  };
+
+  const handlePickAttachment = (kind: AttachmentKind): void => {
+    void (async () => {
+      try {
+        const list = await pickAttachments(kind);
+        for (const item of list) {
+          await store.uploadAttachment(item.base64, item.name, item.kind ?? kind);
+        }
+      } catch (err) {
+        store.setError((err as Error).message || '读取附件失败');
+      }
+    })();
   };
 
   return (
@@ -106,10 +120,15 @@ export function HomeScreen(): React.ReactElement {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.brand}>锦囊</Text>
-          <View style={styles.connRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="查看引擎连接状态"
+            onPress={() => store.openConnectModal()}
+            style={styles.connRow}
+          >
             <Dot color={connColor} size={5} />
             <Text style={styles.connText}>{connLabel}</Text>
-          </View>
+          </Pressable>
         </View>
         <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
       </View>
@@ -195,6 +214,9 @@ export function HomeScreen(): React.ReactElement {
           presets={presets}
           activePresetId={state.draftPresetId}
           onPickPreset={(id) => store.setDraftPreset(id)}
+          attachments={state.pendingAttachments}
+          onPickAttachment={handlePickAttachment}
+          onRemoveAttachment={(id) => store.removeAttachment(id)}
         />
       </SmoothKeyboardAvoid>
 

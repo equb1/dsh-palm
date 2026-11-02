@@ -1,11 +1,22 @@
 import { EngineClient, type ConnectionState } from '../lib/client';
 import { clearDeviceKey, loadDeviceKey, saveDeviceKey } from '../lib/deviceKey';
-import { hostAvailable, hostLogs, hostStatus, startHost, stopHost, type HostStatus } from '../lib/host';
+import {
+  getInitialNotificationSession,
+  hostAvailable,
+  hostLogs,
+  hostStatus,
+  readHostUiCache,
+  startHost,
+  stopHost,
+  writeHostUiCache,
+  type HostStatus,
+} from '../lib/host';
 import { loadHostCommands, saveHostCommands } from '../lib/hostCmd';
 import { humanizeError } from '../lib/errors';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
 import { isAppActive, openUrl } from '../lib/platform';
 import { getInitialShare, readFileBase64 } from '../lib/share';
+import type { AttachmentKind } from '../lib/pickImage';
 import type {
   AccountState,
   Approval,
@@ -25,6 +36,67 @@ import type {
   Turn,
   Workspace,
 } from '../protocol';
+
+export interface PendingAttachment {
+  /** 已上传拿到的回执 id；列表页暂存阶段为 staged-* 临时 id */
+  receiptId: string;
+  name: string;
+  kind?: AttachmentKind;
+  /** 列表页尚未创建会话时暂存的 base64，建会话后自动上传 */
+  base64?: string;
+  uploading?: boolean;
+}
+
+const LOCAL_DEFAULT_CAPS: Capabilities = {
+  protocol: 1,
+  host: { id: 'host-real-dsh', name: '本机引擎', kind: 'phone', platform: 'android-arm64', engineVersion: '0.2.1' },
+  presets: [
+    {
+      id: 'standard',
+      name: '标准',
+      glyph: '标',
+      tagline: '宿主预设 · standard（默认）',
+      version: 'host',
+      builtin: true,
+      contract: { tools: [], net: 'allow' },
+      modelPolicy: {},
+    },
+    {
+      id: 'minimal',
+      name: '精简',
+      glyph: '简',
+      tagline: '宿主预设 · minimal',
+      version: 'host',
+      builtin: true,
+      contract: { tools: [], net: 'allow' },
+      modelPolicy: {},
+    },
+    {
+      id: 'ptc',
+      name: 'PTC',
+      glyph: 'P',
+      tagline: '宿主预设 · ptc',
+      version: 'host',
+      builtin: true,
+      contract: { tools: [], net: 'allow' },
+      modelPolicy: {},
+    },
+    {
+      id: 'cordis',
+      name: 'Cordis',
+      glyph: 'C',
+      tagline: '宿主预设 · cordis',
+      version: 'host',
+      builtin: true,
+      contract: { tools: [], net: 'allow' },
+      modelPolicy: {},
+    },
+  ],
+  workspaces: [],
+  limits: { maxAttachmentMB: 20, maxFetchFileMB: 20 },
+  events: ['engine.status', 'session.created', 'session.updated', 'run.started', 'block.appended', 'block.delta', 'block.updated', 'run.finished', 'approval.requested', 'approval.resolved', 'account.updated'],
+  actions: ['create_session', 'steer', 'stop', 'approve', 'reject'],
+};
 
 export interface AppState {
   /** 每次变化自增；getSnapshot 靠它换引用来触发重渲染 */
@@ -61,8 +133,10 @@ export interface AppState {
   deviceKey: string | null;
   /** 宿主注册过的工作区 */
   workspaces: Workspace[];
-  /** 已上传、等着跟下一条消息一起发的附件 */
-  pendingAttachments: Array<{ receiptId: string; name: string }>;
+  /** 已上传或暂存、等着跟下一条消息一起发的附件 */
+  pendingAttachments: PendingAttachment[];
+  /** 是否打开连接/诊断面板（本机模式下默认不挡首屏，直接进主页） */
+  connectModalOpen: boolean;
   /** DeepSeek 账号（未登录 / 已存凭据，含正在进行的登录尝试） */
   account: AccountState | null;
   /** 宿主上配置的模型提供商（自定义渠道） */
@@ -96,14 +170,14 @@ export class Store {
     conn: 'idle',
     url: DEFAULT_URL,
     pairCode: '',
-    caps: null,
+    caps: hostAvailable ? LOCAL_DEFAULT_CAPS : null,
     sessions: [],
     currentId: null,
     detail: null,
     approvals: {},
     error: null,
     busy: false,
-    draftPresetId: null,
+    draftPresetId: hostAvailable ? 'standard' : null,
     view: 'main',
     credentials: {},
     models: [],
@@ -113,6 +187,7 @@ export class Store {
     deviceKey: null,
     workspaces: [],
     pendingAttachments: [],
+    connectModalOpen: false,
     account: null,
     providers: [],
     providerCatalog: [],
@@ -166,6 +241,69 @@ export class Store {
     this.patch({ pairCode });
   }
 
+  openConnectModal(): void {
+    this.patch({ connectModalOpen: true });
+  }
+
+  closeConnectModal(): void {
+    this.patch({ connectModalOpen: false });
+  }
+
+  private persistUiCache(): void {
+    try {
+      const payload = JSON.stringify({
+        sessions: this.state.sessions.slice(0, 60),
+        draftPresetId: this.state.draftPresetId,
+        defaultModel: this.state.defaultModel,
+      });
+      void writeHostUiCache(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** 启动时瞬间恢复本地缓存的会话列表与设备密钥，保证首屏 0 秒直达 */
+  async hydrateLocalCache(): Promise<void> {
+    try {
+      const [key, rawCache] = await Promise.all([loadDeviceKey(), readHostUiCache()]);
+      const nextPatch: Partial<AppState> = {};
+      if (key) nextPatch.deviceKey = key;
+      if (rawCache) {
+        const parsed = JSON.parse(rawCache) as {
+          sessions?: SessionSummary[];
+          draftPresetId?: string | null;
+          defaultModel?: ModelChoice;
+        };
+        if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
+          nextPatch.sessions = parsed.sessions;
+        }
+        if (parsed.draftPresetId && !this.state.draftPresetId) {
+          nextPatch.draftPresetId = parsed.draftPresetId;
+        }
+        if (parsed.defaultModel && !this.state.defaultModel) {
+          nextPatch.defaultModel = parsed.defaultModel;
+        }
+      }
+      if (Object.keys(nextPatch).length > 0) this.patch(nextPatch);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** 检查是否从点击通知进入，自动跳转到对应会话 */
+  async checkNotificationNavigation(): Promise<void> {
+    const targetSessionId = await getInitialNotificationSession();
+    if (!targetSessionId) return;
+    if (this.state.conn === 'connected' && this.client) {
+      this.patch({ view: 'main', connectModalOpen: false });
+      await this.openSession(targetSessionId);
+    } else {
+      this.pendingNotificationSessionId = targetSessionId;
+    }
+  }
+
+  private pendingNotificationSessionId: string | null = null;
+
   /** 忘掉这台设备的配对（宿主那边需要手动删，或者下次从列表里撤） */
   async forgetDevice(): Promise<void> {
     await clearDeviceKey();
@@ -175,9 +313,13 @@ export class Store {
 
   async connect(url?: string): Promise<void> {
     const target = (url ?? this.state.url).trim();
-    const code = this.state.pairCode.trim();
+    const code = (this.state.pairCode.trim() || this.state.host?.pairCode || '').trim();
+    const key = (this.state.deviceKey ?? '').trim();
+    const params: string[] = [];
+    if (key) params.push('key=' + encodeURIComponent(key));
+    if (code) params.push('pair=' + encodeURIComponent(code));
     const separator = target.includes('?') ? '&' : '?';
-    const endpoint = code ? target + separator + 'pair=' + encodeURIComponent(code) : target;
+    const endpoint = params.length > 0 ? target + separator + params.join('&') : target;
     this.patch({ url: target, error: null, conn: 'connecting' });
 
     this.client?.close();
@@ -195,6 +337,7 @@ export class Store {
       this.patch({
         caps,
         conn: 'connected',
+        connectModalOpen: false,
         error: null,
         draftPresetId: this.state.draftPresetId ?? caps.presets[0]?.id ?? null,
       });
@@ -206,6 +349,15 @@ export class Store {
       void this.refreshWorkspaces();
       void this.refreshAccount();
       void this.refreshProviders();
+      if (this.pendingNotificationSessionId) {
+        const navId = this.pendingNotificationSessionId;
+        this.pendingNotificationSessionId = null;
+        this.patch({ view: 'main', connectModalOpen: false });
+        void this.openSession(navId);
+      } else if (this.state.currentId) {
+        // 如果用户在引擎连接前已经点开了某个缓存会话，连上后自动刷新它的详情
+        void this.openSession(this.state.currentId);
+      }
     } catch (err) {
       this.patch({ conn: 'closed' });
       this.fail(err);
@@ -215,7 +367,14 @@ export class Store {
   disconnect(): void {
     this.client?.close();
     this.client = null;
-    this.patch({ conn: 'closed', caps: null, detail: null, currentId: null, account: null });
+    this.patch({
+      conn: 'closed',
+      caps: hostAvailable ? LOCAL_DEFAULT_CAPS : null,
+      detail: null,
+      currentId: null,
+      account: null,
+      connectModalOpen: true,
+    });
   }
 
   /* ------------------------------------------------------------ */
@@ -225,6 +384,7 @@ export class Store {
     try {
       const { sessions } = await this.client.request('sessions.list', {});
       this.patch({ sessions });
+      this.persistUiCache();
     } catch (err) {
       this.fail(err);
     }
@@ -475,19 +635,24 @@ export class Store {
   }
 
   /**
-   * 首页输入框直接开聊：用当前选中的锦囊建会话，再把这句话发出去。
-   * 标题先取这句话的前 18 个字，之后可以再让模型改。
+   * 首页输入框直接开聊：用当前选中的锦囊建会话，再把这句话（及暂存附件）发出去。
+   * 标题先取这句话的前 18 个字（如果没打字只发了附件，取首个附件文件名），之后可以再让模型改。
    */
   async startWith(text: string): Promise<void> {
     const trimmed = text.trim();
-    if (!this.client || !trimmed) return;
-    const presetId = this.state.draftPresetId ?? this.state.caps?.presets[0]?.id;
-    if (!presetId) return;
+    const hasAttachments = this.state.pendingAttachments.length > 0 || Boolean(this.state.pendingShare?.imagePath);
+    if (!trimmed && !hasAttachments) return;
+    if (!this.client || this.state.conn !== 'connected') {
+      this.setError('引擎正在唤醒中，请稍候片刻再发送');
+      return;
+    }
+    const presetId = this.state.draftPresetId ?? this.state.caps?.presets[0]?.id ?? 'standard';
+    const rawTitle = trimmed || this.state.pendingAttachments[0]?.name || '新会话';
     this.patch({ busy: true, error: null });
     try {
       const { session } = await this.client.request('sessions.create', {
         presetId,
-        title: trimmed.length > 18 ? `${trimmed.slice(0, 18)}…` : trimmed,
+        title: rawTitle.length > 18 ? `${rawTitle.slice(0, 18)}…` : rawTitle,
       });
       await this.openSession(session.id);
       if (this.state.pendingShare?.imagePath) await this.attachSharedImage();
@@ -499,18 +664,45 @@ export class Store {
 
   async send(text: string): Promise<void> {
     const { currentId, detail } = this.state;
-    if (!this.client || !currentId || !detail || !text.trim()) return;
+    const trimmed = text.trim();
+    const stagedList = this.state.pendingAttachments.slice();
+    if (!this.client || !currentId || !detail || (!trimmed && stagedList.length === 0)) return;
+    if (stagedList.some((a) => a.uploading)) {
+      this.setError('附件还在上传中，请稍候…');
+      return;
+    }
     const running = detail.status === 'running' || detail.status === 'waiting_approval';
-    this.patch({ busy: true, error: null });
+    this.patch({ busy: true, error: null, pendingAttachments: [] });
     try {
-      if (running) await this.client.request('sessions.steer', { sessionId: currentId, text });
-      else await this.client.request('sessions.send', { sessionId: currentId, text });
+      const receiptIds: string[] = [];
+      for (const item of stagedList) {
+        if (item.base64) {
+          const uploaded = await this.client.request('attachments.upload', {
+            sessionId: currentId,
+            data: item.base64,
+            name: item.name,
+          });
+          receiptIds.push(uploaded.receiptId);
+        } else if (item.receiptId && !item.receiptId.startsWith('staged-')) {
+          receiptIds.push(item.receiptId);
+        }
+      }
+
+      const payload = {
+        sessionId: currentId,
+        text: trimmed,
+        ...(receiptIds.length > 0 ? { attachments: receiptIds } : {}),
+      };
+      if (running) await this.client.request('sessions.steer', payload);
+      else await this.client.request('sessions.send', payload);
       // 提交成功后立刻置为 running：停止按钮要马上出现，
       // 下一条消息也要走 steer（插话）而不是再排一个回合。
       const { detail: latest } = this.state;
       if (latest) this.patch({ busy: false, detail: { ...latest, status: 'running' } });
       else this.patch({ busy: false });
     } catch (err) {
+      // 发送失败时把附件放回待发列表，避免用户重选
+      this.patch({ pendingAttachments: stagedList });
       this.fail(err);
     }
   }
@@ -579,20 +771,39 @@ export class Store {
 
   /* ---------------------------- 模型 ---------------------------- */
 
-  /** 上传一个附件，成功后挂进待发送列表 */
-  async uploadAttachment(base64: string, name: string): Promise<void> {
+  /**
+   * 上传或暂存一个附件，成功后挂进待发送列表。
+   * - 在会话详情页（有 currentId 且已连上）：立即调 attachments.upload 拿回执；
+   * - 在首页列表页（还没建会话）：先暂存在内存 pendingAttachments 里，点发送建会话后自动上传。
+   */
+  async uploadAttachment(base64: string, name: string, kind: AttachmentKind = 'file'): Promise<void> {
     const { currentId } = this.state;
-    if (!this.client || !currentId) return;
-    this.patch({ busy: true, error: null });
+    if (!currentId || !this.client || this.state.conn !== 'connected') {
+      const stagedId = `staged-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      this.patch({
+        error: null,
+        pendingAttachments: [...this.state.pendingAttachments, { receiptId: stagedId, name, kind, base64 }],
+      });
+      return;
+    }
+
+    const tempId = `uploading-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    this.patch({
+      error: null,
+      pendingAttachments: [...this.state.pendingAttachments, { receiptId: tempId, name, kind, uploading: true }],
+    });
     try {
       const res = await this.client.request('attachments.upload', { sessionId: currentId, data: base64, name });
       this.patch({
-        busy: false,
-        pendingAttachments: [...this.state.pendingAttachments, { receiptId: res.receiptId, name: res.name ?? name }],
+        pendingAttachments: this.state.pendingAttachments.map((a) =>
+          a.receiptId === tempId ? { receiptId: res.receiptId, name: res.name ?? name, kind, uploading: false } : a,
+        ),
       });
     } catch (err) {
+      this.patch({
+        pendingAttachments: this.state.pendingAttachments.filter((a) => a.receiptId !== tempId),
+      });
       this.fail(err);
-      this.patch({ busy: false });
     }
   }
 
@@ -709,27 +920,33 @@ export class Store {
   async refreshHost(): Promise<void> {
     if (!hostAvailable) return;
     const status = await hostStatus();
-    // 启动时界面 500ms 拉一次，内容没变就别触发重渲染
-    if (status && JSON.stringify(status) !== JSON.stringify(this.state.host)) this.patch({ host: status });
+    if (!status) return;
+    const nextPatch: Partial<AppState> = {};
+    if (JSON.stringify(status) !== JSON.stringify(this.state.host)) nextPatch.host = status;
+    if (status.pairCode && status.pairCode !== this.state.pairCode) nextPatch.pairCode = status.pairCode;
+    if (Object.keys(nextPatch).length > 0) this.patch(nextPatch);
   }
 
-  /** 自动连接只赌一次：冷启动时本机引擎就绪后连一次，失败就交回给用户 */
-  private autoConnectTried = false;
+  private lastAutoConnectAt = 0;
 
   /**
    * 本机模式的一键连接。
    *
-   * 引擎和桥都是 App 自己拉起来的：地址是本机 127.0.0.1，配对码就打在桥的启动日志里。
-   * 让用户再手抄一遍六位数字没有道理——桥 ready 后自动填码并连一次。
+   * 引擎和桥都是 App 自己拉起来的：地址是本机 127.0.0.1，配对码由 HostRuntime 常驻保存（或存了 deviceKey）。
+   * 桥 ready 后自动连接，若中途断线也会按节流自动重连。
    */
   async maybeAutoConnect(): Promise<void> {
-    if (!hostAvailable || this.autoConnectTried) return;
+    if (!hostAvailable) return;
     const host = this.state.host;
     if (!host || host.engine !== 'ready' || host.bridge !== 'ready') return;
-    if (this.state.caps || this.state.conn === 'connecting') return;
-    this.autoConnectTried = true;
+    if (this.state.conn === 'connected' || this.state.conn === 'connecting') return;
+    const now = Date.now();
+    if (now - this.lastAutoConnectAt < 2000) return;
+    this.lastAutoConnectAt = now;
 
-    if (!this.state.deviceKey && !this.state.pairCode.trim()) {
+    if (host.pairCode && !this.state.pairCode.trim()) {
+      this.patch({ pairCode: host.pairCode });
+    } else if (!this.state.deviceKey && !this.state.pairCode.trim()) {
       try {
         const logs = await hostLogs();
         const found = logs.join('\n').match(/配对码\s+(\d{6})/);
@@ -757,11 +974,14 @@ export class Store {
       this.setError('这台设备不支持本机引擎（需要原生构建，Expo Go 不行）');
       return;
     }
+    await this.hydrateLocalCache();
+    void ensureNotificationPermission();
     await startHost({
       engineCmd: this.state.hostEngineCmd.trim() || undefined,
       bridgeCmd: this.state.hostBridgeCmd.trim() || undefined,
     });
     await this.refreshHost();
+    await this.maybeAutoConnect();
   }
 
   async stopLocalHost(): Promise<void> {
@@ -789,18 +1009,30 @@ export class Store {
     if (isAppActive()) return;
     if (this.notifiedApprovals.has(approval.id)) return;
     this.notifiedApprovals.add(approval.id);
-    const title = approval.kind === 'question' ? '有个问题要你回答' : '需要你确认';
-    void notifyEvent(title, approval.title, 'approval:' + approval.id);
+    const title = approval.kind === 'question' ? '有个问题等你回答' : '需要你确认操作';
+    const body = approval.summary ? `${approval.title}：${approval.summary}` : approval.title;
+    void notifyEvent(title, body, `approval:${approval.sessionId}:${approval.id}`);
   }
 
-  private notifyRunFinished(data: { sessionId: string; reason: string }): void {
+  private notifyRunFinished(data: { sessionId: string; reason: string; preview?: string; error?: string }): void {
     if (isAppActive()) return;
     if (data.reason === 'stopped') return;
-    const session = this.state.sessions.find((s) => s.id === data.sessionId);
+    const session =
+      this.state.sessions.find((s) => s.id === data.sessionId) ??
+      (this.state.detail?.id === data.sessionId ? this.state.detail : undefined);
+    const sessionTitle = session?.title ?? '会话';
+    if (data.reason === 'error') {
+      void notifyEvent(
+        `会话出错 · ${sessionTitle}`,
+        data.error || '执行过程中遇到错误，点击查看详情',
+        `run:${data.sessionId}`,
+      );
+      return;
+    }
     void notifyEvent(
-      data.reason === 'error' ? '会话出错' : '任务完成',
-      session?.title ?? '会话',
-      'run:' + data.sessionId,
+      `回复完成 · ${sessionTitle}`,
+      data.preview || '已完成本轮回复，点击查看',
+      `run:${data.sessionId}`,
     );
   }
 
@@ -822,6 +1054,7 @@ export class Store {
         const patch: Partial<AppState> = { sessions };
         if (detail && detail.id === session.id) patch.detail = { ...detail, ...session };
         this.patch(patch);
+        this.persistUiCache();
         return;
       }
 

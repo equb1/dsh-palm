@@ -541,23 +541,79 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     // 真引擎的事件（turn/end 之类）
     if (value.type === 'event') {
       const ev = (value as { event?: { type?: string; data?: Record<string, unknown> } }).event;
-      if (ev?.type === 'turn/end' && liveTurn) {
-        // 真引擎的收尾原因：completed / aborted（用户中断）/ stopped
+      if (ev?.type === 'session/title') {
+        const nextTitle = typeof ev.data?.title === 'string' ? ev.data.title.trim() : '';
+        if (nextTitle) {
+          void client
+            .listSessions()
+            .then(({ items }) => {
+              const found = items.find((s) => s.sessionId === sessionId);
+              if (found) {
+                const summary = toSummary(found);
+                summary.title = nextTitle;
+                broadcast('session.updated', { session: summary });
+              }
+            })
+            .catch(() => undefined);
+        }
+        return;
+      }
+      if (ev?.type === 'turn/end') {
+        // 真引擎的收尾原因：completed / stop / aborted（用户中断）/ stopped / error
         const reason = (ev.data?.reason ?? {}) as Record<string, unknown>;
         const kind = typeof reason.kind === 'string' ? reason.kind : '';
-        const cancelled = kind === 'aborted' || kind === 'stopped';
-        liveTurn.status = cancelled ? 'stopped' : 'done';
-        liveTurn.meta = { steps: liveTurn.blocks.length };
-        broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
+        const finalReason: 'done' | 'stopped' | 'error' =
+          kind === 'completed' || kind === 'stop' || kind === ''
+            ? 'done'
+            : kind === 'aborted' || kind === 'stopped'
+              ? 'stopped'
+              : 'error';
+        const failure = (reason.failure ?? {}) as Record<string, unknown>;
+        const errMsg =
+          typeof reason.message === 'string' && reason.message.trim()
+            ? reason.message.trim()
+            : typeof failure.message === 'string' && failure.message.trim()
+              ? failure.message.trim()
+              : '';
+
+        if (!liveTurn && finalReason === 'error') {
+          liveRunId = crypto.randomUUID();
+          liveTurn = {
+            id: 'turn-' + liveRunId,
+            role: 'assistant',
+            createdAt: Date.now(),
+            blocks: errMsg ? [{ kind: 'text', id: liveRunId + '-err', text: `错误：${errMsg}` }] : [],
+            status: 'error',
+          };
+        }
+
+        let preview = '';
+        if (liveTurn) {
+          liveTurn.status = finalReason;
+          if (finalReason === 'error' && errMsg && liveTurn.blocks.length === 0) {
+            liveTurn.blocks.push({ kind: 'text', id: liveRunId + '-err', text: `错误：${errMsg}` });
+          }
+          liveTurn.meta = { steps: liveTurn.blocks.length };
+          for (let i = liveTurn.blocks.length - 1; i >= 0; i -= 1) {
+            const b = liveTurn.blocks[i];
+            if (b && b.kind === 'text' && b.text.trim()) {
+              preview = b.text.replace(/\s+/g, ' ').trim().slice(0, 120);
+              break;
+            }
+          }
+          broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
+        }
+
         broadcast('run.finished', {
           sessionId,
-          runId: liveRunId,
-          reason: cancelled ? 'stopped' : 'done',
-          usage: liveTurn.usage,
+          runId: liveRunId || 'run',
+          reason: finalReason,
+          usage: liveTurn?.usage,
+          ...(errMsg ? { error: errMsg } : {}),
+          ...(preview ? { preview } : {}),
         });
         liveTurn = null;
       }
-
 
       return;
     }
@@ -735,9 +791,22 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
     // 真引擎的发消息：session/prompt。mode=queue 排队，steer 立刻插入当前回合。
     'sessions.send': async ({ sessionId, text, attachments }) => {
-      broadcastUserTurn(sessionId, text);
-      const parts: Array<Record<string, unknown>> = [{ type: 'text', text }];
-      for (const receiptId of attachments ?? []) parts.push({ type: 'file', receiptId });
+      startFollow(sessionId);
+      const cleanText = text.trim();
+      const attList = attachments ?? [];
+      const displayText =
+        cleanText.length > 0
+          ? attList.length > 0
+            ? `${cleanText}\n[已附带 ${attList.length} 个文件]`
+            : text
+          : attList.length > 0
+            ? `[已发送 ${attList.length} 个附件]`
+            : text;
+      broadcastUserTurn(sessionId, displayText);
+      const parts: Array<Record<string, unknown>> = [
+        { type: 'text', text: cleanText.length > 0 ? text : '请查看并处理我上传的附件。' },
+      ];
+      for (const receiptId of attList) parts.push({ type: 'file', receiptId });
       await client.rpc('session/prompt', {
         request: {
           requestId: crypto.randomUUID(),
@@ -749,14 +818,29 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { accepted: true as const, runId: crypto.randomUUID() };
     },
 
-    'sessions.steer': async ({ sessionId, text }) => {
-      broadcastUserTurn(sessionId, text);
+    'sessions.steer': async ({ sessionId, text, attachments }) => {
+      startFollow(sessionId);
+      const cleanText = text.trim();
+      const attList = attachments ?? [];
+      const displayText =
+        cleanText.length > 0
+          ? attList.length > 0
+            ? `${cleanText}\n[已附带 ${attList.length} 个文件]`
+            : text
+          : attList.length > 0
+            ? `[已发送 ${attList.length} 个附件]`
+            : text;
+      broadcastUserTurn(sessionId, displayText);
+      const parts: Array<Record<string, unknown>> = [
+        { type: 'text', text: cleanText.length > 0 ? text : '请查看并处理我上传的附件。' },
+      ];
+      for (const receiptId of attList) parts.push({ type: 'file', receiptId });
       await client.rpc('session/prompt', {
         request: {
           requestId: crypto.randomUUID(),
           sessionId,
           mode: 'steer',
-          content: [{ type: 'text', text }],
+          content: parts,
         },
       });
       return { accepted: true as const };
@@ -840,9 +924,10 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { workspace };
     },
     'attachments.upload': async ({ sessionId, data, name }) => {
+      const cleanBase64 = data.replace(/^data:[^;]+;base64,/i, '').replace(/\s+/g, '');
       const value = await client.rpc<{ receiptId?: string; file?: { name?: string } }>('fileUploads/upload', {
         agentId: sessionId,
-        request: { data, ...(name ? { name } : {}) },
+        request: { data: cleanBase64, ...(name ? { name } : {}) },
       });
       const receiptId = String(value.receiptId ?? '');
       if (!receiptId) throw Object.assign(new Error('宿主没有返回上传回执'), { code: 'internal' satisfies ProtocolError['code'] });

@@ -1,12 +1,17 @@
 package cool.cnb.dshpalm.host
 
+import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -18,6 +23,47 @@ import com.facebook.react.bridge.WritableMap
  * 界面通过这些方法控制原生服务，不再需要 adb。
  */
 class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
+
+    @Volatile private var pendingPickPromise: Promise? = null
+
+    init {
+        ctx.addActivityEventListener(object : BaseActivityEventListener() {
+            override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+                if (requestCode != PICK_FILE_REQ) return
+                val promise = pendingPickPromise ?: return
+                pendingPickPromise = null
+                if (resultCode != Activity.RESULT_OK || data == null) {
+                    promise.resolve(Arguments.createArray())
+                    return
+                }
+                val uris = mutableListOf<Uri>()
+                val clip = data.clipData
+                if (clip != null) {
+                    for (i in 0 until clip.itemCount) {
+                        clip.getItemAt(i)?.uri?.let { uris.add(it) }
+                    }
+                } else {
+                    data.data?.let { uris.add(it) }
+                }
+                if (uris.isEmpty()) {
+                    promise.resolve(Arguments.createArray())
+                    return
+                }
+                Thread({
+                    try {
+                        val arr = Arguments.createArray()
+                        for (uri in uris) {
+                            val item = readUriAsAttachment(uri)
+                            if (item != null) arr.pushMap(item)
+                        }
+                        promise.resolve(arr)
+                    } catch (t: Throwable) {
+                        promise.reject("pick_failed", t.message ?: "读取文件失败", t)
+                    }
+                }, "dsh-pick-file").start()
+            }
+        })
+    }
 
     override fun getName(): String = "DshPalmHost"
 
@@ -85,20 +131,31 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     @ReactMethod
     fun notifyEvent(title: String, body: String, tag: String?, promise: Promise) {
         try {
+            // 原生层强校验：如果当前 Activity 正在前台且拥有焦点，绝不弹系统通知（防止刚切回前台瞬间误弹）
+            val activity = ctx.currentActivity
+            if (activity != null && activity.hasWindowFocus()) {
+                promise.resolve(false)
+                return
+            }
             val manager = ctx.getSystemService(NotificationManager::class.java)
             if (!manager.areNotificationsEnabled()) {
                 promise.resolve(false)
                 return
             }
             ensureEventChannel(manager)
+            val sessionId = extractSessionIdFromTag(tag)
+            val notifyId = (tag ?: title).hashCode()
             val intent = Intent(ctx, cool.cnb.dshpalm.MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 action = Intent.ACTION_MAIN
                 addCategory(Intent.CATEGORY_LAUNCHER)
+                if (!sessionId.isNullOrBlank()) {
+                    putExtra(EXTRA_NOTIFY_SESSION_ID, sessionId)
+                }
             }
             val pending = PendingIntent.getActivity(
                 ctx,
-                0,
+                notifyId,
                 intent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
@@ -110,11 +167,35 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
                 .setAutoCancel(true)
                 .setContentIntent(pending)
                 .build()
-            manager.notify((tag ?: title).hashCode(), notification)
+            manager.notify(notifyId, notification)
             promise.resolve(true)
         } catch (t: Throwable) {
             promise.reject("notify_failed", t)
         }
+    }
+
+    /** 读取点击通知带过来的目标会话 ID（读一次即清除） */
+    @ReactMethod
+    fun getInitialNotificationSession(promise: Promise) {
+        try {
+            val intent = ctx.currentActivity?.intent
+            val sessionId = intent?.getStringExtra(EXTRA_NOTIFY_SESSION_ID)
+            if (!sessionId.isNullOrBlank()) {
+                intent.removeExtra(EXTRA_NOTIFY_SESSION_ID)
+                promise.resolve(sessionId)
+            } else {
+                promise.resolve(null)
+            }
+        } catch (t: Throwable) {
+            promise.resolve(null)
+        }
+    }
+
+    private fun extractSessionIdFromTag(tag: String?): String? {
+        if (tag.isNullOrBlank()) return null
+        // 支持 "run:<sessionId>" 或 "approval:<sessionId>:<approvalId>"
+        val parts = tag.split(":")
+        return if (parts.size >= 2 && parts[1].startsWith("session-")) parts[1] else null
     }
 
     private fun ensureEventChannel(manager: NotificationManager) {
@@ -223,6 +304,110 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         }
     }
 
+    /**
+     * 打开系统文件选择器（支持图片、视频、音频及任意类型文件，支持多选）。
+     * 返回 [{ name, mime, size, base64 }]。
+     */
+    @ReactMethod
+    fun pickAttachments(mimeType: String?, promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null) {
+            promise.reject("no_activity", "当前界面不可用")
+            return
+        }
+        pendingPickPromise?.resolve(Arguments.createArray())
+        pendingPickPromise = promise
+        try {
+            val targetMime = mimeType?.takeIf { it.isNotBlank() } ?: "*/*"
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = targetMime
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }
+            activity.startActivityForResult(intent, PICK_FILE_REQ)
+        } catch (t: Throwable) {
+            try {
+                val targetMime = mimeType?.takeIf { it.isNotBlank() } ?: "*/*"
+                val fallback = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = targetMime
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                }
+                activity.startActivityForResult(Intent.createChooser(fallback, "选择附件"), PICK_FILE_REQ)
+            } catch (e: Throwable) {
+                pendingPickPromise = null
+                promise.reject("pick_failed", e.message ?: "无法打开文件选择器", e)
+            }
+        }
+    }
+
+    private fun readUriAsAttachment(uri: Uri): WritableMap? {
+        val cr = ctx.contentResolver
+        val mime = cr.getType(uri) ?: "application/octet-stream"
+        var displayName: String? = null
+        var size: Long = -1L
+        runCatching {
+            cr.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIdx >= 0 && !cursor.isNull(nameIdx)) {
+                        displayName = cursor.getString(nameIdx)
+                    }
+                    val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) {
+                        size = cursor.getLong(sizeIdx)
+                    }
+                }
+            }
+        }
+        if (size > MAX_ATTACHMENT_BYTES) {
+            throw IllegalArgumentException("文件「${displayName ?: "附件"}」超过 20MB 上限")
+        }
+        val bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: return null
+        if (bytes.isEmpty()) return null
+        if (bytes.size > MAX_ATTACHMENT_BYTES) {
+            throw IllegalArgumentException("文件「${displayName ?: "附件"}」超过 20MB 上限")
+        }
+        val finalName = displayName?.takeIf { it.isNotBlank() } ?: run {
+            val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "bin"
+            "attachment-${System.currentTimeMillis()}.$ext"
+        }
+        val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+        return Arguments.createMap().apply {
+            putString("name", finalName)
+            putString("mime", mime)
+            putDouble("size", bytes.size.toDouble())
+            putString("base64", base64)
+        }
+    }
+
+    /** 读取本地 UI 缓存（首屏秒开会话列表） */
+    @ReactMethod
+    fun readUiCache(promise: Promise) {
+        try {
+            val file = java.io.File(ctx.filesDir, UI_CACHE_FILE)
+            if (!file.exists()) {
+                promise.resolve(null)
+                return
+            }
+            promise.resolve(file.readText(Charsets.UTF_8))
+        } catch (_: Throwable) {
+            promise.resolve(null)
+        }
+    }
+
+    /** 写入本地 UI 缓存 */
+    @ReactMethod
+    fun writeUiCache(json: String, promise: Promise) {
+        try {
+            val file = java.io.File(ctx.filesDir, UI_CACHE_FILE)
+            file.writeText(json, Charsets.UTF_8)
+            promise.resolve(true)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
     @ReactMethod
     fun logs(promise: Promise) {
         promise.resolve(Arguments.createArray().apply { HostRuntime.logs().forEach { pushString(it) } })
@@ -230,6 +415,10 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
 
     companion object {
         private const val EVENT_CHANNEL = "dsh-palm-events"
+        private const val EXTRA_NOTIFY_SESSION_ID = "dsh_session_id"
+        private const val PICK_FILE_REQ = 4712
+        private const val MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+        private const val UI_CACHE_FILE = "ui-cache.json"
     }
 
     private fun toMap(s: HostRuntime.Status): WritableMap = Arguments.createMap().apply {
@@ -240,6 +429,7 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         putDouble("since", s.since.toDouble())
         putString("phase", s.phase)
         putInt("progress", s.progress)
+        putString("pairCode", s.pairCode)
     }
 
     private fun prefs() = ctx.getSharedPreferences("dsh-palm", android.content.Context.MODE_PRIVATE)

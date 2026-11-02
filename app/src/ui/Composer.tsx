@@ -1,12 +1,33 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import type { AttachmentKind } from '../lib/pickImage';
 import type { Preset } from '../protocol';
 import { colors, radius, space } from './theme';
 
+export interface ComposerAttachment {
+  receiptId: string;
+  name: string;
+  kind?: AttachmentKind;
+  uploading?: boolean;
+}
+
+const KIND_BADGE: Record<AttachmentKind, string> = {
+  image: '图',
+  video: '视',
+  audio: '音',
+  file: '件',
+};
+
+const ATTACH_TYPES: Array<{ kind: AttachmentKind; label: string; sub: string }> = [
+  { kind: 'image', label: '图片', sub: '相册原图/截图' },
+  { kind: 'file', label: '文件', sub: '文档/代码/压缩包' },
+  { kind: 'video', label: '视频', sub: 'MP4/录屏短片' },
+  { kind: 'audio', label: '音频', sub: '录音/MP3/语音' },
+];
+
 /**
- * 输入区：上排是输入框和发送键，下排是一排预设胶囊。
- * 预设不做成弹层——豆包和 Gemini 都是「一排小胶囊」，扫一眼就能换。
+ * 输入区：上排是附件预览/类型菜单，中排是左 `+` + 输入框 + 右发送键，下排是一排预设胶囊。
  */
 export function Composer({
   draft,
@@ -23,6 +44,7 @@ export function Composer({
   canSteer = true,
   attachments = [],
   onAttach,
+  onPickAttachment,
   onRemoveAttachment,
 }: {
   draft: string;
@@ -39,54 +61,106 @@ export function Composer({
   /** 宿主能力：能不能停、能不能插话 */
   canStop?: boolean;
   canSteer?: boolean;
-  attachments?: Array<{ receiptId: string; name: string }>;
+  attachments?: ComposerAttachment[];
   onAttach?: () => void;
+  onPickAttachment?: (kind: AttachmentKind) => void;
   onRemoveAttachment?: (receiptId: string) => void;
 }): React.ReactElement {
   const hasText = draft.trim().length > 0;
-  const showStop = running && !hasText && canStop;
-  const canSend = hasText && (!running || canSteer);
-  const [contentHeight, setContentHeight] = React.useState(26);
+  const hasAttachments = attachments.length > 0;
+  const anyUploading = attachments.some((a) => a.uploading);
+  const showStop = running && !hasText && !hasAttachments && canStop;
+  const canSend = (hasText || hasAttachments) && !anyUploading && (!running || canSteer);
+  const [contentHeight, setContentHeight] = React.useState(32);
+  const [attachMenuOpen, setAttachMenuOpen] = React.useState(false);
 
-  // 当内容被清空（发送后），高度自动重置为单行初始高度
+  // 当内容被清空（发送后），高度自动重置为单行初始高度 32（与左右 32x32 按钮严格等高）
   React.useEffect(() => {
     if (!draft) {
-      setContentHeight(26);
+      setContentHeight(32);
     }
   }, [draft]);
 
-  const clampedHeight = Math.max(26, Math.min(120, contentHeight));
+  const clampedHeight = Math.max(32, Math.min(120, contentHeight));
+  const isSingleLine = clampedHeight <= 38;
+
+  const handlePressPlus = () => {
+    if (onPickAttachment) {
+      setAttachMenuOpen((v) => !v);
+    } else if (onAttach) {
+      onAttach();
+    }
+  };
 
   return (
     <View style={styles.wrap}>
       <View style={styles.box}>
-        {attachments.length > 0 ? (
-          <View style={styles.attachRow}>
-            {attachments.map((a) => (
+        {attachMenuOpen && onPickAttachment ? (
+          <View style={styles.typeMenu}>
+            {ATTACH_TYPES.map((item) => (
               <Pressable
-                key={a.receiptId}
+                key={item.kind}
                 accessibilityRole="button"
-                accessibilityLabel={'移除附件 ' + a.name}
-                onPress={() => onRemoveAttachment?.(a.receiptId)}
-                style={styles.attachChip}
+                accessibilityLabel={'添加' + item.label}
+                onPress={() => {
+                  setAttachMenuOpen(false);
+                  onPickAttachment(item.kind);
+                }}
+                style={({ pressed }) => [styles.typeItem, pressed && { opacity: 0.7 }]}
               >
-                <Text style={styles.attachChipText} numberOfLines={1}>
-                  {a.name}
-                </Text>
-                <Text style={styles.attachChipClose}>×</Text>
+                <View style={styles.typeIconCircle}>
+                  <Text style={styles.typeIconText}>{KIND_BADGE[item.kind]}</Text>
+                </View>
+                <View style={styles.typeTextCol}>
+                  <Text style={styles.typeLabel}>{item.label}</Text>
+                  <Text style={styles.typeSub} numberOfLines={1}>
+                    {item.sub}
+                  </Text>
+                </View>
               </Pressable>
             ))}
           </View>
         ) : null}
 
-        <View style={styles.inputRow}>
+        {attachments.length > 0 ? (
+          <View style={styles.attachRow}>
+            {attachments.map((a) => {
+              const badge = KIND_BADGE[a.kind ?? 'file'] ?? '件';
+              return (
+                <Pressable
+                  key={a.receiptId}
+                  accessibilityRole="button"
+                  accessibilityLabel={'移除附件 ' + a.name}
+                  onPress={() => onRemoveAttachment?.(a.receiptId)}
+                  style={[styles.attachChip, a.uploading && { opacity: 0.65 }]}
+                >
+                  <View style={styles.attachBadge}>
+                    <Text style={styles.attachBadgeText}>{badge}</Text>
+                  </View>
+                  <Text style={styles.attachChipText} numberOfLines={1}>
+                    {a.name}
+                    {a.uploading ? ' · 上传中…' : ''}
+                  </Text>
+                  <Text style={styles.attachChipClose}>×</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        <View style={[styles.inputRow, isSingleLine ? styles.inputRowCenter : styles.inputRowBottom]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="添加附件"
-            onPress={onAttach}
-            style={({ pressed }) => [styles.attachBtn, pressed && { opacity: 0.6 }]}
+            onPress={handlePressPlus}
+            style={({ pressed }) => [
+              styles.attachBtn,
+              attachMenuOpen && styles.attachBtnActive,
+              pressed && { opacity: 0.65 },
+            ]}
           >
-            <Text style={styles.attachGlyph}>＋</Text>
+            <View style={[styles.plusBarH, attachMenuOpen && styles.plusBarActive]} />
+            <View style={[styles.plusBarV, attachMenuOpen && styles.plusBarActive]} />
           </Pressable>
           <TextInput
             style={[styles.input, { height: clampedHeight }]}
@@ -119,33 +193,33 @@ export function Composer({
         </View>
 
         {showPresets ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRow}
-          keyboardShouldPersistTaps="handled"
-        >
-          {presets.map((p) => {
-            const active = p.id === activePresetId;
-            return (
-              <Pressable
-                key={p.id}
-                onPress={() => onPickPreset(p.id)}
-                accessibilityRole="button"
-                accessibilityLabel={p.name}
-                style={({ pressed }) => [
-                  styles.chip,
-                  active && styles.chipActive,
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {p.glyph} {p.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+            keyboardShouldPersistTaps="handled"
+          >
+            {presets.map((p) => {
+              const active = p.id === activePresetId;
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() => onPickPreset(p.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={p.name}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    active && styles.chipActive,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    {p.glyph} {p.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         ) : null}
       </View>
     </View>
@@ -163,20 +237,89 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
     gap: 8,
   },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  typeMenu: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 2,
+    paddingTop: 2,
+    paddingBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  typeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '48%',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  typeIconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.blueSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeIconText: {
+    color: colors.blue,
+    fontSize: 12,
+    fontWeight: '700',
+    includeFontPadding: false,
+  },
+  typeTextCol: { flex: 1 },
+  typeLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  typeSub: { color: colors.textFaint, fontSize: 10.5 },
+  inputRow: { flexDirection: 'row', gap: 8 },
+  inputRowCenter: { alignItems: 'center' },
+  inputRowBottom: { alignItems: 'flex-end' },
+  attachBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachBtnActive: {
+    backgroundColor: colors.blueSoft,
+  },
+  plusBarH: {
+    position: 'absolute',
+    width: 14,
+    height: 1.8,
+    borderRadius: 1,
+    backgroundColor: colors.textDim,
+  },
+  plusBarV: {
+    position: 'absolute',
+    width: 1.8,
+    height: 14,
+    borderRadius: 1,
+    backgroundColor: colors.textDim,
+  },
+  plusBarActive: {
+    backgroundColor: colors.blue,
+  },
   input: {
     flex: 1,
-    minHeight: 26,
+    minHeight: 32,
     maxHeight: 120,
-    paddingVertical: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
     color: colors.text,
     fontSize: 15,
     lineHeight: 21,
+    includeFontPadding: false,
   },
   sendBtn: {
     width: 32,
@@ -186,21 +329,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 10, paddingTop: 8 },
+  sendGlyph: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    includeFontPadding: false,
+  },
+  attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 2, paddingTop: 2 },
   attachChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    maxWidth: 200,
+    maxWidth: 220,
     backgroundColor: colors.glassStrong,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  attachChipText: { color: colors.textDim, fontSize: 12 },
-  attachChipClose: { color: colors.textFaint, fontSize: 13 },
-  attachBtn: { paddingHorizontal: 8, paddingVertical: 6 },
-  attachGlyph: { color: colors.textDim, fontSize: 16, fontWeight: '600' },  sendGlyph: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  attachBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    backgroundColor: colors.blueSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachBadgeText: { color: colors.blue, fontSize: 10, fontWeight: '700', includeFontPadding: false },
+  attachChipText: { color: colors.textDim, fontSize: 12, flexShrink: 1 },
+  attachChipClose: { color: colors.textFaint, fontSize: 14, paddingLeft: 2 },
   chipRow: { gap: 6, paddingRight: space.sm },
   chip: {
     flexDirection: 'row',
