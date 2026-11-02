@@ -52,6 +52,9 @@
 | [docs/13-local-engine.md](docs/13-local-engine.md) | 本机引擎落地清单（阶段 1，未实现） | 上真机前 |
 | [docs/17-handoff.md](docs/17-handoff.md) | 交接：真机运行时的现状、踩过的坑、下一步 | 接手真机部分时 |
 | [docs/18-run-on-new-machine.md](docs/18-run-on-new-machine.md) | **新电脑怎么跑**：看界面 / 连真 dsh / 打安卓包 | 刚 clone 下来时 |
+| [docs/19-ui-research.md](docs/19-ui-research.md) | dsh-go 的 UI 调研、与锦囊的差距、三批施工顺序 | 动界面前 |
+| [docs/20-open-work.md](docs/20-open-work.md) | **非 UI 的欠账**：P0/P1/P2 + 工程债 | 排期时 |
+| [docs/21-git-workflow.md](docs/21-git-workflow.md) | 分支/提交规范：从 develop 开，一次一个分支 | 每次动代码前 |
 
 ## 跑起来
 
@@ -117,10 +120,10 @@ App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六
 ## 现在还没有的
 
 - iOS 本机引擎（物理上不可能，没有 fork/exec）和 iOS 遥控器（阶段 2）
-- 手机端模型账号 OAuth 登录（现在填 API Key，见 [12-model-login](docs/12-model-login.md)）
-- 工作区还在 rootfs 里，用户在文件管理器里看不到（见 [17-handoff](docs/17-handoff.md) 的下一步）
-- 拍照 / OCR / 分享菜单
-- 推送、插件市场、桌宠、皮肤
+- 拍照 / OCR
+- 远程推送（跑完/待审批的**本地通知**已接，真机验过）
+- 插件市场、桌宠、皮肤
+- 详见 [20-open-work](docs/20-open-work.md)
 
 ## 当前状态
 

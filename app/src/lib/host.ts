@@ -14,6 +14,10 @@ export interface HostStatus {
   port: number;
   error: string | null;
   since: number;
+  /** 当前这一步（解压 / 启动引擎 / 就绪） */
+  phase?: string;
+  /** 0–100，-1 表示不确定 */
+  progress?: number;
 }
 
 /** 这台设备能不能自己起引擎 */
@@ -37,4 +41,19 @@ export async function hostStatus(): Promise<HostStatus | null> {
 
 export async function hostLogs(): Promise<string[]> {
   return [];
+}
+
+/** 系统是否已把本应用排除在省电限制外（null = 这台设备问不到） */
+export async function hostBatteryWhitelisted(): Promise<boolean | null> {
+  return null;
+}
+
+/** 打开系统电池设置让用户手动放行 */
+export async function openHostBatterySettings(): Promise<boolean> {
+  return false;
+}
+
+/** 标记"下次启动用安全模式"（重置 profiles） */
+export async function setHostSafeModeNext(_enabled: boolean): Promise<boolean> {
+  return false;
 }

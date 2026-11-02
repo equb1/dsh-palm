@@ -1,13 +1,43 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { store, useStore } from './useStore';
 import { Btn, IconButton, Pill } from './parts';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { colors, font, radius, space, topInset } from './theme';
-import { hostAvailable } from '../lib/host';
+import {
+  hostAvailable,
+  hostBatteryWhitelisted,
+  hostLogs,
+  openHostBatterySettings,
+  setHostSafeModeNext,
+} from '../lib/host';
+import { ProvidersCard } from './ProvidersCard';
 
 const REF = 'DEEPSEEK_API_KEY';
+
+/** 登录尝试的阶段 → 一句人能看懂的话 */
+function attemptText(phase: string | undefined, errorCode: string | undefined): string | null {
+  if (!phase) return null;
+  switch (phase) {
+    case 'initializing':
+      return '正在准备登录…';
+    case 'waiting-browser':
+      return '在浏览器里完成授权，回到 App 会自动生效';
+    case 'exchanging':
+    case 'committing':
+      return '正在保存登录凭据…';
+    case 'failed':
+    case 'expired':
+      return errorCode === 'network'
+        ? '连不上 DeepSeek，检查网络后重试'
+        : errorCode === 'expired'
+          ? '授权超时了，重新点一次登录'
+          : '登录没完成，重新试一次';
+    default:
+      return null;
+  }
+}
 
 /**
  * 模型与凭据。
@@ -17,6 +47,10 @@ export function SettingsScreen(): React.ReactElement {
   const state = useStore();
   const [key, setKey] = React.useState('');
   const [saved, setSaved] = React.useState(false);
+  /** API Key 是备选方式，默认收起；账号登录是主路径 */
+  const [showKey, setShowKey] = React.useState(false);
+  /** null = 问不到（非 Android / 老系统） */
+  const [batteryOk, setBatteryOk] = React.useState<boolean | null>(null);
   const status = state.credentials[REF];
   const configured = status?.configured === true;
   const preset = state.caps?.presets.find((p) => p.id === state.draftPresetId) ?? state.caps?.presets[0];
@@ -24,23 +58,46 @@ export function SettingsScreen(): React.ReactElement {
   // 本机引擎状态：进设置页就每 2 秒拉一次
   const host = state.host;
   const hostReady = host?.engine === 'ready' && host?.bridge === 'ready';
+  const hostStarting = host?.engine === 'starting';
   const hostLabel = !hostAvailable
     ? '不支持'
     : hostReady
       ? '运行中'
       : host?.engine === 'failed' || host?.bridge === 'failed'
         ? '出错'
-        : host?.engine === 'starting'
-          ? '启动中'
+        : hostStarting
+          ? host && (host.progress ?? 0) > 0
+            ? `启动中 ${host.progress}%`
+            : '启动中'
           : '已停止';
 
   React.useEffect(() => {
     if (!hostAvailable) return;
+    void hostBatteryWhitelisted().then(setBatteryOk);
     void store.refreshHost();
     void store.loadHostCommands();
-    const timer = setInterval(() => void store.refreshHost(), 2000);
+    // 首装解压只有 10 秒左右，启动时拉密一点才看得见进度
+    const timer = setInterval(() => void store.refreshHost(), hostStarting ? 500 : 2000);
     return () => clearInterval(timer);
-  }, []);
+  }, [hostStarting]);
+
+  // 账号：进设置页拉一次；有登录尝试时 1 秒一次（真引擎的授权页要等宿主生成）
+  const account = state.account;
+  const accountAttempt = account?.attempt;
+  const signedIn = account?.status === 'credential-stored';
+  const waiting = accountAttempt?.phase === 'waiting-browser' || accountAttempt?.phase === 'initializing';
+  const accountNote = attemptText(accountAttempt?.phase, accountAttempt?.errorCode);
+
+  React.useEffect(() => {
+    if (!state.caps) return;
+    void store.refreshAccount();
+  }, [state.caps]);
+
+  React.useEffect(() => {
+    if (!accountAttempt || !waiting) return;
+    const timer = setInterval(() => void store.refreshAccount(), 1000);
+    return () => clearInterval(timer);
+  }, [accountAttempt?.id, waiting]);
 
   const save = async (value: string): Promise<void> => {
     const ok = await store.saveCredential(REF, value);
@@ -63,45 +120,135 @@ export function SettingsScreen(): React.ReactElement {
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.card}>
             <View style={styles.rowTop}>
-              <Text style={styles.cardTitle}>DeepSeek API Key</Text>
+              <Text style={styles.cardTitle}>DeepSeek 账号</Text>
               <Pill>
-                <Text style={[styles.status, configured && { color: colors.ok }]}>
-                  {configured ? '已配置' : '未配置'}
+                <Text style={[styles.status, signedIn && { color: colors.ok }]}>
+                  {signedIn ? '已登录' : waiting ? '登录中' : '未登录'}
                 </Text>
               </Pill>
             </View>
             <Text style={styles.hint}>
-              Key 存在宿主上（连电脑时存在电脑，本机模式下存在这台手机），App 不会保存。
+              推荐：用账号登录，和 dsh 官方一致，不用申请 Key。授权在系统浏览器里完成，令牌留在宿主上，App 不保存。
             </Text>
 
-            <TextInput
-              style={styles.input}
-              value={key}
-              onChangeText={setKey}
-              placeholder={configured ? '已配置 · 粘贴新 Key 可覆盖' : 'sk-…'}
-              placeholderTextColor={colors.textFaint}
-              autoCapitalize="none"
-              autoCorrect={false}
-              secureTextEntry
-              accessibilityLabel="API Key"
-            />
+            {accountNote ? <Text style={styles.hint}>{accountNote}</Text> : null}
 
-            <View style={styles.actions}>
-              <Btn
-                label={saved ? '已保存' : '保存'}
-                onPress={() => void save(key)}
-                disabled={key.trim().length === 0}
-                style={{ flex: 1 }}
-              />
-              <Btn
-                label="清除"
-                kind="ghost"
-                onPress={() => void save('')}
-                disabled={!configured}
-                style={{ flex: 1 }}
-              />
-            </View>
+            {!state.caps ? (
+              <Text style={styles.hint}>还没连上宿主，连上后才能用账号登录。</Text>
+            ) : (
+              <View style={styles.actions}>
+                {signedIn ? (
+                  <>
+                    <Btn
+                      label="退出登录"
+                      kind="ghost"
+                      onPress={() => void store.signOutAccount()}
+                      style={{ flex: 1 }}
+                    />
+                    <Btn
+                      label="查看用量"
+                      kind="ghost"
+                      onPress={() => {
+                        const url = account?.links.usageUrl;
+                        if (url) void Linking.openURL(url).catch(() => undefined);
+                      }}
+                      style={{ flex: 1 }}
+                    />
+                  </>
+                ) : waiting ? (
+                  <>
+                    <Btn
+                      label="重新打开授权页"
+                      onPress={() => store.openAccountAuthPage()}
+                      style={{ flex: 1 }}
+                    />
+                    <Btn
+                      label="取消"
+                      kind="ghost"
+                      onPress={() => void store.cancelAccountSignIn()}
+                      style={{ flex: 1 }}
+                    />
+                  </>
+                ) : (
+                  <Btn
+                    label="用 DeepSeek 账号登录"
+                    onPress={() => void store.startAccountSignIn()}
+                    style={{ flex: 1 }}
+                  />
+                )}
+              </View>
+            )}
           </View>
+
+          <View style={styles.card}>
+            <Pressable
+              style={styles.rowTop}
+              accessibilityRole="button"
+              accessibilityLabel="展开或收起 API Key"
+              onPress={() => setShowKey((v) => !v)}
+            >
+              <Text style={styles.cardTitle}>DeepSeek API Key（备选）</Text>
+              <View style={styles.rowRight}>
+                <Pill>
+                  <Text style={[styles.status, configured && { color: colors.ok }]}>
+                    {configured ? '已配置' : '未配置'}
+                  </Text>
+                </Pill>
+                <Text style={styles.chevron}>{showKey ? '▾' : '▸'}</Text>
+              </View>
+            </Pressable>
+
+            {showKey ? (
+              <>
+                <Text style={styles.hint}>
+                  Key 存在宿主上（连电脑时存在电脑，本机模式下存在这台手机），App 不会保存。
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={key}
+                  onChangeText={setKey}
+                  placeholder={configured ? '已配置 · 粘贴新 Key 可覆盖' : 'sk-…'}
+                  placeholderTextColor={colors.textFaint}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  secureTextEntry
+                  accessibilityLabel="API Key"
+                />
+                <View style={styles.actions}>
+                  <Btn
+                    label={saved ? '已保存' : configured ? '更换' : '保存'}
+                    onPress={() => void save(key)}
+                    disabled={key.trim().length === 0}
+                    style={{ flex: 1 }}
+                  />
+                  <Btn
+                    label="清除"
+                    kind="ghost"
+                    onPress={() => void save('')}
+                    disabled={!configured}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.hint}>
+                  {configured
+                    ? '已配置。换 Key 或清除都在这里；账号登录正常时用不到它。'
+                    : '没有账号授权时，也可以直接填一个 DeepSeek API Key。'}
+                </Text>
+                <View style={styles.actions}>
+                  <Btn
+                    label={configured ? '更换 API Key' : '填写 API Key'}
+                    onPress={() => setShowKey(true)}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              </>
+            )}
+          </View>
+
+          <ProvidersCard />
 
           <View style={styles.card}>
             <View style={styles.rowTop}>
@@ -126,6 +273,12 @@ export function SettingsScreen(): React.ReactElement {
                     {(state.host?.bridge ?? 'stopped') + ' · :' + String(state.host?.port ?? 8788)}
                   </Text>
                 </View>
+                {host?.phase ? (
+                  <Text style={styles.hint}>
+                    {host.phase}
+                    {(host.progress ?? 0) > 0 && (host.progress ?? 0) < 100 ? ` · ${host.progress}%` : ''}
+                  </Text>
+                ) : null}
                 {state.host?.error ? <Text style={styles.error}>{state.host.error}</Text> : null}
 
                 <View style={styles.actions}>
@@ -159,6 +312,13 @@ export function SettingsScreen(): React.ReactElement {
                   autoCorrect={false}
                   accessibilityLabel="桥启动命令"
                 />
+                <View style={styles.kv}>
+                  <Text style={styles.k}>后台保活</Text>
+                  <Text style={[styles.v, batteryOk === false && { color: colors.warn }]}>
+                    {batteryOk == null ? '未知' : batteryOk ? '已放行' : '受限制'}
+                  </Text>
+                </View>
+
                 <View style={styles.actions}>
                   <Btn
                     label="刷新状态"
@@ -173,6 +333,38 @@ export function SettingsScreen(): React.ReactElement {
                     style={{ flex: 1 }}
                   />
                 </View>
+                <View style={styles.actions}>
+                  <Btn
+                    label="导出日志"
+                    kind="ghost"
+                    onPress={() => {
+                      void (async () => {
+                        const lines = await hostLogs();
+                        await Share.share({
+                          message: lines.slice(-300).join('\n') || '（暂无日志）',
+                        }).catch(() => undefined);
+                      })();
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                  <Btn
+                    label="保活设置"
+                    kind="ghost"
+                    onPress={() => void openHostBatterySettings()}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+                <Btn
+                  label="安全模式重启（重置 profiles）"
+                  kind="ghost"
+                  onPress={() => {
+                    void (async () => {
+                      await setHostSafeModeNext(true);
+                      await store.stopLocalHost();
+                      await store.startLocalHost();
+                    })();
+                  }}
+                />
 
                 {state.hostLogs.length > 0 ? (
                   <View style={styles.logBox}>
@@ -207,10 +399,13 @@ export function SettingsScreen(): React.ReactElement {
               <Text style={styles.k}>当前锦囊</Text>
               <Text style={styles.v}>{preset?.name ?? '—'}</Text>
             </View>
+            <Text style={styles.hint}>
+              锦囊决定 agent 的工作方式。真 dsh 宿主暂不提供工具白名单，别把这里当安全边界。
+            </Text>
           </View>
 
           <Text style={styles.footnote}>
-            账号登录（OAuth）还没接。它也在宿主的流端点里，不在 HTTP 接口上。
+            Key 和账号登录都写在宿主上。换手机只要重新配对，不用重配模型。
           </Text>
 
           {Boolean(state.error) ? (
@@ -255,6 +450,8 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  chevron: { color: colors.textFaint, fontSize: 12 },
   cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
   status: { color: colors.textFaint, fontSize: 11 },
   hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },

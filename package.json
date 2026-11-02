@@ -7,7 +7,7 @@
     "engine": "tsx engine/src/main.ts",
     "app": "npm --prefix app run start",
     "app:web": "npm --prefix app run web",
-    "test": "node --import tsx --test test/e2e.test.ts",
+    "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test"
   },
@@ -16,6 +16,7 @@
     "@types/ws": "^8.5.13",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "esbuild": "^0.28.2"
   }
 }

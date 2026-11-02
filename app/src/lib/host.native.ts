@@ -13,6 +13,10 @@ export interface HostStatus {
   port: number;
   error: string | null;
   since: number;
+  /** 当前这一步（解压 / 启动引擎 / 就绪） */
+  phase?: string;
+  /** 0–100，-1 表示不确定 */
+  progress?: number;
 }
 
 interface HostNativeModule {
@@ -20,6 +24,9 @@ interface HostNativeModule {
   stop(): Promise<boolean>;
   status(): Promise<HostStatus>;
   logs(): Promise<string[]>;
+  isBatteryWhitelisted(): Promise<boolean>;
+  openBatterySettings(): Promise<boolean>;
+  setSafeModeNext(enabled: boolean): Promise<boolean>;
 }
 
 const native: HostNativeModule | null =
@@ -45,6 +52,33 @@ export async function stopHost(): Promise<boolean> {
 export async function hostStatus(): Promise<HostStatus | null> {
   if (!native) return null;
   return await native.status();
+}
+
+export async function hostBatteryWhitelisted(): Promise<boolean | null> {
+  if (!native) return null;
+  try {
+    return await native.isBatteryWhitelisted();
+  } catch {
+    return null;
+  }
+}
+
+export async function openHostBatterySettings(): Promise<boolean> {
+  if (!native) return false;
+  try {
+    return await native.openBatterySettings();
+  } catch {
+    return false;
+  }
+}
+
+export async function setHostSafeModeNext(enabled: boolean): Promise<boolean> {
+  if (!native) return false;
+  try {
+    return await native.setSafeModeNext(enabled);
+  } catch {
+    return false;
+  }
 }
 
 export async function hostLogs(): Promise<string[]> {

@@ -240,6 +240,71 @@ test('工作区：列出现有工作区，能在指定工作区建会话', async
   const created = await client.request('workspaces.create', { path: target.root });
   assert.equal(created.workspace.root, target.root);
 });
+
+test('账号：读状态 → 登录 → 退出，事件跟着推', async () => {
+  const initial = await client.request('account.state', {});
+  assert.equal(initial.account.status, 'signed-out');
+  assert.ok(initial.account.links.usageUrl.startsWith('https://'));
+  assert.equal(initial.account.attempt, null);
+
+  // 事件要在响应之前/同时到达，先挂监听
+  const updatedPromise = waitFor(client, 'account.updated', (d) => d.account.status === 'credential-stored');
+  const signed = await client.request('account.signIn', {});
+  assert.equal(signed.account.status, 'credential-stored');
+  const pushed = await updatedPromise;
+  assert.equal(pushed.account.attempt?.phase, 'succeeded', '登录成功也要推一条事件');
+
+  const out = await client.request('account.signOut', {});
+  assert.equal(out.account.status, 'signed-out');
+  assert.equal(out.account.attempt, null);
+});
+
+test('模型提供商：拉模型 → 保存 → 列出 → 删除', async () => {
+  const empty = await client.request('providers.list', {});
+  assert.equal(empty.providers.length, 0, 'mock 初始没有自定义渠道');
+
+  const { models } = await client.request('providers.discover', {
+    baseURL: 'https://openrouter.ai/api/v1',
+    api: 'openai-completions',
+    apiKey: 'sk-test',
+  });
+  assert.ok(models.length >= 1, '要能拉到模型');
+  assert.ok(models[0]!.id.length > 0);
+
+  const saved = await client.request('providers.save', {
+    mode: 'custom',
+    id: 'openrouter',
+    displayName: 'OpenRouter',
+    baseURL: 'https://openrouter.ai/api/v1',
+    api: 'openai-completions',
+    models: [models[0]!],
+    apiKey: 'sk-test',
+  });
+  assert.equal(saved.providers.length, 1);
+  assert.equal(saved.providers[0]!.id, 'openrouter');
+  assert.equal(saved.providers[0]!.models.length, 1);
+  assert.equal(saved.providers[0]!.apiKeyEnv, 'OPENROUTER_API_KEY');
+  assert.equal(saved.providers[0]!.source, 'custom');
+
+  // 内置目录：选一个第三方提供商，只填 Key
+  const catalog = await client.request('providers.catalog', {});
+  assert.ok(catalog.providers.some((p) => p.id === 'openai'));
+  const viaCatalog = await client.request('providers.save', {
+    mode: 'catalog',
+    id: 'openai',
+    apiKey: 'sk-test',
+  });
+  const openai = viaCatalog.providers.find((p) => p.id === 'openai');
+  assert.equal(openai?.source, 'catalog');
+  assert.equal(openai?.baseURL, 'https://api.openai.com/v1');
+  assert.ok((openai?.models.length ?? 0) >= 1);
+
+  const removedCustom = await client.request('providers.remove', { id: 'openrouter' });
+  assert.equal(removedCustom.providers.length, 1, '目录型那条还在');
+  const removed = await client.request('providers.remove', { id: 'openai' });
+  assert.equal(removed.providers.length, 0);
+});
+
 test('错误路径：未知方法给出可读错误', async () => {
   await assert.rejects(
     () => (client.request as unknown as (m: string, p: unknown) => Promise<unknown>)('nope.nope', {}),

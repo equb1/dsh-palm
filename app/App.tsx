@@ -1,5 +1,5 @@
 import React from 'react';
-import { BackHandler, Platform, StatusBar, StyleSheet, View } from 'react-native';
+import { BackHandler, Linking, Platform, StatusBar, StyleSheet, View } from 'react-native';
 
 import { ChatScreen } from './src/ui/ChatScreen';
 import { ConnectScreen } from './src/ui/ConnectScreen';
@@ -30,10 +30,35 @@ export default function App(): React.ReactElement {
         .catch(() => undefined);
     };
     tick();
-    const timer = setInterval(tick, 2000);
+    // 首装解压/冷启动只有十几秒，这段时间拉密一点才看得到进度
+    const timer = setInterval(tick, 800);
     return () => clearInterval(timer);
   }, [state.caps]);
 
+
+  // dshpalm://pair?url=ws://192.168.1.7:8788/ws&code=246810 —— 扫码/外部唤起走这里
+  // 冷启动读一次系统分享的内容（文字进输入框，图片先进 pending）
+  React.useEffect(() => {
+    void store.consumeInitialShare();
+  }, []);
+
+  React.useEffect(() => {
+    const handle = (url: string | null): void => {
+      if (!url || !url.startsWith('dshpalm://')) return;
+      const query = url.split('?')[1] ?? '';
+      const params = new URLSearchParams(query);
+      const target = params.get('url');
+      const code = params.get('code');
+      if (target) store.setUrl(target);
+      if (code) store.setPairCode(code);
+      if (target) void store.connect(target);
+    };
+    void Linking.getInitialURL()
+      .then((url) => handle(url ?? null))
+      .catch(() => undefined);
+    const sub = Linking.addEventListener('url', (event) => handle(event.url));
+    return () => sub.remove();
+  }, []);
 
   React.useEffect(() => {
     const onBackPress = (): boolean => {

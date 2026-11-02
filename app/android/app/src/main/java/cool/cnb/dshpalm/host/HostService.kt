@@ -43,12 +43,43 @@ class HostService : Service() {
     private var engineCmd = ""
     private var bridgeCmd = ""
     private var port = 8788
+    /** 上一次写进通知的文字，避免每 2% 进度都重画一遍 */
+    private var lastNotification = ""
+    /** startForeground 之后才允许 notify()：之前发通知会被系统当成后台通知 */
+    private var foregroundStarted = false
+
+    /** 进度/状态变化就更新常驻通知：锁屏上也能看到"解压 42%"这种话 */
+    private val statusListener: (HostRuntime.Status) -> Unit = { s ->
+        updateNotification(statusText(s))
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
+        HostRuntime.addListener(statusListener)
+    }
+
+    override fun onDestroy() {
+        HostRuntime.removeListener(statusListener)
+        super.onDestroy()
+    }
+
+    private fun statusText(s: HostRuntime.Status): String = when {
+        s.engine == "failed" || s.bridge == "failed" -> s.error ?: "启动失败"
+        s.engine == "ready" && s.bridge == "ready" -> "已就绪"
+        s.phase.isNotEmpty() ->
+            s.phase + if (s.progress in 1..99) " · ${s.progress}%" else ""
+        else -> "引擎启动中…"
+    }
+
+    private fun updateNotification(text: String) {
+        if (!foregroundStarted || text == lastNotification) return
+        lastNotification = text
+        runCatching {
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(text))
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -76,6 +107,7 @@ class HostService : Service() {
             ?: 8788
 
         startInForeground()
+        applySafeModeIfRequested()
         RuntimeInstaller.ensureExecutable(applicationContext)
         val runtimePaths = RuntimeInstaller.paths(applicationContext)
         HostRuntime.start(
@@ -84,7 +116,12 @@ class HostService : Service() {
             bridgeCmd = bridgeCmd,
             bridgePort = port,
             prepare = {
-                RuntimeInstaller.install(applicationContext) { line -> HostRuntime.note(line) } &&
+                RuntimeInstaller.install(
+                    applicationContext,
+                    { line -> HostRuntime.note(line) },
+                    { label, pct -> HostRuntime.progress(label, pct) },
+                ) &&
+                    RuntimeInstaller.ensureLayout(applicationContext) { line -> HostRuntime.note(line) } &&
                     RuntimeInstaller.ensurePatch(applicationContext) { line -> HostRuntime.note(line) } &&
                     RuntimeInstaller.ensureShims(applicationContext) { line -> HostRuntime.note(line) }
             },
@@ -97,9 +134,29 @@ class HostService : Service() {
                 "HOME" to "/root",
                 "TERM" to "dumb",
                 "LANG" to "C.UTF-8",
+                // 桥的设备密钥放在 bind 进来的 /bridge 上：换镜像不会把配对状态冲掉
+                "DSH_PALM_DEVICES" to "/bridge/devices.json",
             ),
         )
         return START_STICKY
+    }
+
+    /**
+     * 安全模式：把 profiles 目录挪走，让引擎用默认 profile 重新起。
+     * 只在"连续失败 3 次"或用户在设置里主动点「安全模式重启」时触发，一次性。
+     */
+    private fun applySafeModeIfRequested() {
+        val prefs = getSharedPreferences("dsh-palm", MODE_PRIVATE)
+        if (!prefs.getBoolean("safeModeNext", false)) return
+        prefs.edit().putBoolean("safeModeNext", false).apply()
+        val profiles = java.io.File(applicationContext.filesDir, "home/.dsh/profiles")
+        if (!profiles.exists()) {
+            HostRuntime.note("[host] 安全模式：profiles 不存在，直接按默认启动")
+            return
+        }
+        val backup = java.io.File(profiles.parentFile, "profiles.broken-${System.currentTimeMillis()}")
+        val ok = profiles.renameTo(backup)
+        HostRuntime.note("[host] 安全模式：profiles → ${backup.name}（ok=$ok）")
     }
 
     /** 外部配置文件（可选）：{ "engineCmd": "...", "bridgeCmd": "...", "port": 8788 } */
@@ -114,7 +171,10 @@ class HostService : Service() {
         }
     }
     private fun startInForeground() {
-        val notification = buildNotification("引擎启动中…")
+        val text = "引擎启动中…"
+        lastNotification = text
+        foregroundStarted = true
+        val notification = buildNotification(text)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
@@ -152,8 +212,18 @@ class HostService : Service() {
     private fun defaultEngineCmd(): String {
         val home = getSharedPreferences("dsh-palm", MODE_PRIVATE).getString("engineCmd", null)
         if (!home.isNullOrBlank()) return home
-                return if (RuntimeInstaller.hasNode(this)) RuntimeInstaller.engineCmd(this) else RuntimeInstaller.smokeEngineCmd(this)
+        // 首装时 node 还没解压出来，hasNode 一定是 false —— 但 APK 里带着 payload 就说明
+        // 装完就有 node。只按 hasNode 判断会在「全新安装的第一次启动」选错成冒烟脚本。
+        return if (RuntimeInstaller.hasNode(this) || hasPayloadAsset()) {
+            RuntimeInstaller.engineCmd(this)
+        } else {
+            RuntimeInstaller.smokeEngineCmd(this)
+        }
     }
+
+    /** APK 的 assets 里有没有运行时载荷（决定装完能不能跑真 dsh） */
+    private fun hasPayloadAsset(): Boolean =
+        runCatching { assets.list("")?.contains(RuntimeInstaller.PAYLOAD_ASSET) == true }.getOrDefault(false)
 
     /** 真机默认：跑桥（token 和 port 由运行时替换） */
     private fun defaultBridgeCmd(): String {

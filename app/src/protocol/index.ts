@@ -160,6 +160,38 @@ export interface PermissionOption {
   description?: string;
 }
 
+/* ------------------------------------------------------------------ *
+ * 账号（见 docs/12-model-login.md）
+ *
+ * 手机自己是宿主时，OAuth 的回调就落在本机引擎的端口上，
+ * 系统浏览器和引擎在同一台设备上 —— 登录不需要电脑。
+ * ------------------------------------------------------------------ */
+
+export type AccountPhase =
+  | 'initializing'
+  | 'waiting-browser'
+  | 'exchanging'
+  | 'committing'
+  | 'succeeded'
+  | 'cancelled'
+  | 'expired'
+  | 'failed';
+
+export interface AccountAttempt {
+  id: string;
+  phase: AccountPhase;
+  /** 只在 waiting-browser 阶段给：拿它去开系统浏览器 */
+  authorizeUrl?: string;
+  expiresAt?: number;
+  errorCode?: 'expired' | 'no-response' | 'network' | 'protocol' | 'storage';
+}
+
+export interface AccountState {
+  status: 'signed-out' | 'credential-stored';
+  attempt: AccountAttempt | null;
+  links: { usageUrl: string; topUpUrl: string };
+}
+
 export interface SessionDetail extends SessionSummary {
   turns: Turn[];
   /** 当前会话选的模型；没选过就是宿主默认 */
@@ -168,6 +200,46 @@ export interface SessionDetail extends SessionSummary {
   permission?: string;
   /** 会话当前的契约（可能被「会话内升级」改过） */
   contract: CapabilityContract;
+}
+
+/* ------------------------------------------------------------------ *
+ * 模型提供商（见 docs/12-model-login.md）
+ *
+ * 和 dsh 官方一致：账号登录是主路径，API Key 走"渠道"。
+ * 一个渠道 = 协议 + Base URL + Key + 模型列表，存在宿主上。
+ * ------------------------------------------------------------------ */
+
+/** 线协议标识，和 settings.yaml 里的值一致 */
+export type ProviderProtocol = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
+
+export interface ProviderModel {
+  id: string;
+  name?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+export interface ProviderRow {
+  /** 路由 id，例如 openrouter */
+  id: string;
+  displayName: string;
+  api: string;
+  baseURL: string;
+  models: ProviderModel[];
+  /** Key 存哪个 ref；没有就是不用 Key */
+  apiKeyEnv?: string;
+  configured: boolean;
+  /** catalog = 内置目录里的提供商（协议/地址/模型由适配器给）；custom = 自己填的 */
+  source: 'custom' | 'catalog';
+}
+
+/** 内置目录里可选的一个提供商 */
+export interface CatalogProvider {
+  id: string;
+  displayName: string;
+  defaultBaseURL?: string;
+  /** 这个提供商认哪些环境变量（仅作提示） */
+  env?: string[];
 }
 
 /* ------------------------------------------------------------------ *
@@ -241,6 +313,8 @@ export interface EventPayloads {
   };
   'approval.requested': { approval: Approval };
   'approval.resolved': { approvalId: string; decision: ApprovalDecision; by: string };
+  /** 账号状态变化（登录流程每个阶段都会推一次） */
+  'account.updated': { account: AccountState };
   'job.progress': { jobId: string; pct: number; note?: string };
   'job.done': {
     jobId: string;
@@ -303,6 +377,48 @@ export interface RequestParams {
   'credentials.set': { ref: string; value: string };
   /** 删除某个凭据（真引擎用 credentials/unset，set 传空值会被拒） */
   'credentials.unset': { ref: string };
+  /** 读账号状态（未登录 / 已存凭据 + 正在进行的登录尝试） */
+  'account.state': Record<string, never>;
+  /**
+   * 开始浏览器登录。
+   * 回调地址由宿主自己决定（本机模式下就是引擎自己的 loopback），
+   * 客户端只负责把返回的 authorizeUrl 交给系统浏览器。
+   */
+  'account.signIn': Record<string, never>;
+  'account.cancelSignIn': { attemptId: string };
+  'account.signOut': Record<string, never>;
+
+  /** 宿主上已配置的模型提供商（不含 DeepSeek 账号） */
+  'providers.list': Record<string, never>;
+  /** 内置目录（可选的第三方提供商） */
+  'providers.catalog': Record<string, never>;
+  /** 用 Base URL + Key 去服务商拉模型列表 */
+  'providers.discover': { baseURL: string; api: ProviderProtocol; apiKey?: string };
+  /** 新建或更新一个提供商；apiKey 为空表示沿用原来的 */
+  'providers.save':
+    | {
+        /** custom：自己填协议/地址/模型 */
+        mode: 'custom';
+        id: string;
+        displayName?: string;
+        baseURL: string;
+        api: ProviderProtocol;
+        models: ProviderModel[];
+        apiKey?: string;
+      }
+    | {
+        /** catalog：从内置目录选，只填 Key（可选改地址） */
+        mode: 'catalog';
+        id: string;
+        baseURL?: string;
+        apiKey: string;
+      };
+  'providers.remove': { id: string };
+
+  /** 会话管理：改名、置顶、归档（真宿主接口） */
+  'sessions.rename': { sessionId: string; title: string };
+  'sessions.pin': { sessionId: string; pinned: boolean };
+  'sessions.archive': { sessionId: string; archived: boolean };
 }
 
 export interface RequestResults {
@@ -328,6 +444,18 @@ export interface RequestResults {
   'credentials.describe': { credentials: Record<string, { configured: boolean; writable: boolean }> };
   'credentials.set': { ok: true };
   'credentials.unset': { ok: true };
+  'account.state': { account: AccountState };
+  'account.signIn': { account: AccountState };
+  'account.cancelSignIn': { account: AccountState };
+  'account.signOut': { account: AccountState };
+  'providers.list': { providers: ProviderRow[] };
+  'providers.catalog': { providers: CatalogProvider[] };
+  'providers.discover': { models: ProviderModel[] };
+  'providers.save': { providers: ProviderRow[] };
+  'providers.remove': { providers: ProviderRow[] };
+  'sessions.rename': { session: SessionDetail };
+  'sessions.pin': { ok: true };
+  'sessions.archive': { ok: true };
 }
 
 export type Method = keyof RequestParams;
