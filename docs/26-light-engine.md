@@ -3,7 +3,7 @@
 > 状态：**已实现，Node 侧全绿；真机自检入口已接，等一次真机结果。**
 > 对应 [23-requirements.md](23-requirements.md) §2/§4 与 §8 的 M1 前半，接续
 > [25-m1-spike-results.md](25-m1-spike-results.md) 里"剩下的集成工作"第 1 条。
-> 验证：`npm run verify`（typecheck + 61 条测试）。
+> 验证：`npm run verify`（typecheck + 62 条测试）。
 
 ## 0. 一句话
 
@@ -123,6 +123,10 @@ XMLHttpRequest 的增量 `responseText`**——RN 的 fetch 会把响应体收�
 `test/provider.test.ts`（4 条）：本地 HTTP 服务按 17 字节乱切 SSE，验证行缓冲、
 文本/思考/工具分片/usage、401/404、空响应、URL 拼接。
 
+`test/light-e2e.test.ts`（1 条）：真 HTTP + 真 SSE + 真 `LightHost`，只有模型是
+本地假服务——走完"流式回答 → 审批 → bash 落盘 → 工具结果回灌 → 最终回答"，
+并断言第二次请求里带了 `role:'tool'`。
+
 ### 5.2 Agent loop（`light/agent.ts`）
 
 一次 `sessions.send` = 一次 run：
@@ -188,7 +192,7 @@ unsupported。
 Node 侧（不需要手机）：
 
 ```bash
-npm run verify        # typecheck + 61 条测试
+npm run verify        # typecheck + 62 条测试
 ```
 
 打包侧（不需要手机，验证 Metro 解析与 `.native.ts` 分叉）：
