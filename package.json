@@ -9,7 +9,8 @@
     "app:web": "npm --prefix app run web",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm test"
+    "verify": "npm run typecheck && npm test",
+    "plugin:check": "node --import tsx scripts/plugin-compat.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
