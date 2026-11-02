@@ -13,5 +13,11 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["engine/src/**/*.ts", "test/**/*.ts", "app/src/protocol/**/*.ts", "app/src/lib/**/*.ts"]
+  "include": [
+    "engine/src/**/*.ts",
+    "test/**/*.ts",
+    "app/src/protocol/**/*.ts",
+    "app/src/lib/**/*.ts",
+    "app/src/engine/**/*.ts"
+  ]
 }
