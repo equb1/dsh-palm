@@ -44,6 +44,11 @@ RN 的死法只有一个：原生模块越写越多，最后变成一个"用 RN 
 | **Flutter** | 要学 Dart；且会走上 dsh-go 完全相同的路径，包括它的坑 |
 | **纯 WebView 壳** | 失去原生插件面板、无障碍差、性能差。只适合做"网页版逃生舱" |
 
+> **现状（2026-11-02）**：实际依赖只有 `expo` 58 / `react-native` 0.88 / `react` 19 /
+> `react-native-web` / `expo-secure-store` / `expo-image-picker`（+ 构建期 `@babel/core`、`babel-preset-expo`）。
+> 路由是 `App.tsx` 里一个 `view` 状态切换；状态管理是手写的 `app/src/state/store.ts`（version 计数触发重渲染）；
+> 没有 Zustand / TanStack Query / SQLite / FlashList / xterm。下表是当初的**选型意向**，落地时按需再加。
+
 ## 依赖选型
 
 | 层 | 选择 | 备注 |
@@ -66,19 +71,18 @@ RN 的死法只有一个：原生模块越写越多，最后变成一个"用 RN 
 
 ```
 dsh-palm/
-├── app/                    # RN + Expo 应用（UI）
-│   ├── app/                # Expo Router 路由
+├── app/                     # RN + Expo 应用
+│   ├── App.tsx              # 入口：启动宿主、深链、自动连接、页面切换
 │   ├── src/
-│   │   ├── features/       # 按功能切：chat / sessions / presets / approvals
-│   │   └── ui/             # 设计系统、基础组件
-│   └── app.json
-├── modules/                # 本地 Expo Module（Kotlin / Swift），即那七个接口
-├── packages/
-│   ├── protocol/           # 事件与载荷类型（从引擎 OpenAPI 生成）
-│   ├── client/             # 引擎客户端，UI 无关，可单测
-│   └── mock-engine/        # 阶段 0 用的假引擎
-├── runtime/                # rootfs 分层构建脚本 + manifest
-├── tooling/                # 工具链、诊断、发布脚本
+│   │   ├── lib/             # 引擎客户端、host/notify/share 的原生封装
+│   │   ├── protocol/        # 协议契约（客户端与桥的唯一约定）
+│   │   ├── state/store.ts   # 手写 store（事件落地、请求关联）
+│   │   └── ui/              # 首页/聊天/抽屉/设置/输入区…
+│   └── android/             # Expo prebuild 产物 + 原生宿主（host/*.kt）
+├── engine/                  # mock 引擎 + 真 dsh 桥（engine/src/real/）
+├── test/                    # e2e / 审批卡 / 单元测试（22 条）
+├── scripts/                 # 探针、建桥、安卓构建准备
+├── runtime/                 # rootfs 分层与 profile
 └── docs/
 ```
 

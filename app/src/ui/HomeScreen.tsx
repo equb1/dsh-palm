@@ -51,6 +51,12 @@ export function HomeScreen(): React.ReactElement {
   const [refreshing, setRefreshing] = React.useState(false);
   const [drawer, setDrawer] = React.useState(false);
 
+  // 从系统分享菜单进来的文字：填进输入框（只填一次）
+  React.useEffect(() => {
+    const shared = store.takeShareText();
+    if (shared) setDraft((d) => (d.trim().length > 0 ? d : shared));
+  }, []);
+
   React.useEffect(() => {
     if (!drawer) return;
     const onBackPress = (): boolean => {
@@ -65,16 +71,25 @@ export function HomeScreen(): React.ReactElement {
   const preset = presets.find((p) => p.id === state.draftPresetId) ?? presets[0];
   const hasText = draft.trim().length > 0;
 
+  // 首装解压 + 引擎冷启动有 10 多秒，这段时间首页别只显示"未连接"
+  const booting = state.conn !== 'connected' && state.host?.engine === 'starting';
+  const bootPct = state.host?.progress ?? 0;
+  const bootLabel = state.host?.phase
+    ? state.host.phase + (bootPct > 0 && bootPct < 100 ? ` ${bootPct}%` : '')
+    : '引擎启动中';
+
   const connColor =
-    state.conn === 'connected' ? colors.ok : state.conn === 'reconnecting' ? colors.warn : colors.danger;
+    state.conn === 'connected' ? colors.ok : state.conn === 'reconnecting' || booting ? colors.warn : colors.danger;
   const connLabel =
     state.conn === 'connected'
       ? (state.caps?.host.name ?? '已连接')
-      : state.conn === 'reconnecting'
-        ? '重连中'
-        : state.conn === 'connecting'
-          ? '连接中'
-          : '未连接';
+      : booting
+        ? bootLabel
+        : state.conn === 'reconnecting'
+          ? '重连中'
+          : state.conn === 'connecting'
+            ? '连接中'
+            : '未连接';
 
   const send = (): void => {
     if (!hasText) return;
@@ -98,6 +113,14 @@ export function HomeScreen(): React.ReactElement {
         </View>
         <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
       </View>
+
+      {state.pendingShare?.imagePath ? (
+        <Pressable onPress={() => void store.attachSharedImage()}>
+          <Text style={styles.shareHint}>
+            {state.currentId ? '点这里把分享的图片放进当前会话' : '已收到分享的图片，发一句话时一起带上'}
+          </Text>
+        </Pressable>
+      ) : null}
 
       <SmoothKeyboardAvoid style={styles.bodyWrap}>
         <ScrollView
@@ -201,6 +224,13 @@ const styles = StyleSheet.create({
   },
   brandGlyph: { color: colors.gold, fontSize: 18, fontWeight: '700' },
   brand: { color: colors.text, fontSize: 19, fontWeight: '700', letterSpacing: 1.5 },
+  shareHint: {
+    color: colors.blue,
+    fontSize: 11.5,
+    textAlign: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
   connRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   connText: { color: colors.textFaint, fontSize: 11 },
   disconnect: { color: colors.textDim, fontSize: 12 },

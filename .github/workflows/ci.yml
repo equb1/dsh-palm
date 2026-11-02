@@ -1,0 +1,22 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 根依赖
+        run: npm install
+      - name: App 依赖
+        run: npm --prefix app install
+      - name: App 类型检查
+        run: npm --prefix app run typecheck
+      - name: 协议层验证（typecheck + 22 条测试）
+        run: npm run verify

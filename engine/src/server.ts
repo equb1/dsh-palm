@@ -3,6 +3,10 @@ import { networkInterfaces } from 'node:os';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import type {
+  AccountState,
+  CatalogProvider,
+  ProviderModel,
+  ProviderRow,
   Approval,
   ApprovalDecision,
   Block,
@@ -42,6 +46,53 @@ const pendingApprovals = new Map<
 const cancelledRuns = new Set<string>();
 /** mock 的凭据库：只活在内存里，重启即清空 */
 const mockCredentials = new Map<string, string>();
+
+/**
+ * mock 账号。
+ *
+ * 真宿主（本机模式）的登录是「浏览器 → 本机引擎回调」，mock 不真开浏览器，
+ * 直接给出 succeeded，让界面能走完「未登录 → 已登录」这条路径。
+ */
+const ACCOUNT_LINKS = {
+  usageUrl: 'https://platform.deepseek.com/usage',
+  topUpUrl: 'https://platform.deepseek.com/top_up',
+};
+let mockAccount: AccountState = { status: 'signed-out', attempt: null, links: ACCOUNT_LINKS };
+
+/** mock 的模型提供商（自定义渠道）：只活在内存里 */
+const mockProviders: ProviderRow[] = [];
+
+/** mock 的内置目录 */
+const MOCK_CATALOG: CatalogProvider[] = [
+  { id: 'anthropic', displayName: 'anthropic', defaultBaseURL: 'https://api.anthropic.com', env: ['ANTHROPIC_API_KEY'] },
+  { id: 'openai', displayName: 'openai', defaultBaseURL: 'https://api.openai.com/v1', env: ['OPENAI_API_KEY'] },
+  { id: 'openrouter', displayName: 'openrouter', defaultBaseURL: 'https://openrouter.ai/api/v1', env: ['OPENROUTER_API_KEY'] },
+];
+const mockCatalogModels: Record<string, ProviderModel[]> = {
+  anthropic: [{ id: 'claude-sonnet-4', name: 'Claude Sonnet 4', contextWindow: 200000 }],
+  openai: [{ id: 'gpt-4o-mini', name: 'GPT-4o mini', contextWindow: 128000 }],
+  openrouter: [{ id: 'openai/gpt-4o-mini', name: 'GPT-4o mini' }],
+};
+
+function mockKeyRef(id: string): string {
+  return id.toUpperCase().replace(/[^A-Z0-9]+/g, '_') + '_API_KEY';
+}
+
+/** mock 的"发现模型"：任何合法 Base URL 都回两个假模型 */
+function mockDiscover(baseURL: string): ProviderModel[] {
+  const host = (() => {
+    try {
+      return new URL(baseURL).host;
+    } catch {
+      return '';
+    }
+  })();
+  if (!host) throw Object.assign(new Error('Base URL 不合法'), { code: 'bad_request' as const });
+  return [
+    { id: 'mock-chat', name: `${host} · Mock Chat`, contextWindow: 65536 },
+    { id: 'mock-vision', name: `${host} · Mock Vision`, contextWindow: 131072 },
+  ];
+}
 
 /** 每个会话当前在跑的 run，用于 stop */
 const activeRuns = new Map<string, string>();
@@ -172,6 +223,7 @@ function capabilities(): Capabilities {
       'run.finished',
       'approval.requested',
       'approval.resolved',
+      'account.updated',
       'job.progress',
       'job.done',
     ],
@@ -582,6 +634,104 @@ const handlers: { [M in Method]: Handler<M> } = {
   'credentials.unset': ({ ref }) => {
     mockCredentials.delete(ref);
     return { ok: true as const };
+  },
+
+  'account.state': () => ({ account: mockAccount }),
+
+  'account.signIn': () => {
+    mockAccount = {
+      status: 'credential-stored',
+      attempt: { id: newId('acc'), phase: 'succeeded' },
+      links: ACCOUNT_LINKS,
+    };
+    broadcast('account.updated', { account: mockAccount });
+    return { account: mockAccount };
+  },
+
+  'account.cancelSignIn': ({ attemptId }) => {
+    if (mockAccount.attempt?.id === attemptId) {
+      mockAccount = { ...mockAccount, attempt: { id: attemptId, phase: 'cancelled' } };
+    }
+    broadcast('account.updated', { account: mockAccount });
+    return { account: mockAccount };
+  },
+
+  'account.signOut': () => {
+    mockAccount = { status: 'signed-out', attempt: null, links: ACCOUNT_LINKS };
+    broadcast('account.updated', { account: mockAccount });
+    return { account: mockAccount };
+  },
+
+  'providers.list': () => ({ providers: mockProviders.map((p) => ({ ...p })) }),
+
+  'providers.catalog': () => ({ providers: MOCK_CATALOG }),
+
+  'providers.discover': ({ baseURL }) => ({ models: mockDiscover(baseURL) }),
+
+  'providers.save': (p) => {
+    const upsert = (row: ProviderRow): void => {
+      const i = mockProviders.findIndex((x) => x.id === row.id);
+      if (i >= 0) {
+        const prev = mockProviders[i]!;
+        mockProviders[i] = { ...row, ...(row.apiKeyEnv ? {} : prev.apiKeyEnv ? { apiKeyEnv: prev.apiKeyEnv } : {}) };
+      } else {
+        mockProviders.push(row);
+      }
+    };
+
+    if (p.mode === 'catalog') {
+      const meta = MOCK_CATALOG.find((c) => c.id === p.id);
+      if (!meta) throw Object.assign(new Error('目录里没有这个提供商'), { code: 'bad_request' as const });
+      upsert({
+        id: p.id,
+        displayName: meta.displayName,
+        api: 'openai-completions',
+        baseURL: p.baseURL?.trim() || meta.defaultBaseURL || '',
+        models: mockCatalogModels[p.id] ?? [],
+        ...(p.apiKey.trim().length > 0 ? { apiKeyEnv: mockKeyRef(p.id) } : {}),
+        configured: p.apiKey.trim().length > 0,
+        source: 'catalog',
+      });
+      return { providers: mockProviders.map((x) => ({ ...x })) };
+    }
+
+    upsert({
+      id: p.id,
+      displayName: p.displayName?.trim() || p.id,
+      api: p.api,
+      baseURL: p.baseURL.trim(),
+      models: p.models.map((m) => ({ ...m })),
+      ...(p.apiKey ? { apiKeyEnv: mockKeyRef(p.id) } : {}),
+      configured: true,
+      source: 'custom',
+    });
+    return { providers: mockProviders.map((x) => ({ ...x })) };
+  },
+
+  'sessions.rename': ({ sessionId, title }) => {
+    const s = requireSession(sessionId);
+    touch(s, { title: title.trim() });
+    const detail: SessionDetail = {
+      ...s.summary,
+      turns: s.turns,
+      contract: s.contract,
+      ...(s.permission ? { permission: s.permission } : {}),
+      ...(s.model ? { model: s.model } : {}),
+    };
+    return { session: detail };
+  },
+
+  'sessions.pin': () => ({ ok: true as const }),
+
+  'sessions.archive': ({ sessionId }) => {
+    sessions.delete(sessionId);
+    return { ok: true as const };
+  },
+
+  'providers.remove': ({ id }) => {
+    const i = mockProviders.findIndex((p) => p.id === id);
+    if (i >= 0) mockProviders.splice(i, 1);
+    return { providers: mockProviders.map((p) => ({ ...p })) };
   },
 };
 

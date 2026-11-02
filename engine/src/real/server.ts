@@ -8,7 +8,11 @@ import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import type {
+  AccountState,
   Capabilities,
+  CatalogProvider,
+  ProviderModel,
+  ProviderRow,
   Method,
   Approval,
   Block,
@@ -225,6 +229,212 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
   startEvents();
 
+  /* ---------------- 账号：本机模式下的浏览器 OAuth ---------------- */
+
+  let accountWatchDispose: (() => void) | null = null;
+
+  /** 把宿主给的账号快照收窄成我们协议里的形状（脏数据直接丢掉） */
+  function asAccountState(value: unknown): AccountState | null {
+    if (!value || typeof value !== 'object') return null;
+    const v = value as Record<string, unknown>;
+    if (v.status !== 'signed-out' && v.status !== 'credential-stored') return null;
+    const rawAttempt = v.attempt;
+    const attempt =
+      rawAttempt && typeof rawAttempt === 'object'
+        ? (() => {
+            const a = rawAttempt as Record<string, unknown>;
+            if (typeof a.id !== 'string' || typeof a.phase !== 'string') return null;
+            return {
+              id: a.id,
+              phase: a.phase,
+              ...(typeof a.authorizeUrl === 'string' ? { authorizeUrl: a.authorizeUrl } : {}),
+              ...(typeof a.expiresAt === 'number' ? { expiresAt: a.expiresAt } : {}),
+              ...(typeof a.errorCode === 'string' ? { errorCode: a.errorCode } : {}),
+            } as AccountState['attempt'];
+          })()
+        : null;
+    const links = (v.links ?? {}) as Record<string, unknown>;
+    return {
+      status: v.status,
+      attempt,
+      links: {
+        usageUrl: typeof links.usageUrl === 'string' ? links.usageUrl : 'https://platform.deepseek.com/usage',
+        topUpUrl: typeof links.topUpUrl === 'string' ? links.topUpUrl : 'https://platform.deepseek.com/top_up',
+      },
+    };
+  }
+
+  /**
+   * 订阅宿主上的 `account/watch`。
+   *
+   * `authorizeUrl` 是 startSignIn 之后才生成的，HTTP 调用当场拿不到，
+   * 只能从这个流里收——所以登录过程中界面必须看到它。
+   */
+  function startAccountWatch(): void {
+    if (accountWatchDispose) return;
+    accountWatchDispose = client.openStream('account/watch', {}, (value) => {
+      const next = asAccountState(value);
+      if (!next) return;
+      emitAccount(next);
+    });
+  }
+
+  /**
+   * 登录回调必须落在"浏览器够得着"的 loopback 地址上。
+   *
+   * 本机模式：浏览器和引擎在同一台手机上，用引擎自己的地址就行。
+   * 连电脑模式：浏览器在手机上、回调在电脑上，这条路走不通——
+   * 那时登录本来也不该由手机发起（用宿主自己的界面登录，手机只读 status）。
+   */
+  function callbackOrigin(): string | null {
+    let url: URL;
+    try {
+      url = new URL(options.baseUrl);
+    } catch {
+      return null;
+    }
+    if (url.protocol !== 'http:') return null;
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return null;
+    return `${url.protocol}//${url.hostname}:${url.port || '80'}`;
+  }
+
+  /** 账号 RPC 都要带客户端身份（宿主的平台请求头由它派生） */
+  const accountClient = () => ({
+    version: '0.1.0',
+    locale: 'zh-CN',
+    timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60,
+  });
+
+  /** 同一条账号快照只推一次：流和显式广播会重，界面不该因此重渲染 */
+  let lastAccountJson = '';
+  function emitAccount(account: AccountState): void {
+    const json = JSON.stringify(account);
+    if (json === lastAccountJson) return;
+    lastAccountJson = json;
+    broadcast('account.updated', { account });
+  }
+
+  /** 老宿主没有账号方法时，把网关的 invocation-unavailable 翻成人话 */
+  async function accountRpc<T>(method: string, args: unknown = {}): Promise<T> {
+    try {
+      return await client.rpc<T>(method, args);
+    } catch (err) {
+      const message = (err as Error).message ?? '';
+      if (message.includes('invocation-unavailable') || message.includes('404')) {
+        throw Object.assign(new Error('这个宿主的版本还不支持账号登录'), {
+          code: 'unsupported' satisfies ProtocolError['code'],
+          hint: '先在上面填 API Key 用着；或者把宿主上的 dsh 升级到支持账号的版本。',
+        });
+      }
+      throw err;
+    }
+  }
+
+  /* ---------------- 模型提供商（llm-pi-ai） ---------------- */
+
+  type SettingsNamespace = {
+    ns: string;
+    value?: Record<string, unknown>;
+    user?: Record<string, unknown>;
+    base?: Record<string, unknown>;
+    revision?: number;
+  };
+
+  async function describeNamespace(ns: string): Promise<SettingsNamespace | undefined> {
+    const d = await client.rpc<{ namespaces?: SettingsNamespace[] }>('settings/describe', {});
+    return (d.namespaces ?? []).find((n) => n.ns === ns);
+  }
+
+  function normalizeModel(raw: unknown): ProviderModel | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const m = raw as Record<string, unknown>;
+    if (typeof m.id !== 'string' || m.id.length === 0) return null;
+    return {
+      id: m.id,
+      ...(typeof m.name === 'string' ? { name: m.name } : {}),
+      ...(typeof m.contextWindow === 'number' ? { contextWindow: m.contextWindow } : {}),
+      ...(typeof m.maxTokens === 'number' ? { maxTokens: m.maxTokens } : {}),
+    };
+  }
+
+  /** 和官方 UI 一致：路由 id → 凭据 ref */
+  function keyRefFor(id: string): string {
+    return id.toUpperCase().replace(/[^A-Z0-9]+/g, '_') + '_API_KEY';
+  }
+
+  /** 内置目录（llm/listConfigurableProviders 里挂在 llm-pi-ai 下的那些） */
+  let catalogCache: CatalogProvider[] | null = null;
+  async function catalogProviders(): Promise<CatalogProvider[]> {
+    if (catalogCache) return catalogCache;
+    const list = await client.rpc<Array<Record<string, unknown>>>('llm/listConfigurableProviders', {});
+    catalogCache = list
+      .filter((p) => p.settingsNs === 'llm-pi-ai' && typeof p.provider === 'string')
+      .map((p) => {
+        const auth = (p.nativeAuth ?? {}) as { env?: unknown };
+        return {
+          id: String(p.provider),
+          displayName: typeof p.displayName === 'string' ? p.displayName : String(p.provider),
+          ...(typeof p.defaultBaseURL === 'string' ? { defaultBaseURL: p.defaultBaseURL } : {}),
+          ...(Array.isArray(auth.env) ? { env: auth.env.filter((e): e is string => typeof e === 'string') } : {}),
+        };
+      })
+      .sort((a, b) => a.id.localeCompare(b.id));
+    return catalogCache;
+  }
+
+  /** 读 llm-pi-ai 里已添加的提供商，补上目录归属、模型和 Key 状态 */
+  async function providerRows(): Promise<ProviderRow[]> {
+    const ns = await describeNamespace('llm-pi-ai');
+    const providers = (ns?.value?.providers ?? {}) as Record<string, Record<string, unknown>>;
+    const catalog = await catalogProviders().catch(() => [] as CatalogProvider[]);
+    const catalogById = new Map(catalog.map((c) => [c.id, c]));
+
+    // 目录型提供商的模型来自 modelCatalog（适配器给），自定义渠道的模型存在 settings 里
+    const catalog2 = await client
+      .rpc<{ groups?: Array<{ id?: string; models?: Array<Record<string, unknown>> }> }>('session/modelCatalog', {})
+      .catch(() => ({ groups: [] }));
+    const modelsByProvider = new Map<string, ProviderModel[]>();
+    for (const group of catalog2.groups ?? []) {
+      if (typeof group.id !== 'string') continue;
+      modelsByProvider.set(
+        group.id,
+        (group.models ?? []).map(normalizeModel).filter((m): m is ProviderModel => m != null),
+      );
+    }
+
+    const rows: ProviderRow[] = Object.entries(providers).map(([id, p]) => {
+      const meta = catalogById.get(id);
+      const stored = Array.isArray(p.models)
+        ? p.models.map(normalizeModel).filter((m): m is ProviderModel => m != null)
+        : [];
+      return {
+        id,
+        displayName:
+          typeof p.displayName === 'string' && p.displayName.length > 0
+            ? p.displayName
+            : (meta?.displayName ?? id),
+        api: typeof p.api === 'string' ? p.api : 'openai-completions',
+        baseURL:
+          typeof p.baseURL === 'string' ? p.baseURL : (meta?.defaultBaseURL ?? ''),
+        models: stored.length > 0 ? stored : (modelsByProvider.get(id) ?? []),
+        ...(typeof p.apiKeyEnv === 'string' && p.apiKeyEnv.length > 0 ? { apiKeyEnv: p.apiKeyEnv } : {}),
+        configured: p.apiKeyEnv == null,
+        source: meta ? 'catalog' : 'custom',
+      };
+    });
+
+    const refs = rows.map((r) => r.apiKeyEnv).filter((r): r is string => typeof r === 'string');
+    if (refs.length > 0) {
+      const status = await client
+        .rpc<Record<string, { configured?: boolean }>>('credentials/describe', { refs })
+        .catch(() => ({}) as Record<string, { configured?: boolean }>);
+      for (const row of rows) {
+        if (row.apiKeyEnv) row.configured = status[row.apiKeyEnv]?.configured === true;
+      }
+    }
+    return rows;
+  }
+
   const [presetList, sessionList] = await Promise.all([
     client.listAgentPresets().catch(() => ({ presets: [] as Array<{ id: string; isDefault?: boolean }> })),
     client.listSessions().catch(() => ({ items: [] as RealSessionListItem[] })),
@@ -237,17 +447,20 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   const presets = presetList.presets.map((p) => presetFromId(p.id, p.isDefault));
 
   function capabilities(): Capabilities {
+    // 桥和引擎都在手机里（baseUrl 是 loopback）时，别把宿主说成"桌面"
+    const local = callbackOrigin() !== null;
     return {
       protocol: PROTOCOL_VERSION,
       host: {
         id: HOST_ID,
-        kind: 'desktop',
-        name: '真 dsh（桌面）',
+        kind: local ? 'phone' : 'desktop',
+        name: local ? '本机 dsh' : '真 dsh（桌面）',
         platform: 'dsh-web',
         engineVersion: '0.2.1-rc.5',
       },
-      events: ['engine.status', 'session.created', 'session.updated'],
-      actions: ['create_session'],
+      events: ['engine.status', 'session.created', 'session.updated', 'account.updated'],
+      // 桥实际实现了这些动作；switch_preset 不在内（真宿主没有会话内换预设）
+      actions: ['approve', 'reject', 'steer', 'stop', 'create_session'],
       presets,
       workspaces: [],
       limits: { maxAttachmentMB: 20, maxFetchFileMB: 50 },
@@ -555,6 +768,33 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     },
     'sessions.setPreset': async () => unsupported('sessions.setPreset'),
 
+    'sessions.rename': async ({ sessionId, title }) => {
+      const trimmed = title.trim();
+      if (trimmed.length === 0) {
+        throw Object.assign(new Error('标题不能为空'), { code: 'bad_request' satisfies ProtocolError['code'] });
+      }
+      await client.rpc('session/rename', { request: { sessionId, title: trimmed } });
+      const { items } = await client.listSessions();
+      const item = items.find((s) => s.sessionId === sessionId);
+      if (!item) throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
+      const snap = await client.snapshot(sessionId);
+      const proj = projectRecords((snap?.records ?? []) as RealRecord[]);
+      return { session: { ...toSummary(item), turns: proj.turns, contract: { tools: [], net: 'allow' } } };
+    },
+
+    'sessions.pin': async ({ sessionId, pinned }) => {
+      await client.rpc(pinned ? 'workspace/pinSession' : 'workspace/unpinSession', { sessionId });
+      return { ok: true as const };
+    },
+
+    'sessions.archive': async ({ sessionId, archived }) => {
+      await client.rpc(archived ? 'workspace/archiveSession' : 'workspace/unarchiveSession', {
+        sessionId,
+        ...(archived ? { stopActivity: true } : {}),
+      });
+      return { ok: true as const };
+    },
+
     'workspaces.list': async () => {
       // workspace/follow 的第一帧是 baseline，里面就是工作区清单
       type WorkspaceView = { workspaceId?: string; path?: string; title?: string };
@@ -764,6 +1004,128 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       await client.rpc('credentials/unset', { ref });
       return { ok: true as const };
     },
+
+    'account.state': async () => {
+      startAccountWatch();
+      const account = asAccountState(await accountRpc('account/getState', {}));
+      if (!account) throw Object.assign(new Error('宿主返回了无法识别的账号状态'), { code: 'internal' satisfies ProtocolError['code'] });
+      return { account };
+    },
+
+    'account.signIn': async () => {
+      const origin = callbackOrigin();
+      if (!origin) {
+        throw Object.assign(new Error('这个宿主不在这台设备上，没法从手机完成登录'), {
+          code: 'unsupported' satisfies ProtocolError['code'],
+          hint: '连电脑时请在那台电脑的 dsh 界面里登录；手机只显示登录状态。',
+        });
+      }
+      startAccountWatch();
+      // 实测：account/startSignIn 是真正的方法名（login / signIn / startLogin 都不存在）
+      const account = asAccountState(
+        await accountRpc('account/startSignIn', {
+          client: accountClient(),
+          callbackOrigin: origin,
+          loginSource: 'web',
+        }),
+      );
+      if (!account) throw Object.assign(new Error('宿主返回了无法识别的账号状态'), { code: 'internal' satisfies ProtocolError['code'] });
+      emitAccount(account);
+      return { account };
+    },
+
+    'account.cancelSignIn': async ({ attemptId }) => {
+      const account = asAccountState(await accountRpc('account/cancelSignIn', { attemptId }));
+      if (!account) throw Object.assign(new Error('宿主返回了无法识别的账号状态'), { code: 'internal' satisfies ProtocolError['code'] });
+      emitAccount(account);
+      return { account };
+    },
+
+    'providers.list': async () => ({ providers: await providerRows() }),
+
+    'providers.catalog': async () => ({ providers: await catalogProviders() }),
+
+    'providers.discover': async ({ baseURL, api, apiKey }) => {
+      const raw = await client.rpc<unknown>('llm/discoverModels', {
+        settingsNs: 'llm-pi-ai',
+        request: { baseURL, api, ...(apiKey ? { apiKey } : {}) },
+      });
+      const list = Array.isArray(raw) ? raw : ((raw as { models?: unknown[] } | null)?.models ?? []);
+      return {
+        models: list.map(normalizeModel).filter((m): m is ProviderModel => m != null),
+      };
+    },
+
+    'providers.save': async (params) => {
+      const ns = await describeNamespace('llm-pi-ai');
+      const providers = (ns?.value?.providers ?? {}) as Record<string, Record<string, unknown>>;
+      const existing = providers[params.id];
+      const keyRef =
+        typeof existing?.apiKeyEnv === 'string' && existing.apiKeyEnv.length > 0
+          ? existing.apiKeyEnv
+          : keyRefFor(params.id);
+
+      if (params.mode === 'catalog') {
+        // 目录型：只记录 apiKeyEnv（可选改地址），协议和模型交给适配器
+        const profile = {
+          ...(params.apiKey.trim().length > 0
+            ? { apiKeyEnv: keyRef }
+            : existing?.apiKeyEnv
+              ? { apiKeyEnv: existing.apiKeyEnv }
+              : {}),
+          ...(params.baseURL && params.baseURL.trim().length > 0 ? { baseURL: params.baseURL.trim() } : {}),
+        };
+        await client.rpc('settings/mutate', {
+          ns: 'llm-pi-ai',
+          ops: [{ op: 'set', path: ['providers', params.id], value: profile }],
+        });
+        if (params.apiKey.trim().length > 0) {
+          await client.rpc('credentials/set', { ref: keyRef, value: params.apiKey.trim() });
+        }
+        return { providers: await providerRows() };
+      }
+
+      const profile = {
+        ...(params.displayName && params.displayName.trim().length > 0
+          ? { displayName: params.displayName.trim() }
+          : {}),
+        ...(params.apiKey && params.apiKey.trim().length > 0
+          ? { apiKeyEnv: keyRef }
+          : existing?.apiKeyEnv
+            ? { apiKeyEnv: existing.apiKeyEnv }
+            : {}),
+        api: params.api,
+        baseURL: params.baseURL.trim(),
+        models: params.models.map((m) => ({ ...m })),
+      };
+      await client.rpc('settings/mutate', {
+        ns: 'llm-pi-ai',
+        ops: [{ op: 'set', path: ['providers', params.id], value: profile }],
+      });
+      if (params.apiKey && params.apiKey.trim().length > 0) {
+        await client.rpc('credentials/set', { ref: keyRef, value: params.apiKey.trim() });
+      }
+      return { providers: await providerRows() };
+    },
+
+    'providers.remove': async ({ id }) => {
+      const ns = await describeNamespace('llm-pi-ai');
+      const existing = ((ns?.value?.providers ?? {}) as Record<string, Record<string, unknown>>)[id];
+      const keyRef = typeof existing?.apiKeyEnv === 'string' && existing.apiKeyEnv.length > 0 ? existing.apiKeyEnv : keyRefFor(id);
+      await client.rpc('credentials/unset', { ref: keyRef }).catch(() => undefined);
+      await client.rpc('settings/mutate', {
+        ns: 'llm-pi-ai',
+        ops: [{ op: 'unset', path: ['providers', id] }],
+      });
+      return { providers: await providerRows() };
+    },
+
+    'account.signOut': async () => {
+      const account = asAccountState(await accountRpc('account/signOut', { client: accountClient() }));
+      if (!account) throw Object.assign(new Error('宿主返回了无法识别的账号状态'), { code: 'internal' satisfies ProtocolError['code'] });
+      emitAccount(account);
+      return { account };
+    },
   };
 
   const http = createServer((req, res) => {
@@ -836,10 +1198,14 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       const handler = handlers[method] as (p: unknown) => Promise<unknown>;
       handler(msg.params ?? {})
         .then((result) => send({ type: 'res', v: PROTOCOL_VERSION, id, ok: true, result }))
-        .catch((err: { code?: ProtocolError['code']; message?: string }) =>
+        .catch((err: { code?: ProtocolError['code']; message?: string; hint?: string }) =>
           send({
             type: 'res', v: PROTOCOL_VERSION, id, ok: false,
-            error: { code: err.code ?? 'internal', message: err.message ?? '内部错误' } satisfies ProtocolError,
+            error: {
+              code: err.code ?? 'internal',
+              message: err.message ?? '内部错误',
+              ...(typeof err.hint === 'string' ? { hint: err.hint } : {}),
+            } satisfies ProtocolError,
           }),
         );
     });
@@ -858,6 +1224,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     close: () =>
       new Promise<void>((resolve) => {
         eventsDispose?.();
+        accountWatchDispose?.();
+        accountWatchDispose = null;
         followDispose?.();
         followDispose = null;
         for (const ws of clients) ws.close();

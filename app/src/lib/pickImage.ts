@@ -23,7 +23,8 @@ export async function pickImage(): Promise<PickedFile | null> {
 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    quality: 0.85,
+    // 手机拍的原图动辄 5–10MB，压到 0.7 再 base64（+33%）通常还在 1–2MB
+    quality: 0.7,
     base64: true,
     allowsMultipleSelection: false,
   });

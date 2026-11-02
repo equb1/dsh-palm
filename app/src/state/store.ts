@@ -2,8 +2,18 @@ import { EngineClient, type ConnectionState } from '../lib/client';
 import { clearDeviceKey, loadDeviceKey, saveDeviceKey } from '../lib/deviceKey';
 import { hostAvailable, hostLogs, hostStatus, startHost, stopHost, type HostStatus } from '../lib/host';
 import { loadHostCommands, saveHostCommands } from '../lib/hostCmd';
+import { humanizeError } from '../lib/errors';
+import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
+import { isAppActive, openUrl } from '../lib/platform';
+import { getInitialShare, readFileBase64 } from '../lib/share';
 import type {
+  AccountState,
   Approval,
+  CatalogProvider,
+  ProviderModel,
+  ProviderProtocol,
+  ProviderRow,
+  RequestParams,
   ApprovalDecision,
   Block,
   Capabilities,
@@ -53,6 +63,14 @@ export interface AppState {
   workspaces: Workspace[];
   /** 已上传、等着跟下一条消息一起发的附件 */
   pendingAttachments: Array<{ receiptId: string; name: string }>;
+  /** DeepSeek 账号（未登录 / 已存凭据，含正在进行的登录尝试） */
+  account: AccountState | null;
+  /** 宿主上配置的模型提供商（自定义渠道） */
+  providers: ProviderRow[];
+  /** 内置提供商目录（第三方） */
+  providerCatalog: CatalogProvider[];
+  /** 从系统分享菜单进来的内容（冷启动读一次） */
+  pendingShare: { text?: string; imagePath?: string; imageName?: string } | null;
   /** 本机引擎（原生宿主服务）的状态；null 表示这台设备不支持 */
   host: HostStatus | null;
   /** 本机引擎最近日志 */
@@ -95,6 +113,10 @@ export class Store {
     deviceKey: null,
     workspaces: [],
     pendingAttachments: [],
+    account: null,
+    providers: [],
+    providerCatalog: [],
+    pendingShare: null,
     host: null,
     hostLogs: [],
     hostEngineCmd: '',
@@ -104,6 +126,17 @@ export class Store {
 
   private listeners = new Set<Listener>();
   private client: EngineClient | null = null;
+  /** 已经交给浏览器的登录尝试 id：同一次尝试只开一个标签页 */
+  private openedAttemptId: string | null = null;
+  /**
+   * 这次登录是不是**用户在本机点的**。
+   *
+   * 桥会把所有客户端的账号事件广播过来；不开这个开关的话，别的设备（或调试探针）
+   * 发起的尝试也会被这台手机打开 —— 用户点到已经取消/过期的链接就会看到"授权失败"。
+   */
+  private pendingSignIn = false;
+  /** 已经弹过通知的审批，避免重连/重放时重复打扰 */
+  private notifiedApprovals = new Set<string>();
 
   /* ------------------------------------------------------------ */
 
@@ -120,8 +153,7 @@ export class Store {
   }
 
   private fail(err: unknown): void {
-    const message = err instanceof Error ? err.message : String(err);
-    this.patch({ error: message, busy: false });
+    this.patch({ error: humanizeError(err), busy: false });
   }
 
   /* ------------------------------------------------------------ */
@@ -167,10 +199,13 @@ export class Store {
         draftPresetId: this.state.draftPresetId ?? caps.presets[0]?.id ?? null,
       });
       await this.refreshSessions();
+      void ensureNotificationPermission();
       // 连上就把模型/权限/工作区拉到本地：头部徽标和新会话要立刻可用
       void this.refreshModels();
       void this.refreshPermissions();
       void this.refreshWorkspaces();
+      void this.refreshAccount();
+      void this.refreshProviders();
     } catch (err) {
       this.patch({ conn: 'closed' });
       this.fail(err);
@@ -180,7 +215,7 @@ export class Store {
   disconnect(): void {
     this.client?.close();
     this.client = null;
-    this.patch({ conn: 'closed', caps: null, detail: null, currentId: null });
+    this.patch({ conn: 'closed', caps: null, detail: null, currentId: null, account: null });
   }
 
   /* ------------------------------------------------------------ */
@@ -260,6 +295,181 @@ export class Store {
     }
   }
 
+  /* ------------------------ 分享进来的内容 ------------------------ */
+
+  /** 冷启动时读一次「分享到锦囊」；没有就什么都不做 */
+  async consumeInitialShare(): Promise<void> {
+    const share = await getInitialShare();
+    if (!share) return;
+    if (!share.text && !share.path) return;
+    this.patch({
+      pendingShare: {
+        ...(share.text ? { text: share.text } : {}),
+        ...(share.path ? { imagePath: share.path } : {}),
+        ...(share.name ? { imageName: share.name } : {}),
+      },
+    });
+  }
+
+  /** 首页取走分享来的文字（取完清掉，只填一次输入框） */
+  takeShareText(): string | null {
+    const text = this.state.pendingShare?.text;
+    if (!text) return null;
+    const { text: _drop, ...rest } = this.state.pendingShare ?? {};
+    this.patch({ pendingShare: Object.keys(rest).length > 0 ? rest : null });
+    return text;
+  }
+
+  /** 当前会话里把分享来的图片传上去 */
+  async attachSharedImage(): Promise<void> {
+    const share = this.state.pendingShare;
+    if (!share?.imagePath || !this.state.currentId || !this.client) return;
+    const base64 = await readFileBase64(share.imagePath);
+    if (!base64) return;
+    await this.uploadAttachment(base64, share.imageName ?? 'share');
+    this.patch({ pendingShare: share.text ? { text: share.text } : null });
+  }
+
+  /* ------------------------ 模型提供商 ------------------------ */
+
+  async refreshProviders(): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { providers } = await this.client.request('providers.list', {});
+      if (JSON.stringify(providers) !== JSON.stringify(this.state.providers)) this.patch({ providers });
+    } catch {
+      if (this.state.providers.length > 0) this.patch({ providers: [] });
+    }
+  }
+
+  /** 用 Base URL + Key 去服务商拉模型；失败抛错给对话框显示 */
+  async discoverProviderModels(input: {
+    baseURL: string;
+    api: ProviderProtocol;
+    apiKey?: string;
+  }): Promise<ProviderModel[]> {
+    if (!this.client) throw new Error('还没连上宿主');
+    const { models } = await this.client.request('providers.discover', input);
+    return models;
+  }
+
+  async saveProvider(input: RequestParams['providers.save']): Promise<void> {
+    if (!this.client) return;
+    const { providers } = await this.client.request('providers.save', input);
+    this.patch({ providers });
+    // 新渠道的模型要能马上出现在会话的模型选择里
+    void this.refreshModels();
+  }
+
+  async refreshProviderCatalog(): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { providers } = await this.client.request('providers.catalog', {});
+      if (JSON.stringify(providers) !== JSON.stringify(this.state.providerCatalog)) {
+        this.patch({ providerCatalog: providers });
+      }
+    } catch {
+      /* 老宿主没有这个接口就当没有目录 */
+    }
+  }
+
+  async removeProvider(id: string): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { providers } = await this.client.request('providers.remove', { id });
+      this.patch({ providers });
+      void this.refreshModels();
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  /* ------------------------ 账号登录 ------------------------ */
+
+  /** 读一次账号状态；老宿主没有这个方法时不打扰用户 */
+  async refreshAccount(): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { account } = await this.client.request('account.state', {});
+      // 轮询期间状态没变就别触发重渲染
+      if (JSON.stringify(account) === JSON.stringify(this.state.account)) return;
+      this.applyAccount(account);
+    } catch {
+      if (this.state.account !== null) this.patch({ account: null });
+    }
+  }
+
+  /**
+   * 开始浏览器登录。
+   *
+   * 回调地址由宿主决定（本机模式下就是引擎自己的 loopback），
+   * 这里只负责把宿主给的 authorizeUrl 交给系统浏览器。
+   */
+  async startAccountSignIn(): Promise<void> {
+    if (!this.client) return;
+    this.pendingSignIn = true;
+    this.openedAttemptId = null;
+    this.patch({ busy: true, error: null });
+    try {
+      const { account } = await this.client.request('account.signIn', {});
+      this.applyAccount(account);
+    } catch (err) {
+      this.fail(err);
+    } finally {
+      this.patch({ busy: false });
+    }
+  }
+
+  /** 手动重开当前这次的授权页（浏览器被关掉时用） */
+  openAccountAuthPage(): void {
+    const attempt = this.state.account?.attempt;
+    if (attempt?.authorizeUrl) void openUrl(attempt.authorizeUrl);
+  }
+
+  async cancelAccountSignIn(): Promise<void> {
+    const attempt = this.state.account?.attempt;
+    this.pendingSignIn = false;
+    if (!this.client || !attempt) return;
+    try {
+      const { account } = await this.client.request('account.cancelSignIn', { attemptId: attempt.id });
+      this.applyAccount(account);
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  async signOutAccount(): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { account } = await this.client.request('account.signOut', {});
+      this.applyAccount(account);
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  /** 账号状态落地 + waiting-browser 时把授权页交给浏览器（每次尝试只开一次） */
+  private applyAccount(account: AccountState): void {
+    const wasSignedIn = this.state.account?.status === 'credential-stored';
+    if (account.status === 'credential-stored') this.pendingSignIn = false;
+    this.patch({ account });
+    // 登录状态一变，宿主上的模型目录也会变（多/少 deepseek-account 渠道），立刻刷新
+    const isSignedIn = account.status === 'credential-stored';
+    if (wasSignedIn !== isSignedIn) {
+      void this.refreshModels();
+      void this.refreshCredentials();
+    }
+    const attempt = account.attempt;
+    if (attempt?.phase !== 'waiting-browser' || !attempt.authorizeUrl) return;
+    // 不是本机发起的、已经过期的尝试，一律不自动开浏览器 —— 那只会给用户一个"授权失败"
+    if (!this.pendingSignIn) return;
+    if (typeof attempt.expiresAt === 'number' && attempt.expiresAt <= Date.now()) return;
+    if (this.openedAttemptId === attempt.id) return;
+    this.openedAttemptId = attempt.id;
+    this.pendingSignIn = false;
+    void openUrl(attempt.authorizeUrl);
+  }
+
   setDraftPreset(presetId: string): void {
     this.patch({ draftPresetId: presetId });
   }
@@ -280,6 +490,7 @@ export class Store {
         title: trimmed.length > 18 ? `${trimmed.slice(0, 18)}…` : trimmed,
       });
       await this.openSession(session.id);
+      if (this.state.pendingShare?.imagePath) await this.attachSharedImage();
       await this.send(trimmed);
     } catch (err) {
       this.fail(err);
@@ -314,9 +525,50 @@ export class Store {
     }
   }
 
+  /* ------------------------ 会话管理 ------------------------ */
+
+  async renameSession(id: string, title: string): Promise<void> {
+    if (!this.client) return;
+    try {
+      const { session } = await this.client.request('sessions.rename', { sessionId: id, title });
+      const sessions = this.state.sessions.map((s) => (s.id === id ? { ...s, title: session.title } : s));
+      const patch: Partial<AppState> = { sessions };
+      if (this.state.detail?.id === id) patch.detail = session;
+      this.patch(patch);
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  async setSessionPinned(id: string, pinned: boolean): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.request('sessions.pin', { sessionId: id, pinned });
+      await this.refreshSessions();
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
+  async archiveSession(id: string, archived: boolean): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.request('sessions.archive', { sessionId: id, archived });
+      if (archived && this.state.currentId === id) this.closeSession();
+      await this.refreshSessions();
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
   async setPreset(presetId: string): Promise<void> {
-    const { currentId } = this.state;
+    const { currentId, caps } = this.state;
     if (!this.client || !currentId) return;
+    // 宿主没声明 switch_preset 就别发——真 dsh 没有会话内换预设的接口
+    if (caps && !caps.actions.includes('switch_preset')) {
+      this.setError('这个宿主不支持会话内换预设；想换工作方式，新建一个会话时选。');
+      return;
+    }
     try {
       const { session } = await this.client.request('sessions.setPreset', { sessionId: currentId, presetId });
       this.patch({ detail: session });
@@ -457,7 +709,8 @@ export class Store {
   async refreshHost(): Promise<void> {
     if (!hostAvailable) return;
     const status = await hostStatus();
-    if (status) this.patch({ host: status });
+    // 启动时界面 500ms 拉一次，内容没变就别触发重渲染
+    if (status && JSON.stringify(status) !== JSON.stringify(this.state.host)) this.patch({ host: status });
   }
 
   /** 自动连接只赌一次：冷启动时本机引擎就绪后连一次，失败就交回给用户 */
@@ -531,6 +784,26 @@ export class Store {
     this.patch({ error: null });
   }
 
+  /** App 不在前台时才发系统通知：在看着界面就别打扰 */
+  private notifyApproval(approval: Approval): void {
+    if (isAppActive()) return;
+    if (this.notifiedApprovals.has(approval.id)) return;
+    this.notifiedApprovals.add(approval.id);
+    const title = approval.kind === 'question' ? '有个问题要你回答' : '需要你确认';
+    void notifyEvent(title, approval.title, 'approval:' + approval.id);
+  }
+
+  private notifyRunFinished(data: { sessionId: string; reason: string }): void {
+    if (isAppActive()) return;
+    if (data.reason === 'stopped') return;
+    const session = this.state.sessions.find((s) => s.id === data.sessionId);
+    void notifyEvent(
+      data.reason === 'error' ? '会话出错' : '任务完成',
+      session?.title ?? '会话',
+      'run:' + data.sessionId,
+    );
+  }
+
   /* ------------------------------------------------------------ */
 
   /** 事件统一在这里落到状态上；UI 不做任何拼装 */
@@ -589,6 +862,7 @@ export class Store {
 
       case 'approval.requested': {
         const approval = data.approval as Approval;
+        this.notifyApproval(approval);
         const nextApprovals = { ...this.state.approvals, [approval.id]: approval };
         const d = this.state.detail;
 
@@ -632,6 +906,12 @@ export class Store {
         return;
       }
 
+      case 'account.updated': {
+        const account = (data as { account?: AccountState }).account;
+        if (account) this.applyAccount(account);
+        return;
+      }
+
       case 'device.paired': {
         const key = String((data as { key?: string }).key ?? '');
         if (key) {
@@ -650,6 +930,7 @@ export class Store {
 
       case 'run.finished': {
         const d = this.state.detail;
+        this.notifyRunFinished(data as { sessionId: string; reason: string });
         this.patch({
           busy: false,
           ...(d && data.sessionId === currentId ? { detail: { ...d, status: 'idle' as const } } : {}),

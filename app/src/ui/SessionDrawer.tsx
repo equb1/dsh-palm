@@ -60,6 +60,8 @@ export function SessionDrawer({
   const [mounted, setMounted] = React.useState(visible);
   const [q, setQ] = React.useState('');
   const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const [menuFor, setMenuFor] = React.useState<string | null>(null);
+  const [renameText, setRenameText] = React.useState('');
 
   React.useEffect(() => {
     if (visible) setMounted(true);
@@ -96,6 +98,7 @@ export function SessionDrawer({
   const renderRow = (s: SessionSummary): React.ReactElement => {
     const preset = presets.find((p) => p.id === s.presetId);
     return (
+      <React.Fragment key={s.id}>
       <Pressable
         key={s.id}
         accessibilityRole="button"
@@ -103,6 +106,10 @@ export function SessionDrawer({
         onPress={() => {
           onClose();
           void store.openSession(s.id);
+        }}
+        onLongPress={() => {
+          setMenuFor(menuFor === s.id ? null : s.id);
+          setRenameText(s.title);
         }}
         style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.glassPressed }]}
       >
@@ -124,6 +131,33 @@ export function SessionDrawer({
           </View>
         </View>
       </Pressable>
+
+      {menuFor === s.id ? (
+        <View style={styles.menu}>
+          <Pressable onPress={() => { void store.setSessionPinned(s.id, true); setMenuFor(null); }}>
+            <Text style={styles.menuItem}>置顶</Text>
+          </Pressable>
+          <Pressable onPress={() => { void store.setSessionPinned(s.id, false); setMenuFor(null); }}>
+            <Text style={styles.menuItem}>取消置顶</Text>
+          </Pressable>
+          <Pressable onPress={() => { void store.archiveSession(s.id, true); setMenuFor(null); }}>
+            <Text style={[styles.menuItem, { color: colors.danger }]}>归档</Text>
+          </Pressable>
+          <View style={styles.renameRow}>
+            <TextInput
+              style={styles.renameInput}
+              value={renameText}
+              onChangeText={setRenameText}
+              placeholder="会话标题"
+              placeholderTextColor={colors.textFaint}
+            />
+            <Pressable onPress={() => { void store.renameSession(s.id, renameText); setMenuFor(null); }}>
+              <Text style={styles.menuItem}>保存</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+      </React.Fragment>
     );
   };
 
@@ -247,6 +281,28 @@ const styles = StyleSheet.create({
   list: { padding: space.md, gap: 14, paddingBottom: space.xl },
   groupTitle: { color: colors.textFaint, fontSize: 10.5, letterSpacing: 0.5, marginLeft: 2 },
   empty: { color: colors.textFaint, fontSize: 12.5, textAlign: 'center', marginTop: space.xl },
+  menu: {
+    marginLeft: 46,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: colors.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    gap: 4,
+  },
+  menuItem: { color: colors.blue, fontSize: 12.5, paddingVertical: 5 },
+  renameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  renameInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 12.5,
+    backgroundColor: colors.glassStrong,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, paddingHorizontal: 6, borderRadius: radius.md },
   glyph: {
     width: 32,

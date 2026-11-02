@@ -312,6 +312,11 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const userInteracting = React.useRef(false);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
+
+  // 从分享菜单带进来的图片：进到会话里就传上去
+  React.useEffect(() => {
+    if (state.pendingShare?.imagePath) void store.attachSharedImage();
+  }, [session.id, state.pendingShare?.imagePath]);
   const hasText = draft.trim().length > 0;
 
   // 头部模型徽标：优先会话自己选的，其次宿主默认；名字太长就把 DeepSeek- 前缀砍掉
@@ -441,9 +446,19 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           onSend={send}
           onStop={() => void store.stop()}
           running={running}
-          placeholder={running ? '生成中 · 可直接插话' : '给锦囊发消息…'}
+          canStop={state.caps?.actions.includes('stop') ?? false}
+          canSteer={state.caps?.actions.includes('steer') ?? false}
+          placeholder={
+            running
+              ? state.caps?.actions.includes('steer')
+                ? '生成中 · 可直接插话'
+                : '生成中 · 等这一轮跑完'
+              : '给锦囊发消息…'
+          }
           presets={state.caps?.presets ?? []}
           activePresetId={session.presetId}
+          // 真宿主没有会话内换预设的接口（capabilities.actions 里没有就不显示）
+          showPresets={state.caps?.actions.includes('switch_preset') ?? false}
           onPickPreset={(id) => void store.setPreset(id)}
           attachments={state.pendingAttachments}
           onRemoveAttachment={(id) => store.removeAttachment(id)}

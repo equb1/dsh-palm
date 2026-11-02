@@ -5,11 +5,14 @@
  *   node scripts/build-bridge.mjs
  */
 import { build } from 'esbuild';
-import { mkdirSync, statSync } from 'node:fs';
+import { copyFileSync, mkdirSync, statSync } from 'node:fs';
 
 const OUT = 'dist/dsh-palm-bridge.cjs';
+/** 同时也放进 APK 的 assets：运行时每次启动同步进 rootfs，改桥就不用重打 payload */
+const ASSET = 'app/android/app/src/main/assets/patch/dsh-palm-bridge.cjs';
 
 mkdirSync('dist', { recursive: true });
+mkdirSync('app/android/app/src/main/assets/patch', { recursive: true });
 
 const result = await build({
   entryPoints: ['engine/src/real/main.ts'],
@@ -37,4 +40,6 @@ if (result.errors.length > 0) {
 }
 
 const size = statSync(OUT).size;
+copyFileSync(OUT, ASSET);
 console.log(`\n打包完成: ${OUT}  ${(size / 1024).toFixed(1)} KB`);
+console.log(`APK 补丁: ${ASSET}`);

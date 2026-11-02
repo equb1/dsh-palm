@@ -18,6 +18,9 @@ export function Composer({
   presets,
   activePresetId,
   onPickPreset,
+  showPresets = true,
+  canStop = true,
+  canSteer = true,
   attachments = [],
   onAttach,
   onRemoveAttachment,
@@ -31,12 +34,18 @@ export function Composer({
   presets: Preset[];
   activePresetId: string | null;
   onPickPreset: (id: string) => void;
+  /** 宿主不支持会话内换预设时，聊天页把这一排收起来 */
+  showPresets?: boolean;
+  /** 宿主能力：能不能停、能不能插话 */
+  canStop?: boolean;
+  canSteer?: boolean;
   attachments?: Array<{ receiptId: string; name: string }>;
   onAttach?: () => void;
   onRemoveAttachment?: (receiptId: string) => void;
 }): React.ReactElement {
   const hasText = draft.trim().length > 0;
-  const showStop = running && !hasText;
+  const showStop = running && !hasText && canStop;
+  const canSend = hasText && (!running || canSteer);
   const [contentHeight, setContentHeight] = React.useState(26);
 
   // 当内容被清空（发送后），高度自动重置为单行初始高度
@@ -96,19 +105,20 @@ export function Composer({
           />
           <Pressable
             onPress={showStop ? onStop : onSend}
-            disabled={!showStop && !hasText}
+            disabled={!showStop && !canSend}
             accessibilityRole="button"
             accessibilityLabel={showStop ? '停止' : '发送'}
             style={({ pressed }) => [
               styles.sendBtn,
               showStop && { backgroundColor: colors.glassStrong },
-              { opacity: showStop || hasText ? (pressed ? 0.75 : 1) : 0.3 },
+              { opacity: showStop || canSend ? (pressed ? 0.75 : 1) : 0.3 },
             ]}
           >
             <Text style={[styles.sendGlyph, showStop && { color: colors.text }]}>{showStop ? '■' : '↑'}</Text>
           </Pressable>
         </View>
 
+        {showPresets ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -136,6 +146,7 @@ export function Composer({
             );
           })}
         </ScrollView>
+        ) : null}
       </View>
     </View>
   );
