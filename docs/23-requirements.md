@@ -113,7 +113,11 @@ App（RN 原生壳）
 **登录（官方 OAuth）**
 
 - 官方包 `@deepseek-ai/dsh-deepseek-account-platform`：browser PKCE、loopback 回调、token 无 refresh。
-- 手机方案：App 内起 `127.0.0.1` 随机端口 HTTP server 作 `redirect_uri`，`ASWebAuthenticationSession`（iOS）/ Custom Tabs（Android）打开授权页，回调后换 token 存 SecureStore。
+- 源码约束（已读 v0.2.1-rc.5）：`redirect_uri` 必须是 `http://localhost|127.0.0.1|[::1]:<显式端口>/oauth/callback`，
+  **不支持自定义 scheme**，路径不可配；state/PKCE 只存在内存，App 被杀则登录尝试作废（token 无 refresh，只能重登）。
+- 手机方案：App 内起 `127.0.0.1` 随机端口 HTTP server（路由固定 `/oauth/callback`），
+  `ASWebAuthenticationSession`（iOS）/ Custom Tabs（Android）打开授权页，回调后换 token 存 SecureStore（Keychain/Keystore）。
+- Platform 侧的 `redirect_uri` 白名单不可见，需真机跑一次登录确认（R3）。
 - 多账号：凭据按 accountId 隔离；设备列表可切换。
 
 **互联（账号只做身份，不做通道）**
@@ -152,7 +156,7 @@ relay 只见密文；文件永不离家。
 
 | 阶段 | 内容 | 产出 |
 |---|---|---|
-| **M0（2 周）** | 三个 spike + 兼容分析器原型 | 结论报告 + dsh 305 包兼容矩阵 v0 |
+| **M0（2 周）** | 四个 spike + 兼容分析器（✅ 2026-11-02 完成静态部分） | 结论见第 9 节 + [24-plugin-compat-matrix](24-plugin-compat-matrix.md) |
 | **M1（4 周）** | LightEngine MVP：会话/流式/审批/提问 + 文档 JS 库 + 生图 | Android 可用的轻引擎 |
 | **M2（4 周）** | WebSurface（WebView 官方前端）+ 完整引擎按需 + 插件徽章 | L0/L3 可用 |
 | **M3（4 周）** | 官方登录 + LAN 互联 + Android 小组件/悬浮球 | v1 内测 |
@@ -177,12 +181,20 @@ relay 只见密文；文件永不离家。
 - just-bash 浏览器包（1.2MB）用到：`Buffer` 18 处、`TextEncoder/Decoder`（原生已有）、`crypto.getRandomValues/subtle`（需 polyfill）、`WebAssembly` 仅特性探测（浏览器构建本就不含 sqlite/js-exec）、`fetch`（RN 有）。
 - 结论：**需要 2–3 个小 shim（buffer / crypto.getRandomValues / performance）**，没有硬性平台阻塞；真正的未知是 Hermes 上 1.2MB bundle 的执行性能，以及 VFS 要自实现 `IFileSystem` 才能落到真实目录。
 
-### 待答
+**R3 · OAuth —— 可行，但要移植（源码结论，待真机登录验证）。**
+- 官方包不自己起 server：它向 Host 的 `webServer` 注册固定路由 `/oauth/callback`（源码 `ctx.get("webServer")`，缺失直接报 protocol）。
+- `redirect_uri` 只认 `http://localhost|127.0.0.1|[::1]:<显式端口>/oauth/callback`；**https loopback、自定义 scheme、`127.0.0.2` 一律拒绝**；端口可随机。
+- RN 复用清单：① 用 App 内 loopback HTTP server 替换 webServer（端口 0 由系统分配）；② 保持 redirect 规则与 PKCE/state 流程；③ 替换 Node API（crypto/stream/Buffer/`Promise.withResolvers`/`AbortSignal.any`）；④ 凭据落 Keychain/Keystore；⑤ 去掉 Cordis Service 外壳；⑥ 用 `Linking.openURL` 打开授权页。
+- 遗留风险：Platform 服务端是否接受该 loopback redirect 需实测；授权完成页 302 到 platform 的 `/dsh/authorized`，外部浏览器不会自动回 App（需中间页/深链，或用 desktop 变体走 204）。
 
-| 编号 | 风险 | 验证方式 | 不过则 |
+### 待验证（都要真机）
+
+| 编号 | 要验证什么 | 验证方式 | 不过则 |
 |---|---|---|---|
-| R2 | just-bash 在 Hermes 上依赖 Buffer/TextEncoder，且是 beta | RN 里加载 1.2MB browser bundle 跑常用命令 | 自研精简 shell 或只做工具级 VFS |
-| R3 | 官方 OAuth 是否接受手机 loopback 回调 | 起本地 server 走一遍真实授权 | 改 custom scheme（需上游支持）或电脑代授权 |
+| R2' | just-bash 在 Hermes 上的真实性能与 VFS 桥接 | RN 里加载 1.2MB bundle + 3 个 shim，跑 `ls/grep/sed/awk` 与大文件 | 自研精简 shell 或只做工具级 VFS |
+| R3' | Platform 服务端是否接受手机 loopback 回调 | App 内起 loopback server 走一次真实授权 | 电脑代授权，或等上游支持 custom scheme |
+
+（R1、R4 已闭环：都不可行，方案已按结论调整。）
 
 ## 10. v1 验收标准
 
