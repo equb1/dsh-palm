@@ -14,8 +14,8 @@
  *   L3  需要真实二进制（child_process / python / git / ffmpeg / libreoffice）：完整引擎（proot）
  *   L4  需要桌面能力（Electron 等）：电脑端执行
  */
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, statSync, existsSync } from 'node:fs';
+import { join, relative, resolve, dirname } from 'node:path';
 
 type Tier = 'L0' | 'L1' | 'L2' | 'L3' | 'L4' | 'no-code';
 
@@ -23,9 +23,11 @@ interface PackageReport {
   name: string;
   version: string;
   tier: Tier;
+  effectiveTier: Tier;
   reasons: string[];
   engines?: string;
   nodeBuiltins: string[];
+  dshDeps: string[];
   hasNativeAddon: boolean;
   hasChildProcess: boolean;
   hasElectron: boolean;
@@ -33,6 +35,9 @@ interface PackageReport {
   usesDynamicImport: boolean;
   jsFiles: number;
 }
+
+const TIER_RANK: Record<Tier, number> = { 'no-code': 0, L0: 0, L1: 1, L2: 2, L3: 3, L4: 4 };
+const RANK_TIER: Record<number, Tier> = { 1: 'L1', 2: 'L2', 3: 'L3', 4: 'L4' };
 
 /** 轻内建：纯 JS 实现，shim 成本低 */
 const LIGHT_BUILTINS = new Set([
@@ -194,9 +199,11 @@ function classify(pkgDir: string, nm: string): PackageReport | null {
     name,
     version: pkg.version ?? '?',
     tier,
+    effectiveTier: tier,
     reasons,
     engines,
     nodeBuiltins: [...builtins].sort(),
+    dshDeps: deps.filter((d) => d.startsWith('@deepseek-ai/')),
     hasNativeAddon,
     hasChildProcess,
     hasElectron,
@@ -206,8 +213,62 @@ function classify(pkgDir: string, nm: string): PackageReport | null {
   };
 }
 
+/**
+ * 依赖闭包：一个包自身是 L2、但依赖了 L3 的包，实际也得按 L3 算。
+ * UI 包（L0）是渲染产物，不参与传播（它的依赖是打包进 web 前端的）。
+ */
+function applyDependencyTiers(reports: PackageReport[]): void {
+  const byName = new Map(reports.map((r) => [r.name, r]));
+  const memo = new Map<string, Tier>();
+
+  const visit = (report: PackageReport, stack: Set<string>): Tier => {
+    if (report.tier === 'L0' || report.tier === 'no-code') return report.tier;
+    const cached = memo.get(report.name);
+    if (cached) return cached;
+    if (stack.has(report.name)) return report.tier;
+    stack.add(report.name);
+
+    let rank = TIER_RANK[report.tier];
+    let driver = '';
+    for (const dep of report.dshDeps) {
+      const child = byName.get(dep);
+      if (!child) continue;
+      const childTier = visit(child, stack);
+      if (TIER_RANK[childTier] > rank) {
+        rank = TIER_RANK[childTier];
+        driver = dep;
+      }
+    }
+    stack.delete(report.name);
+
+    const effective = rank === TIER_RANK[report.tier] ? report.tier : (RANK_TIER[rank] ?? report.tier);
+    if (driver) report.reasons.push(`依赖 ${driver.replace('@deepseek-ai/', '')} 需要更高运行时`);
+    memo.set(report.name, effective);
+    return effective;
+  };
+
+  for (const report of reports) report.effectiveTier = visit(report, new Set());
+}
+
 function main(): void {
-  const nm = resolve(process.argv[2] ?? 'runtime/build/stage/opt/dsh/node_modules');
+  const input = resolve(process.argv[2] ?? 'runtime/build/stage/opt/dsh/node_modules');
+
+  // 单包模式：直接传一个插件目录，打印判定结果，不写报告文件
+  if (statSync(input).isDirectory() && existsSync(join(input, 'package.json'))) {
+    const report = classify(input, dirname(input));
+    if (!report) {
+      console.error(`读不出 package.json: ${input}`);
+      process.exit(1);
+    }
+    console.log(`包：${report.name}@${report.version}`);
+    console.log(`等级：${report.tier}`);
+    console.log(`理由：${report.reasons.join('；')}`);
+    console.log(`Node 内建：${report.nodeBuiltins.join(', ') || '（无）'}`);
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  const nm = input;
   const outDir = resolve(process.argv[3] ?? 'reports');
   const scope = join(nm, '@deepseek-ai');
   const dirs = readdirSync(scope, { withFileTypes: true }).filter((d) => d.isDirectory());
@@ -216,10 +277,20 @@ function main(): void {
     const report = classify(join(scope, dir.name), nm);
     if (report) reports.push(report);
   }
-  reports.sort((a, b) => a.tier.localeCompare(b.tier) || a.name.localeCompare(b.name));
+  applyDependencyTiers(reports);
+  reports.sort(
+    (a, b) =>
+      a.effectiveTier.localeCompare(b.effectiveTier) ||
+      a.tier.localeCompare(b.tier) ||
+      a.name.localeCompare(b.name),
+  );
 
-  const counts = new Map<Tier, number>();
-  for (const r of reports) counts.set(r.tier, (counts.get(r.tier) ?? 0) + 1);
+  const selfCounts = new Map<Tier, number>();
+  const effectiveCounts = new Map<Tier, number>();
+  for (const r of reports) {
+    selfCounts.set(r.tier, (selfCounts.get(r.tier) ?? 0) + 1);
+    effectiveCounts.set(r.effectiveTier, (effectiveCounts.get(r.effectiveTier) ?? 0) + 1);
+  }
 
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'plugin-compat.json'), JSON.stringify(reports, null, 2));
@@ -228,8 +299,10 @@ function main(): void {
   lines.push('# DSH 插件手机兼容矩阵（自动生成）', '');
   lines.push(`> 生成命令：\`node --import tsx scripts/plugin-compat.ts ${relative(process.cwd(), nm)}\``);
   lines.push(`> 扫描包数：${reports.length}；等级定义见 docs/23-requirements.md 第 4 节。`, '');
-  lines.push('| 等级 | 含义 | 包数 |');
-  lines.push('|---|---|---|');
+  lines.push('「自身」只看这个包自己的代码；「含依赖」按依赖闭包取最高等级——');
+  lines.push('一个包自己只用了 `path`，但它依赖的包要 `child_process`，实际也得按更重的运行时算。', '');
+  lines.push('| 等级 | 含义 | 自身 | 含依赖 |');
+  lines.push('|---|---|---|---|');
   const meaning: Record<Tier, string> = {
     L0: 'Web UI：官方 web 前端 + WebView，零改动',
     L1: '纯 JS：轻 TS 引擎 + 内建 shim',
@@ -239,24 +312,29 @@ function main(): void {
     'no-code': '无 JS 代码',
   };
   for (const tier of ['L0', 'L1', 'L2', 'L3', 'L4', 'no-code'] as Tier[]) {
-    lines.push(`| ${tier} | ${meaning[tier]} | ${counts.get(tier) ?? 0} |`);
+    lines.push(
+      `| ${tier} | ${meaning[tier]} | ${selfCounts.get(tier) ?? 0} | ${effectiveCounts.get(tier) ?? 0} |`,
+    );
   }
   lines.push('');
   for (const tier of ['L0', 'L1', 'L2', 'L3', 'L4', 'no-code'] as Tier[]) {
-    const items = reports.filter((r) => r.tier === tier);
+    const items = reports.filter((r) => r.effectiveTier === tier);
     if (items.length === 0) continue;
     lines.push(`## ${tier}（${items.length}）`, '');
-    lines.push('| 包 | 版本 | 判定理由 |');
-    lines.push('|---|---|---|');
+    lines.push('| 包 | 版本 | 自身 | 判定理由 |');
+    lines.push('|---|---|---|---|');
     for (const item of items) {
-      lines.push(`| \`${item.name}\` | ${item.version} | ${item.reasons.join('；').replace(/\|/g, '/')} |`);
+      const self = item.effectiveTier === item.tier ? '—' : item.tier;
+      lines.push(
+        `| \`${item.name}\` | ${item.version} | ${self} | ${item.reasons.join('；').replace(/\|/g, '/')} |`,
+      );
     }
     lines.push('');
   }
   writeFileSync(join(outDir, 'plugin-compat.md'), lines.join('\n'));
 
   for (const tier of ['L0', 'L1', 'L2', 'L3', 'L4', 'no-code'] as Tier[]) {
-    console.log(`${tier}: ${counts.get(tier) ?? 0}`);
+    console.log(`${tier}: 自身 ${selfCounts.get(tier) ?? 0} / 含依赖 ${effectiveCounts.get(tier) ?? 0}`);
   }
   console.log(`报告：${join(outDir, 'plugin-compat.md')} / ${join(outDir, 'plugin-compat.json')}`);
 }
