@@ -31,7 +31,7 @@
 |---|---|---|---|
 | 问答 / 写作 / 推理 / 多轮会话 | 轻 TS 引擎 | Hermes + Cordis + 自带 agent loop | 流式/思考/审批/提问 |
 | 文档生成与解析（docx/xlsx/pdf） | 轻 TS | docx、SheetJS、pdf-lib、pdf.js | 覆盖率主路径 |
-| 文档格式转换与渲染（office→pdf/png） | 原生或完整引擎 | LibreOffice WASM（需 WASM 运行时）或 proot | **Hermes 无 WebAssembly**，见风险 R1 |
+| 文档格式转换与渲染（office→pdf/png） | 完整引擎 / 电脑端 | Android：proot 里的真 LibreOffice；双端：电脑端 LibreOfficeKit 服务；可选 WKWebView + ZetaOffice（仅小文档） | Hermes 无 WASM（实测 RN 0.88 的 `libhermesvm.so` 里没有 `WebAssembly` 符号）；LO wasm 要 pthreads + GB 级堆，手机必 OOM（见 R1） |
 | 生成图像 | 轻 TS | 调图像模型 API + 落盘 | 官方账号只有文本模型，需另配 provider |
 | 图像理解 / OCR | 原生 | ML Kit / Vision | |
 | 录音 / 转写 | 原生 | sherpa-onnx（DSH 已有 sensevoice 包） | |
@@ -75,12 +75,17 @@ App（RN 原生壳）
 |---|---|---|---|---|
 | **L0** | Web UI 插件 | 内置 WebView 打开本机/电脑的官方 web 前端 | **零改动** | 随 WebView |
 | **L1** | 纯 JS 服务端插件（只用 path/events/url 等轻内建） | 轻 TS 引擎 + node 内建 shim | 小（shim 层） | 亚秒 |
-| **L2** | 需要 fs/http/net/crypto 等 Node 内建 | 内嵌 Node 运行时（nodejs-mobile 路线）或完整引擎 | 中（运行时） | 2–4s（无 proot 税） |
+| **L2** | 需要 fs/http/net/crypto 等 Node 内建 | **当前没有可用运行时**：只能进 proot（按 L3 处理），或由轻引擎重写 | 中 | 2–4s（前提是有内嵌 Node，目前不成立） |
 | **L3** | 需要真实二进制（child_process / python / git / libreoffice） | 完整引擎（proot + 真 Linux） | 零改动 | 13.7s，按需 |
 | **L4** | 需要桌面能力（Electron API、本地大模型、系统权限） | 电脑端执行，手机远程调用 | 零改动 | 无（电脑开销） |
 
 > 关键判断：**L0 和 L4 是"零改动"就能拿到的最大红利**——前者复用整套 web 插件 UI，后者复用整台电脑。
-> L1 需要写一层 shim；L2 需要嵌入式 Node；L3 就是我们现在的 proot。
+> L1 需要写一层 shim；L3 就是我们现在的 proot。
+>
+> **R4 结论（2026-11-02）**：内嵌 Node 这条路暂时走不通——`nodejs-mobile` 停在 Node 18.20.4，
+> 而 DSH 0.2.1 用了 Node 22.15+ 的 `node:zlib` zstd、`node:sqlite`、`Promise.withResolvers` 等；
+> koffi / node-pty / sharp / sherpa / node-addon-require-builtin 也都没有 Android prebuild。
+> **所以 L2 目前没有运行时可落**：L2 包要么进 proot（按 L3 处理），要么由轻引擎重写。
 
 ### 4.2 兼容分析器（把"兼容"变成产品能力）
 
@@ -99,7 +104,7 @@ App（RN 原生壳）
 
 ### 4.4 边界（必须写进文档，避免预期错位）
 
-- 旧插件在 L2/L3 之外**不能**跑在轻引擎里。
+- 旧 Node 插件**只能**在 L3（proot 完整引擎）里跑；轻引擎不承诺兼容它们。
 - UI 插件在 RN 原生界面里**不重绘**，只在 WebView 里用；原生界面和 WebView 是两套皮肤、同一份数据。
 - 插件下载执行受 App Store 2.5.2 约束：市场只做"启用/禁用 + 配置下发 + 内置插件"，不做"下载 JS 后执行"。
 
@@ -153,14 +158,26 @@ relay 只见密文；文件永不离家。
 | **M3（4 周）** | 官方登录 + LAN 互联 + Android 小组件/悬浮球 | v1 内测 |
 | **M4** | relay/WebRTC + iOS + L1 自动转译 | 公测 |
 
-## 9. 风险与 spike（M0 必须先答）
+## 9. 风险与 spike
+
+### 已完成（2026-11-02，M0 前半）
+
+**R1 · WASM —— 不可行。**
+- Hermes 没有 WebAssembly：RN 0.84 起官方在把 WASM 带进 Hermes，但本项目 RN 0.88.1 的 `libhermesvm.so` 里搜不到 `WebAssembly` 符号；RN 的 WASM 方案只有 JSI 解释器（wasm3，单内存）和构建期 AOT（polygen，不支持 threads/exceptions）两类。
+- LibreOffice 的真正阻塞是运行时契约：Emscripten pthreads 需要 SharedArrayBuffer/COOP-COEP；`libreoffice-kit-wasm 0.2.3` 48MB tgz / 152MB 解包，同类浏览器版首下 ~240MB、GB 级堆 → 手机必 OOM。
+- 结论：office→pdf 放 **proot（Android）** 或 **电脑端 LibreOfficeKit（双端）**；iOS 只能电脑端或商业原生 SDK。
+
+**R4 · 内嵌 Node —— 不可行。**
+- `nodejs-mobile-react-native` 最新 18.20.4（2024-10 发布），没有 22.x 分支；DSH 启动即用 Node 22.15+ API（`node:zlib` 的 zstd、`node:sqlite`），Node 18 直接 SyntaxError。
+- 原生依赖 koffi / node-pty / sharp / sherpa / require-builtin 都没有 Android prebuild；nodejs-mobile 也没有 fork/exec，PTY 与 subprocess 直接废。
+- 结论：L2 不设独立运行时，按 L3 或重写处理。
+
+### 待答
 
 | 编号 | 风险 | 验证方式 | 不过则 |
 |---|---|---|---|
-| R1 | **Hermes 无 WebAssembly**，LibreOffice WASM 跑不了 | RN 上接 WASM 运行时（wasm3/WAMR）跑一个 48MB 级 WASM | 文档转换留 L3（proot）或找原生转换器 |
-| R2 | just-bash 在 Hermes 上依赖 `Buffer`/`TextEncoder`，且是 beta | 在 RN 里加载 1.2MB browser bundle 跑常用命令 | 自研精简 shell 或只做工具级 VFS |
+| R2 | just-bash 在 Hermes 上依赖 Buffer/TextEncoder，且是 beta | RN 里加载 1.2MB browser bundle 跑常用命令 | 自研精简 shell 或只做工具级 VFS |
 | R3 | 官方 OAuth 是否接受手机 loopback 回调 | 起本地 server 走一遍真实授权 | 改 custom scheme（需上游支持）或电脑代授权 |
-| R4 | 内嵌 Node（nodejs-mobile）只有 **Node 18**，且 iOS 无 JIT | 在 Android 上跑 dsh web + 一个 L2 插件 | L2 降级到 L3（proot） |
 
 ## 10. v1 验收标准
 

@@ -10,8 +10,9 @@
 1. **「自身」vs「含依赖」**：自身只看包自己的代码；含依赖按依赖闭包取最高等级。一个包自己只用 `path`，但它依赖的包要 `child_process`，实际也得按更重的运行时算——所以看「含依赖」。
 2. **等级是"这个包原样能不能在手机上跑"，不是"手机需不需要它"。** 判 L2 不代表手机端必须用内嵌 Node——也可以由轻引擎自己实现同等服务，不安装它。
 3. **L1 不等于"独立可跑"。** L1 的包大多只是工具/策略/协议，运行时依赖 L2 的 agent / session / gateway 注入服务；轻引擎要自己把这些服务补齐。
-4. **真正卡核心的 L3**：会话落盘（`dsh-session-persistence-jsonl`，带原生 zstd 依赖）、终端与子进程（`dsh-terminal*`、`dsh-subprocess-local`、`dsh-native-command`）、沙箱（`dsh-sandbox-local`）、文档转换（`libreoffice-kit`，`engines >=22.19`）、启动器（`dsh`、`dsh-web-app`）。
-5. 这是**静态扫描**：看导入、`child_process`、原生扩展、`engines`，不做运行时验证；边界包（`import type`、字符串里出现关键词）会有误差。
+4. **L2 目前没有运行时可放**：内嵌 Node 方案已被 R4 否决（nodejs-mobile 停在 Node 18），L2 包实际只能进 proot（按 L3）或由轻引擎重写。
+5. **真正卡核心的 L3**：会话落盘（`dsh-session-persistence-jsonl`，带原生 zstd 依赖）、终端与子进程（`dsh-terminal*`、`dsh-subprocess-local`、`dsh-native-command`）、沙箱（`dsh-sandbox-local`）、文档转换（`libreoffice-kit`，`engines >=22.19`）、启动器（`dsh`、`dsh-web-app`）。
+6. 这是**静态扫描**：看导入、`child_process`、原生扩展、`engines`，不做运行时验证；边界包（`import type`、字符串里出现关键词）会有误差。
 # 24 · DSH 插件手机兼容矩阵（自动生成快照）
 
 > 生成命令：`node --import tsx scripts/plugin-compat.ts runtime\build\stage\opt\dsh\node_modules`
