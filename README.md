@@ -58,6 +58,7 @@
 | [docs/23-requirements.md](docs/23-requirements.md) | **v1 需求冻结 + 运行时分工 + 插件兼容体系** | 动手前必读 |
 | [docs/24-plugin-compat-matrix.md](docs/24-plugin-compat-matrix.md) | dsh 305 个包的手机兼容矩阵（L0–L4） | 判断插件能不能跑 |
 | [docs/25-m1-spike-results.md](docs/25-m1-spike-results.md) | **M1 spike 实测**：just-bash 在 Hermes、WebView 官方前端 | 接轻引擎前 |
+| [docs/26-light-engine.md](docs/26-light-engine.md) | **轻引擎 MVP + IFileSystem 适配**：真实工作区、shell、agent loop | 动轻引擎 / 工作区适配时 |
 
 ## 跑起来
 
@@ -117,11 +118,15 @@ App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六
 | Mock 引擎 | `engine/` | 能力协商、流式块、工具调用、审批、预设切换 |
 | 真引擎桥 | `engine/src/real/` + `dist/dsh-palm-bridge.cjs` | 连真 dsh：会话 / 模型 / 审批 / 提问 / 流式 / 配对鉴权 |
 | 端到端测试 | `test/e2e.test.ts` | 11/11 通过 |
+| 轻引擎 | `app/src/engine/light/` | 进程内 agent loop：会话 / 流式 / 审批 / 提问 / 工具，走同一份协议 |
+| 文件系统适配 | `app/src/engine/fs/` | `IFileSystem` → Node / expo-file-system，真实工作区 `/workspace` |
+| Shell | `app/src/engine/shell/` | just-bash + 手机限额（30s / 24k 输出 / 循环与遍历上限） |
 | App 界面 | `app/src/ui/` | 连接页、会话列表、聊天流式、审批卡、提问卡、会话内换预设 |
 | Android 宿主 | `app/android/` | 前台服务 + proot + 自带 rootfs/node/dsh，真机跑通 |
 
 ## 现在还没有的
 
+- 轻引擎的文档 JS 库（docx / xlsx / pdf）与生图（M1 后半，见 [26](docs/26-light-engine.md)）
 - iOS 本机引擎（物理上不可能，没有 fork/exec）和 iOS 遥控器（阶段 2）
 - 拍照 / OCR
 - 远程推送（跑完/待审批的**本地通知**已接，真机验过）

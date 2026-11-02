@@ -1,8 +1,11 @@
-import { EngineClient, type ConnectionState } from '../lib/client';
+import { EngineClient, type ConnectionState, type EngineTransport } from '../lib/client';
 import { clearDeviceKey, loadDeviceKey, saveDeviceKey } from '../lib/deviceKey';
 import { hostAvailable, hostLogs, hostStatus, startHost, stopHost, type HostStatus } from '../lib/host';
 import { loadHostCommands, saveHostCommands } from '../lib/hostCmd';
 import { humanizeError } from '../lib/errors';
+import { createLightHost, saveLightConfig, type LightEngineSetup } from '../lib/light';
+import { LocalEngineClient } from '../engine/light/localClient';
+import type { LightHost } from '../engine/light/host';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
 import { isAppActive, openUrl } from '../lib/platform';
 import { getInitialShare, readFileBase64 } from '../lib/share';
@@ -78,6 +81,8 @@ export interface AppState {
   /** 覆盖用的启动命令（空 = 用 Kotlin 里的默认值） */
   hostEngineCmd: string;
   hostBridgeCmd: string;
+  /** 当前连的是哪种引擎：远程宿主 / 本机轻引擎 */
+  engineKind: 'remote' | 'light' | null;
 }
 
 /**
@@ -122,10 +127,13 @@ export class Store {
     hostEngineCmd: '',
     hostBridgeCmd: '',
     modelSheetOpen: false,
+    engineKind: null,
   };
 
   private listeners = new Set<Listener>();
-  private client: EngineClient | null = null;
+  private client: EngineTransport | null = null;
+  /** 轻引擎实例：断开时要一起关掉（否则后台还在跑） */
+  private lightHost: LightHost | null = null;
   /** 已经交给浏览器的登录尝试 id：同一次尝试只开一个标签页 */
   private openedAttemptId: string | null = null;
   /**
@@ -180,9 +188,43 @@ export class Store {
     const endpoint = code ? target + separator + 'pair=' + encodeURIComponent(code) : target;
     this.patch({ url: target, error: null, conn: 'connecting' });
 
-    this.client?.close();
+    this.closeEngines();
     const client = new EngineClient({ url: endpoint, autoReconnect: true });
+    await this.attach(client, 'remote');
+  }
+
+  /**
+   * 连本机的轻引擎：引擎和 UI 在同一个 JS 进程里，传输层换成进程内调用，
+   * 但 store 以上（含所有界面）看到的仍是一模一样的协议。
+   */
+  async connectLight(setup: LightEngineSetup): Promise<void> {
+    this.patch({ conn: 'connecting', error: null });
+    this.closeEngines();
+    try {
+      const host = await createLightHost(setup);
+      this.lightHost = host;
+      const client = new LocalEngineClient(host);
+      await this.attach(client, 'light');
+      await saveLightConfig(setup);
+    } catch (err) {
+      this.lightHost?.close();
+      this.lightHost = null;
+      this.patch({ conn: 'closed', engineKind: null });
+      this.fail(err);
+    }
+  }
+
+  private closeEngines(): void {
+    this.client?.close();
+    this.client = null;
+    this.lightHost?.close();
+    this.lightHost = null;
+  }
+
+  /** 连线之后的共同部分：远程宿主和轻引擎都走这里 */
+  private async attach(client: EngineTransport, kind: 'remote' | 'light'): Promise<void> {
     this.client = client;
+    this.patch({ engineKind: kind });
 
     client.onStateChange((conn, connDetail) => {
       this.patch({ conn, connDetail });
@@ -213,9 +255,15 @@ export class Store {
   }
 
   disconnect(): void {
-    this.client?.close();
-    this.client = null;
-    this.patch({ conn: 'closed', caps: null, detail: null, currentId: null, account: null });
+    this.closeEngines();
+    this.patch({
+      conn: 'closed',
+      caps: null,
+      detail: null,
+      currentId: null,
+      account: null,
+      engineKind: null,
+    });
   }
 
   /* ------------------------------------------------------------ */

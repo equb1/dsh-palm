@@ -14,6 +14,7 @@ import {
 } from '../lib/host';
 import { ProvidersCard } from './ProvidersCard';
 import { JustBashProbe } from './JustBashProbe';
+import { LightEngineScreen } from './LightEngineScreen';
 import { WebSurface } from './WebSurface';
 
 const REF = 'DEEPSEEK_API_KEY';
@@ -64,7 +65,7 @@ export function SettingsScreen(): React.ReactElement {
   /** null = 问不到（非 Android / 老系统） */
   const [batteryOk, setBatteryOk] = React.useState<boolean | null>(null);
   /** 实验室：L0（WebView 官方前端）/ L1（just-bash 前置）两个 spike */
-  const [lab, setLab] = React.useState<'none' | 'web' | 'bash'>('none');
+  const [lab, setLab] = React.useState<'none' | 'web' | 'bash' | 'light'>('none');
   const [webUrl, setWebUrl] = React.useState<string | null>(null);
   const [labNote, setLabNote] = React.useState<string | null>(null);
   const status = state.credentials[REF];
@@ -137,6 +138,9 @@ export function SettingsScreen(): React.ReactElement {
 
   if (lab === 'bash') {
     return <JustBashProbe onClose={() => setLab('none')} />;
+  }
+  if (lab === 'light') {
+    return <LightEngineScreen onClose={() => setLab('none')} />;
   }
   if (lab === 'web' && webUrl) {
     return (
@@ -424,23 +428,43 @@ export function SettingsScreen(): React.ReactElement {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>实验室 · M1 spike</Text>
+            <Text style={styles.cardTitle}>实验室 · M1</Text>
             <Text style={styles.hint}>
-              验证两条兼容路径：L0 = 官方 web 界面（WebView，全部 web 插件原样），L1 = just-bash 在 Hermes 上的实测性能。
+              L0 = 官方 web 界面（WebView，全部 web 插件原样）；L1 = just-bash 在 Hermes 上跑；
+              轻引擎 = 进程内 agent loop（会话 / 流式 / 审批 / 提问 + 真实工作区）。
             </Text>
             {Platform.OS === 'web' ? (
-              <Text style={styles.hint}>web 上不跑 WebView / just-bash，请在 Android 真机试。</Text>
+              <Text style={styles.hint}>web 上不跑 WebView / just-bash / 轻引擎，请在 Android 真机试。</Text>
             ) : (
-              <View style={styles.actions}>
-                <Btn label="打开完整界面" onPress={() => void openWebSurface()} style={{ flex: 1 }} />
-                <Btn label="just-bash 自检" kind="ghost" onPress={() => setLab('bash')} style={{ flex: 1 }} />
-              </View>
+              <>
+                <View style={styles.actions}>
+                  <Btn label="打开完整界面" onPress={() => void openWebSurface()} style={{ flex: 1 }} />
+                  <Btn label="just-bash 自检" kind="ghost" onPress={() => setLab('bash')} style={{ flex: 1 }} />
+                </View>
+                <View style={styles.actions}>
+                  <Btn
+                    label="轻引擎（工作区 + 模型）"
+                    onPress={() => setLab('light')}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              </>
             )}
             {labNote ? <Text style={styles.hint}>{labNote}</Text> : null}
           </View>
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>宿主</Text>
+            <View style={styles.kv}>
+              <Text style={styles.k}>引擎</Text>
+              <Text style={styles.v}>
+                {state.engineKind === 'light'
+                  ? '轻引擎（本机）'
+                  : state.engineKind === 'remote'
+                    ? '远程宿主'
+                    : '—'}
+              </Text>
+            </View>
             <View style={styles.kv}>
               <Text style={styles.k}>名称</Text>
               <Text style={styles.v}>{state.caps?.host.name ?? '—'}</Text>

@@ -2,6 +2,8 @@
 
 > 对应 [23-requirements.md](23-requirements.md) 第 9 节的 R2 / L0。
 > 环境：华为 PLR110 / Android 16 / Hermes（RN 0.88.1）/ 无线 adb（192.168.1.2:41723）。
+>
+> 后续：`IFileSystem` 适配与轻引擎已落地，见 [26-light-engine.md](26-light-engine.md)。
 
 ## 测试包说明
 
@@ -51,9 +53,13 @@ RN 原生界面负责快和核心操作，WebView 负责"全部旧插件"。
 | L0 WebView | 计划 | **已验证** |
 
 剩下的集成工作（不是可行性问题）：
-1. `IFileSystem` → RN 文件系统适配（让 shell 操作真实工作区）；
-2. 命令覆盖与执行限额（just-bash 自带 `executionLimits`）；
-3. WebView 与 RN 的会话态联动（当前是独立打开，token 从宿主日志解析）。
+
+1. ✅ **已完成**：`IFileSystem` → RN 文件系统适配 + 轻引擎 MVP，见
+   [26-light-engine.md](26-light-engine.md)。工作区就是 `<filesDir>/workspace`
+   （和 proot 完整引擎的 `/root/work` 是同一个目录）；
+2. ✅ **已完成**：执行限额（`executionLimits` + 手机档位 + 30s 墙钟 + 输出截断），
+   命令覆盖仍按 just-bash 内置表；
+3. ⬜ WebView 与 RN 的会话态联动（当前是独立打开，token 从宿主日志解析）。
 
 ## 复现
 

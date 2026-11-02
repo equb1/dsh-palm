@@ -157,7 +157,7 @@ relay 只见密文；文件永不离家。
 | 阶段 | 内容 | 产出 |
 |---|---|---|
 | **M0（2 周）** | 四个 spike + 兼容分析器（✅ 2026-11-02 完成静态部分） | 结论见第 9 节 + [24-plugin-compat-matrix](24-plugin-compat-matrix.md) |
-| **M1（4 周）** | LightEngine MVP：会话/流式/审批/提问 + 文档 JS 库 + 生图 | Android 可用的轻引擎 |
+| **M1（4 周）** | LightEngine MVP：会话/流式/审批/提问 + 文档 JS 库 + 生图 | Android 可用的轻引擎（前半已完成，见 [26-light-engine.md](26-light-engine.md)；文档库/生图待做） |
 | **M2（4 周）** | WebSurface（WebView 官方前端）+ 完整引擎按需 + 插件徽章 | L0/L3 可用 |
 | **M3（4 周）** | 官方登录 + LAN 互联 + Android 小组件/悬浮球 | v1 内测 |
 | **M4** | relay/WebRTC + iOS + L1 自动转译 | 公测 |
