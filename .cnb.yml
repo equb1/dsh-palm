@@ -1,0 +1,25 @@
+# cnb.cool 流水线：develop 的 PR/push 和 main 的 push 都跑同一套验证。
+# GitHub 镜像用 .github/workflows/ci.yml。
+
+.stages: &stages
+  - name: 安装依赖
+    script: npm install && npm --prefix app install
+  - name: App 类型检查
+    script: npm --prefix app run typecheck
+  - name: 协议层验证
+    script: npm run verify
+
+.pipeline: &pipeline
+  docker:
+    image: node:22
+  stages: *stages
+
+develop:
+  pull_request:
+    - <<: *pipeline
+  push:
+    - <<: *pipeline
+
+main:
+  push:
+    - <<: *pipeline

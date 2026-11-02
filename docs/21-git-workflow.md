@@ -48,7 +48,8 @@ main                发布分支：只接受从 develop 合入的发版（tag �
 
 1. 分支推到 `origin`，开 PR 到 `develop`；
 2. PR 描述里贴：改了什么、怎么验的、有什么已知限制；
-3. CI 必须绿（`.github/workflows/ci.yml`：app typecheck + 22 条测试）；
+3. CI 必须绿：cnb.cool 用 `.cnb.yml`（develop 的 PR/push、main 的 push），
+   GitHub 镜像用 `.github/workflows/ci.yml`，两边跑同一套（app typecheck + 22 条测试）；
 4. 合并方式用 **squash**，标题沿用提交标题；
 5. 合并后删分支。
 
