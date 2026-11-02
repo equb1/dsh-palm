@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 
+import { extractXlsxText } from '../app/src/engine/docs/xlsx';
 import { NodeBackend } from '../app/src/engine/fs/nodeBackend';
 import { createDataSandbox, createWorkspaceMount } from '../app/src/engine/fs/mount';
 import { ShellRunner } from '../app/src/engine/shell/bash';
@@ -211,6 +212,45 @@ describe('轻引擎 · 工具与审批', () => {
     assert.equal(toolBlocks.length, 1);
     const toolBlock = toolBlocks[0] as { state: string; detail?: string };
     assert.equal(toolBlock.state, 'done');
+  });
+
+  it('文档工具：批准后生成 xlsx，工具结果回灌给模型', async () => {
+    const harness = await makeHost([
+      {
+        toolCalls: [
+          call('create_xlsx', {
+            path: 'docs/真机表.xlsx',
+            sheets: [{ name: '真机表', rows: [['项目', '数值'], ['自检', 47]] }],
+          }),
+        ],
+      },
+      { text: '表格好了' },
+    ]);
+    const sessionId = await createSession(harness);
+
+    const approval = nextEvent(harness, 'approval.requested');
+    const finished = nextEvent(harness, 'run.finished');
+    await harness.client.request('sessions.send', { sessionId, text: '做个表' });
+    const requested = await approval;
+    const card = requested.data as { approval: { id: string; title: string; command?: string } };
+    assert.equal(card.approval.title, '生成 Excel 表格');
+    assert.match(card.approval.command ?? '', /真机表\.xlsx/);
+
+    await harness.client.request('approvals.resolve', { approvalId: card.approval.id, decision: 'approve' });
+    const done = await finished;
+    assert.equal((done.data as { reason: string }).reason, 'done');
+
+    const bytes = await readFile(join(harness.workspaceRoot, 'docs/真机表.xlsx'));
+    assert.equal(bytes.subarray(0, 2).toString('utf8'), 'PK');
+    const text = await extractXlsxText(new Uint8Array(bytes));
+    assert.match(text, /真机表/);
+    assert.match(text, /自检 \| 47/);
+
+    const { session } = await harness.client.request('sessions.get', { sessionId });
+    const toolMessage = session.turns
+      .flatMap((turn) => turn.blocks)
+      .find((block) => block.kind === 'tool' && block.name === 'create_xlsx');
+    assert.equal((toolMessage as { state: string }).state, 'done');
   });
 
   it('拒绝审批：工具不执行，模型收到的是拒绝', async () => {

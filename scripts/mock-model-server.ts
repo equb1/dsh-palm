@@ -16,6 +16,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const PORT = Number(process.argv[2] ?? process.env.PORT ?? 8799);
 
+/** 1x1 透明 PNG：生图接口回这个，验证落盘和尺寸解析 */
+const TINY_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
 interface ChatMessage {
   role: string;
   content?: string | null;
@@ -25,14 +29,26 @@ interface ChatMessage {
 }
 
 interface Plan {
-  kind: 'question' | 'bash' | 'final';
+  kind: 'question' | 'bash' | 'final' | 'xlsx' | 'docx' | 'image' | 'read-xlsx' | 'read-docx' | 'final-docs';
   answer?: string;
 }
 
+/** docs 模式：专门验证 create/read_xlsx、create/read_docx、generate_image */
+const DOCS_MODE = process.env.MOCK_PLAN === 'docs';
+
 function planFor(messages: ChatMessage[]): Plan {
   const toolMessages = messages.filter((message) => message.role === 'tool');
-  const asked = toolMessages.some((message) => message.name === 'ask_user_question');
-  const ran = toolMessages.some((message) => message.name === 'bash');
+  const has = (name: string): boolean => toolMessages.some((message) => message.name === name);
+
+  if (DOCS_MODE) {
+    if (!has('create_xlsx')) return { kind: 'xlsx' };
+    if (!has('create_docx')) return { kind: 'docx' };
+    if (!has('generate_image')) return { kind: 'image' };
+    if (!has('read_xlsx')) return { kind: 'read-xlsx' };
+    if (!has('read_docx')) return { kind: 'read-docx' };
+    return { kind: 'final-docs' };
+  }
+
   const answerMessage = toolMessages.find((message) => message.name === 'ask_user_question');
   let answer = '';
   try {
@@ -40,8 +56,8 @@ function planFor(messages: ChatMessage[]): Plan {
   } catch {
     answer = '';
   }
-  if (!asked) return { kind: 'question' };
-  if (!ran) return { kind: 'bash' };
+  if (!has('ask_user_question')) return { kind: 'question' };
+  if (!has('bash')) return { kind: 'bash' };
   return { kind: 'final', answer };
 }
 
@@ -129,6 +145,160 @@ async function writePlan(
       }),
     );
     await emit(sse({ choices: [{ finish_reason: 'tool_calls' }] }));
+  } else if (plan.kind === 'xlsx') {
+    await emit(sse({ choices: [{ delta: { content: '先做表格。\n' } }] }), 20);
+    await emit(
+      sse({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_xlsx_1',
+                  type: 'function',
+                  function: {
+                    name: 'create_xlsx',
+                    arguments: JSON.stringify({
+                      path: 'docs/device.xlsx',
+                      sheets: [
+                        {
+                          name: '真机表',
+                          rows: [
+                            ['项目', '数值', '备注'],
+                            ['工作区自检', '47ms', '真机'],
+                            ['xlsx', 'OK', 'SheetJS'],
+                          ],
+                        },
+                      ],
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    await emit(sse({ choices: [{ finish_reason: 'tool_calls' }] }));
+  } else if (plan.kind === 'docx') {
+    await emit(sse({ choices: [{ delta: { content: '表格好了，再写文档。\n' } }] }), 20);
+    await emit(
+      sse({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_docx_1',
+                  type: 'function',
+                  function: {
+                    name: 'create_docx',
+                    arguments: JSON.stringify({
+                      path: 'docs/device.docx',
+                      title: '真机文档',
+                      blocks: [
+                        { type: 'heading', text: '验证', level: 2 },
+                        { type: 'paragraph', text: '这份 docx 是手机上的轻引擎生成的。' },
+                        { type: 'bullet', text: '中文正常' },
+                        { type: 'table', rows: [['模块', '状态'], ['docx', 'OK']] },
+                      ],
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    await emit(sse({ choices: [{ finish_reason: 'tool_calls' }] }));
+  } else if (plan.kind === 'image') {
+    await emit(sse({ choices: [{ delta: { content: '文档好了，再生成一张图。\n' } }] }), 20);
+    await emit(
+      sse({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_image_1',
+                  type: 'function',
+                  function: {
+                    name: 'generate_image',
+                    arguments: JSON.stringify({ prompt: 'a tiny pixel', path: 'images/device.png' }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    await emit(sse({ choices: [{ finish_reason: 'tool_calls' }] }));
+  } else if (plan.kind === 'read-xlsx') {
+    await emit(sse({ choices: [{ delta: { content: '读回表格核对一下。\n' } }] }), 20);
+    await emit(
+      sse({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_read_xlsx_1',
+                  type: 'function',
+                  function: { name: 'read_xlsx', arguments: JSON.stringify({ path: 'docs/device.xlsx' }) },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    await emit(sse({ choices: [{ finish_reason: 'tool_calls' }] }));
+  } else if (plan.kind === 'read-docx') {
+    await emit(sse({ choices: [{ delta: { content: '再读回文档。\n' } }] }), 20);
+    await emit(
+      sse({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_read_docx_1',
+                  type: 'function',
+                  function: { name: 'read_docx', arguments: JSON.stringify({ path: 'docs/device.docx' }) },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+    await emit(sse({ choices: [{ finish_reason: 'tool_calls' }] }));
+  } else if (plan.kind === 'final-docs') {
+    const resultOf = (name: string): string =>
+      (messages.find((message) => message.role === 'tool' && message.name === name)?.content ?? '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+    const text = [
+      '文档链路全部完成：',
+      '1) Excel 生成：' + resultOf('create_xlsx'),
+      '2) Word 生成：' + resultOf('create_docx'),
+      '3) 图片：' + resultOf('generate_image'),
+      '4) 读回 Excel：' + resultOf('read_xlsx'),
+      '5) 读回 Word：' + resultOf('read_docx'),
+    ].join('\n');
+    for (const chunk of contentChunks(text)) {
+      await emit(sse({ choices: [{ delta: { content: chunk } }] }), 30);
+    }
+    await emit(sse({ choices: [{ finish_reason: 'stop' }] }), 10);
+    await emit(sse({ choices: [], usage: { prompt_tokens: 200, completion_tokens: 60 } }), 0);
   } else {
     const bashResult =
       messages.find((message) => message.role === 'tool' && message.name === 'bash')?.content ?? '';
@@ -155,6 +325,18 @@ const server = createServer((req, res) => {
   if (req.method === 'GET' && url.startsWith('/health')) {
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+  if (req.method === 'POST' && url.includes('/images/generations')) {
+    let body = '';
+    req.on('data', (chunk: Buffer) => {
+      body += chunk.toString('utf8');
+    });
+    req.on('end', () => {
+      console.log(`[mock] image ${url} body=${body.replace(/\s+/g, ' ').slice(0, 160)}`);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ data: [{ b64_json: TINY_PNG, revised_prompt: 'a tiny pixel' }] }));
+    });
     return;
   }
   if (!url.includes('/chat/completions')) {

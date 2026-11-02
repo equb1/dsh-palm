@@ -34,6 +34,7 @@ import { toolsForPermission } from './tools';
 import type {
   AskAnswer,
   AskQuestion,
+  LightImageConfig,
   LightModelConfig,
   LightPendingApproval,
   LightPendingQuestion,
@@ -54,11 +55,22 @@ const PRESETS: Preset[] = [
     id: 'light',
     name: '轻引擎',
     glyph: '✦',
-    tagline: '手机默认：秒开，能读写 /workspace',
+    tagline: '手机默认：秒开，能读写 /workspace、生成文档',
     version: '0.1.0',
     builtin: true,
     contract: {
-      tools: ['bash', 'read_file', 'write_file', 'list_dir', 'ask_user_question'],
+      tools: [
+        'bash',
+        'read_file',
+        'write_file',
+        'list_dir',
+        'create_docx',
+        'create_xlsx',
+        'read_docx',
+        'read_xlsx',
+        'generate_image',
+        'ask_user_question',
+      ],
       fs: [{ path: WORKSPACE_MOUNT, mode: 'rw' }],
       net: 'allow',
     },
@@ -72,7 +84,7 @@ const PRESETS: Preset[] = [
     version: '0.1.0',
     builtin: true,
     contract: {
-      tools: ['read_file', 'list_dir', 'ask_user_question'],
+      tools: ['read_file', 'list_dir', 'read_docx', 'read_xlsx', 'ask_user_question'],
       fs: [{ path: WORKSPACE_MOUNT, mode: 'ro' }],
       net: 'allow',
     },
@@ -94,12 +106,16 @@ export interface LightHostOptions {
   shell: ShellRunner;
   dataFs: SandboxFs;
   model: LightModelConfig;
+  /** 可选生图渠道 */
+  image?: LightImageConfig;
   hostName?: string;
   maxSteps?: number;
   approvalTimeoutMs?: number;
   questionTimeoutMs?: number;
   now?: () => number;
   onWarn?: (message: string) => void;
+  /** 诊断日志：真机上报 ttft / run 结束，测试不传 */
+  onLog?: (message: string) => void;
   /** 测试注入假模型 */
   stream?: typeof streamChat;
 }
@@ -131,9 +147,11 @@ export class LightHost {
       model: options.model,
       workspace: options.workspace,
       bash: options.shell,
+      ...(options.image ? { image: options.image } : {}),
       ...(options.maxSteps ? { maxSteps: options.maxSteps } : {}),
       ...(options.now ? { now: options.now } : {}),
       ...(options.stream ? { stream: options.stream } : {}),
+      ...(options.onLog ? { log: options.onLog } : {}),
     });
     this.workspace = {
       id: LIGHT_WORKSPACE_ID,

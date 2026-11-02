@@ -23,9 +23,10 @@
 左：首页就一个输入框 · 中：会话都在抽屉里 · 右：审批卡只看一屏就能决定
 
 2026-11-02 M1 真机（PLR110 / Android 16）：轻引擎不装 proot 也能跑——
-工作区自检 7 条命令 **41–47ms**，然后走完「提问 → 审批 bash → 流式回答」，
-bash 真实写进 `files/workspace`；换成 **DeepSeek 真模型**也跑通了同一条链路。
-截图和数字见 [docs/26](docs/26-light-engine.md)。
+工作区自检 7 条命令 **41–47ms**，走完「提问 → 审批 bash → 流式回答」；
+换成 **DeepSeek 真模型**也跑通了同一条链路；**docx / xlsx / 生图**在 Hermes
+上生成 + 读回都正常（Excel 15.8KB、Word 9.6KB、图 1×1）。截图和数字见
+[docs/26](docs/26-light-engine.md)。
 
 ## 它不是什么
 
@@ -124,6 +125,8 @@ App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六
 | 真引擎桥 | `engine/src/real/` + `dist/dsh-palm-bridge.cjs` | 连真 dsh：会话 / 模型 / 审批 / 提问 / 流式 / 配对鉴权 |
 | 端到端测试 | `test/e2e.test.ts` | 11/11 通过 |
 | 轻引擎 | `app/src/engine/light/` | 进程内 agent loop：会话 / 流式 / 审批 / 提问 / 工具，走同一份协议；真机全链路已验证 |
+| 文档与表格 | `app/src/engine/docs/` | docx（docx 9.x）、xlsx（SheetJS）生成 + 读回，Hermes 真机验证 |
+| 生图 | `app/src/engine/light/image.ts` | 可选 `images/generations` 渠道，落盘 + 读 PNG 尺寸 |
 | 文件系统适配 | `app/src/engine/fs/` | `IFileSystem` → Node / expo-file-system，真实工作区 `/workspace` |
 | Shell | `app/src/engine/shell/` | just-bash + 手机限额（30s / 24k 输出 / 循环与遍历上限） |
 | App 界面 | `app/src/ui/` | 连接页、会话列表、聊天流式、审批卡、提问卡、会话内换预设 |
@@ -131,7 +134,7 @@ App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六
 
 ## 现在还没有的
 
-- 轻引擎的文档 JS 库（docx / xlsx / pdf）与生图（M1 后半，见 [26](docs/26-light-engine.md)）
+- PDF 生成（pdf-lib 标准字体不含中文，要先定子集字体方案）
 - iOS 本机引擎（物理上不可能，没有 fork/exec）和 iOS 遥控器（阶段 2）
 - 拍照 / OCR
 - 远程推送（跑完/待审批的**本地通知**已接，真机验过）

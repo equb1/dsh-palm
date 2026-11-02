@@ -1,9 +1,10 @@
 # 26 · 轻引擎 MVP + IFileSystem 适配
 
-> 状态：**已实现并真机验证（PLR110 / Android 16；假模型 + DeepSeek 真模型）。**
+> 状态：**已实现并真机验证（PLR110 / Android 16；假模型 + DeepSeek 真模型 +
+> docx/xlsx/生图）。**
 > 对应 [23-requirements.md](23-requirements.md) §2/§4 与 §8 的 M1 前半，接续
 > [25-m1-spike-results.md](25-m1-spike-results.md) 里"剩下的集成工作"第 1 条。
-> 验证：`npm run verify`（typecheck + 67 条测试）+ 真机全链路（见 §6）。
+> 验证：`npm run verify`（typecheck + 78 条测试）+ 真机全链路（见 §6）。
 
 ## 0. 一句话
 
@@ -33,7 +34,7 @@ app/src/ui/…                     界面只认 protocol（和连真宿主时同
                                      │
                                   Agent（流式 / 工具 / 审批 / 提问）
                                    ├── provider（OpenAI 兼容 SSE）
-                                   └── tools（bash / 读 / 写 / 列目录 / 提问）
+                                   └── tools（bash / 读写文件 / 文档 / 生图 / 提问）
                                      │
                                   SandboxFs（IFileSystem 实现）
                                    ├── NodeBackend（测试 / 桌面）
@@ -155,12 +156,18 @@ run.finished(done | stopped | error)
 | `read_file` | 不要 | 带行号，offset/limit，40k 字符截断 |
 | `write_file` | 要 | 自动建父目录，2MB 上限 |
 | `list_dir` | 不要 | `d`/`f` 前缀，500 项上限 |
+| `create_docx` | 要 | blocks 结构化 → .docx（标题/段落/列表/表格/代码/分页） |
+| `read_docx` | 不要 | 解 zip 抽 `word/document.xml` 文本，不还原样式 |
+| `create_xlsx` | 要 | sheets/rows 二维数组 → .xlsx（多工作表） |
+| `read_xlsx` | 不要 | SheetJS 读成文本表格，行/列/字符都有上限 |
+| `generate_image` | 要 | 可选生图渠道；没配就明确报错，不假装生成 |
 | `ask_user_question` | 不要 | 复用审批卡的 `kind:'question'` 展示位 |
 
 权限三档：
 
-- `read-only`：工具表里**没有** bash/write_file，模型硬调用会得到"没有这个工具"；
-- `workspace-write`（默认）：bash/write_file 逐次审批；
+- `read-only`：工具表里**没有** bash / write_file / create_* / generate_image，
+  模型硬调用会得到"没有这个工具"；read_docx / read_xlsx 保留；
+- `workspace-write`（默认）：写操作与生图逐次审批；
 - `danger-full-access`：不逐次审批，但仍只能访问 `/workspace`。
 
 预设两个：`light`（轻引擎）、`reader`（只读）。文档/票据/纪要走 light，
@@ -176,21 +183,55 @@ run.finished(done | stopped | error)
 - 没实现的方法**显式拒绝**（`unsupported` + 一句 hint），不假装成功：
   账号登录、附件上传、多工作区、provider 增删改。
 
-`test/light-engine.test.ts`（12 条）：capabilities、流式回合、落盘重启、bash
-审批通过/拒绝、提问回答、只读工具表、停止、插话、停止时挂起审批、客户端事件、
-unsupported。
+`test/light-engine.test.ts`（13 条）：capabilities、流式回合、落盘重启、bash
+审批通过/拒绝、文档工具审批与落盘、提问回答、只读工具表、停止、插话、
+停止时挂起审批、客户端事件、unsupported。
 
-### 5.5 真机入口
+### 5.5 文档与生图
+
+**文档（`app/src/engine/docs/`）**
+
+- `docx` 9.15（内部 fflate）+ SheetJS `xlsx` 0.18.5，都是纯 JS；
+- **动态 import**：引擎启动不加载，第一次用文档才付包体成本；
+- 生成用 `Packer.toArrayBuffer` / `XLSX.write(type:'array')`，不依赖 Node Buffer；
+- 读 docx 不引 mammoth：`fflate` 解压后从 `<w:t>` 抽文本，段落换行、单元格
+  用 tab；读 xlsx 直接 SheetJS `sheet_to_json(header:1)`；
+- 测试：`test/docs.test.ts` 8 条（docx/xlsx 往返、工具落盘、只读工具表、
+  生图 mock）+ `test/light-engine.test.ts` 里的文档工具审批集成；
+- 文档工具带来的包体：JS bundle 2.6MB → **4.2MB**（720 → 729 modules），
+  APK 仍是一次性安装成本；
+- **PDF 还没做**：`pdf-lib` 的标准字体不含 CJK，要内嵌中文字体得先定
+  "用哪套子集字体、放 assets 还是按需下载"；这属于产品决策，先不做半成品。
+
+**生图（`light/image.ts`）**
+
+- 渠道配置和文本模型分开（`imageBaseURL / imageModel / imageApiKey / imageSize`），
+  官方 DeepSeek 账号没有图像模型；
+- 调 `POST {base}/images/generations`，只认 `b64_json`（也兼容 `url` 再下载）；
+- 落盘后从 PNG 头读出宽高，工具结果回给模型；
+- 没配渠道时 `generate_image` 返回可读错误，引导用户去实验室配置；
+- 深链支持可选的 `imageBase / imageModel / imageKey / imageSize`。
+
+**首 token 埋点**
+
+- agent 每跳模型调用后打 `[light] ttft=…ms stream=…ms tools=…`，
+  run 结束打 `[light] run <id> <reason>`；
+- 原生入口打 `[light] ready=…ms`（建工作区 + 数据目录的实际耗时）；
+- 测试不传 `onLog`，不会污染测试输出。
+
+### 5.6 真机入口
 
 `app/src/lib/light.native.ts`：
 工作区 = `Paths.document/workspace`，也就是 `<filesDir>/workspace` ——
 **和 proot 完整引擎挂进 `/root/work` 的是同一个目录**，两种引擎之间切，
 文件是连续的。配置（Base URL / 模型 / Key）存 SecureStore。
 
-另有一条深链，用来扫码/粘贴切换本机模型渠道：
+另有一条深链，用来扫码/粘贴切换本机模型渠道（生图参数可选）：
 
 ```
 dshpalm://light?base=https%3A%2F%2Fapi.deepseek.com%2Fv1&model=deepseek-chat&key=sk-…&name=DeepSeek
+               &imageBase=https%3A%2F%2Fapi.openai.com%2Fv1&imageModel=gpt-image-1&imageKey=sk-…
+               &imageSize=1024x1024
 ```
 
 冷启动或前台收到后会存好配置并直接连接（`app/src/lib/lightLink.ts`，
@@ -202,7 +243,7 @@ dshpalm://light?base=https%3A%2F%2Fapi.deepseek.com%2Fv1&model=deepseek-chat&key
 ### 6.1 Node 侧（不需要手机）
 
 ```bash
-npm run verify        # typecheck + 67 条测试
+npm run verify        # typecheck + 78 条测试
 ```
 
 ### 6.2 打包侧（不需要手机，验证 Metro 解析与 `.native.ts` 分叉）
@@ -290,35 +331,68 @@ node --import tsx scripts/device-real-check.ts <apk>
 
 一次性 Key 验完即废，没有写进仓库、日志或截图。
 
+#### 文档 / 生图（Hermes 真机）
+
+同一套自动化换成 docs 模式（`MOCK_PLAN=docs` 的假模型 + 假生图接口，
+生图渠道走深链的 `imageBase/imageModel/imageKey`）：
+
+1. 模型依次要求 `create_xlsx`、`create_docx`、`generate_image` —— 三次审批；
+2. 再依次 `read_xlsx`、`read_docx` 把文件读回来核对（读操作不审批）；
+3. 最后流式汇总。
+
+| 项 | 结果 |
+|---|---|
+| `[light] ready` | **4ms**（建工作区 + 数据目录，含 expo 绑定） |
+| ttft（四次模型调用） | 49 / 62 / 69 / 61 ms（本地假模型） |
+| 最后一次流式 | stream **4310ms**（逐帧到达，证明 Hermes 上的 XHR 增量可用） |
+| Excel | `/workspace/docs/device.xlsx`，1 个工作表 3 行，**15.8 KB** |
+| Word | `/workspace/docs/device.docx`，4 个块，**9.6 KB** |
+| 图片 | `/workspace/images/device.png`，1×1，**0.1 KB**（PNG 头解析出宽高） |
+| 读回 Excel | 「真机表（3 行 × 3 列） 项目 \| 数值 \| 备注 …」 |
+| 读回 Word | 「（6 行）真机文档 验证 这份 docx 是手机上的轻引擎生成的。中文正常 模块 状态 docx OK」 |
+
+| Excel 审批 | 生成 + 读回结果 |
+|---|---|
+| ![文档审批](assets/m1-docs-approval.png) | ![文档结果](assets/m1-docs-chat.png) |
+
+这一步验证的是 **docx / SheetJS / fflate 在 Hermes 里真的能跑**，而且中文没有
+乱码、生成的 zip 能被自己读回。PDF 仍未做（见 §5.5 的字体决策）。
+
 ## 7. 与 docs/23 · M1 的差距
 
 M1 的验收是「LightEngine MVP：会话/流式/审批/提问 + 文档 JS 库 + 生图」。
-这次完成的是前半句：
+除了 PDF，其余都已落地：
 
 | M1 项 | 状态 |
 |---|---|
 | 会话 / 流式 / 审批 / 提问 | ✅ |
 | 真实工作区（IFileSystem）+ shell | ✅（docs/25 的第 1 条） |
-| 文档 JS 库（docx / xlsx / pdf） | ⬜ 下一批；先做工具 + 依赖评估 |
-| 生图 | ⬜ 需要 provider 配置形态（目前只有一个模型渠道） |
+| 文档 JS 库（docx / xlsx） | ✅ 生成 + 读回，真机验证 |
+| PDF（pdf-lib / pdf.js） | ⬜ 卡在中文字体：标准字体不含 CJK，要定子集字体方案（见 §5.5） |
+| 生图 | ✅ 可选渠道（`images/generations`），真机用假渠道验证；真渠道等用户配 Key |
 | 命令覆盖与执行限额 | ✅ 限额；命令覆盖按 just-bash 内置表 |
 | WebView 与会话态联动 | ⬜ 目前是独立打开（docs/25 第 3 条） |
 
 ## 8. 已知风险 / 下一步
 
-1. **XHR 增量在 RN 上**：假模型和真模型都验证过（文本和思考按帧渲染，三段工具链
-   之间用户能正常操作、断流重启正常）。**首 token 时延还没单独计时**——这次只
-   记了总耗时（批准到回答结束 9.6s）。下一批在 provider 里加一个 ttft 埋点，
-   和 docs/23 §10 的"轻引擎就绪 < 300ms"分开看。
+1. **XHR 增量在 RN 上**：假模型和真模型都验证过。**ttft 已埋点**：真机
+   `[light] ttft=…` 在本地假模型上是 35–69ms；真模型那轮只看了总耗时（9.6s），
+   下一批接真模型时把 ttft 也记下来。和 docs/23 §10 的"轻引擎就绪 < 300ms"
+   分开看——就绪实测 4ms（expo 绑定 + 建目录）。
 2. **expo `new File(root, ...segments)` 的路径编码**：文件名带空格/中文要靠它；
-   真机自检里没覆盖特殊字符，下一批补一条。
+   真机文档验证用的是中文内容、ASCII 文件名，中文文件名还没覆盖，下一批补。
 3. **没有 OS 级沙箱**：bash 只能在 JS 层做路径约束 + 限额。`/workspace` 之外
    的宿主文件系统本来也读不到（Hermes 没有 `node:fs`），但不要把这当成安全边界
    写进对用户的承诺。
-4. **Bash 构造成本**：现在每次 `bash` 调用新建一个解释器（避免两个会话共享
+4. **Bash 构造成本**：每次 `bash` 调用新建一个解释器（避免两个会话共享
    env/cwd 状态）。真机上 bash 工具整条命令 15ms（含构造），可以接受。
-   轻引擎就绪 < 300ms 的目标（docs/23 §10）不受影响——引擎启动不构造 Bash，
-   第一次调工具时才付这个钱。
 5. **多会话并发**：目前一个会话一个 run，没有队列；M2 的调度器再统一。
-6. **文档生成**：`docx` / SheetJS / pdf-lib 都是纯 JS，能进 Hermes；但要把
-   "生成 → 落盘 → 分享"串起来，等工具集和附件能力一起做。
+6. **文档能力的边界**：docx 只做"生成 + 抽文本"，不还原图片/复杂样式；
+   xlsx 只做值，不写公式/样式/图表。够"票据、纪要、清单"这三类场景，
+   不是 Office 替代品。
+7. **PDF 的中文字体**：`pdf-lib` 标准字体不含 CJK。要么内嵌 Noto Sans SC 子集
+   （按常用字裁到 1–2MB，放 assets 或首次下载），要么等 full engine 的
+   LibreOffice 路径。这是产品决策，先留空。
+8. **包体**：文档库让 JS bundle 从 2.6MB 涨到 4.2MB（APK 13MB → 14.7MB）。
+   动态 import 只能推迟执行，Metro 默认不拆包；真要降，得按会话能力做按需
+   下载 bundle（M2 的插件/资源管道一起做）。

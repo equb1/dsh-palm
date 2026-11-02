@@ -30,6 +30,26 @@ describe('dshpalm 深链', () => {
     assert.equal(parseDeepLink('dshpalm://light?model=x&key=k'), null);
   });
 
+  it('light：可带生图渠道参数', () => {
+    const link = parseDeepLink(
+      'dshpalm://light?base=https%3A%2F%2Fapi.deepseek.com%2Fv1&model=deepseek-chat&key=sk-test' +
+        '&imageBase=https%3A%2F%2Fapi.openai.com%2Fv1&imageModel=gpt-image-1&imageKey=sk-img&imageSize=512x512',
+    );
+    assert.equal(link?.kind, 'light');
+    if (link?.kind !== 'light') return;
+    assert.equal(link.setup.imageBaseURL, 'https://api.openai.com/v1');
+    assert.equal(link.setup.imageModel, 'gpt-image-1');
+    assert.equal(link.setup.imageApiKey, 'sk-img');
+    assert.equal(link.setup.imageSize, '512x512');
+  });
+
+  it('light：生图参数只填一半就不认', () => {
+    assert.equal(
+      parseDeepLink('dshpalm://light?base=https%3A%2F%2Fapi.deepseek.com%2Fv1&model=x&key=k&imageBase=https%3A%2F%2Fa'),
+      null,
+    );
+  });
+
   it('其它 scheme/host 不认', () => {
     assert.equal(parseDeepLink('https://example.com'), null);
     assert.equal(parseDeepLink('dshpalm://unknown?a=1'), null);

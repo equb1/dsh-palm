@@ -37,6 +37,10 @@ export function parseDeepLink(raw: string | null | undefined): DeepLink | null {
       apiKey: params.get('key') ?? params.get('apiKey') ?? '',
       model: params.get('model') ?? '',
       providerName: params.get('name') ?? undefined,
+      imageBaseURL: params.get('imageBase') ?? undefined,
+      imageApiKey: params.get('imageKey') ?? undefined,
+      imageModel: params.get('imageModel') ?? undefined,
+      imageSize: params.get('imageSize') ?? undefined,
     });
     if (setupProblem(setup) !== null) return null;
     return { kind: 'light', setup };

@@ -25,6 +25,7 @@ import type {
   AgentTool,
   AskAnswer,
   AskQuestion,
+  LightImageConfig,
   LightModelConfig,
   LightRun,
   StoredSession,
@@ -50,10 +51,14 @@ export interface AgentDeps {
   model: LightModelConfig;
   workspace: SandboxFs;
   bash: ShellRunner;
+  /** 可选生图渠道，透传给工具上下文 */
+  image?: LightImageConfig;
   maxSteps?: number;
   now?: () => number;
   /** 允许测试替换 */
   stream?: typeof streamChat;
+  /** 诊断日志（真机 logcat 用；测试不传就不打） */
+  log?: (message: string) => void;
 }
 
 export interface RunOutcome {
@@ -95,6 +100,18 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
       return `写入 ${path || '/'}`;
     case 'list_dir':
       return `列出 ${path || '/workspace'}`;
+    case 'create_docx':
+      return `生成 Word ${path || ''}`;
+    case 'create_xlsx':
+      return `生成 Excel ${path || ''}`;
+    case 'read_docx':
+      return `读取 Word ${path || ''}`;
+    case 'read_xlsx':
+      return `读取 Excel ${path || ''}`;
+    case 'generate_image': {
+      const prompt = typeof args.prompt === 'string' ? args.prompt : '';
+      return clip(`生图：${prompt}`, 80);
+    }
     case 'ask_user_question': {
       const list = Array.isArray(args.questions) ? (args.questions as Array<Record<string, unknown>>) : [];
       const question = list[0]?.question;
@@ -109,11 +126,13 @@ export class Agent {
   private readonly deps: AgentDeps;
   private readonly stream: typeof streamChat;
   private readonly now: () => number;
+  private readonly log?: (message: string) => void;
 
   constructor(deps: AgentDeps) {
     this.deps = deps;
     this.stream = deps.stream ?? streamChat;
     this.now = deps.now ?? (() => Date.now());
+    this.log = deps.log;
   }
 
   private systemPrompt(session: StoredSession): string {
@@ -203,12 +222,15 @@ export class Agent {
         ];
 
         let result;
+        const streamStartedAt = this.now();
+        let firstDeltaAt: number | null = null;
         try {
           result = await this.stream(
             modelConfig,
             { messages, tools, signal },
             {
               onText: (delta) => {
+                if (firstDeltaAt === null) firstDeltaAt = this.now();
                 const block = ensureTextBlock('text');
                 block.text += delta;
                 block.block.text += delta;
@@ -222,6 +244,7 @@ export class Agent {
                 });
               },
               onThinking: (delta) => {
+                if (firstDeltaAt === null) firstDeltaAt = this.now();
                 const block = ensureTextBlock('thinking');
                 block.text += delta;
                 block.block.text += delta;
@@ -255,6 +278,10 @@ export class Agent {
             outputTokens: (usage?.outputTokens ?? 0) + (result.usage.outputTokens ?? 0),
           };
         }
+        this.log?.(
+          `ttft=${firstDeltaAt === null ? -1 : firstDeltaAt - streamStartedAt}ms ` +
+            `stream=${this.now() - streamStartedAt}ms tools=${result.toolCalls.length}`,
+        );
 
         const toolCalls = result.toolCalls;
         if (result.text.length > 0 || toolCalls.length > 0) {
@@ -385,6 +412,7 @@ export class Agent {
       bash: this.deps.bash,
       permission: session.permission,
       signal: run.step.signal,
+      ...(this.deps.image ? { image: this.deps.image } : {}),
       requestApproval: async (input) => {
         const decision = await sink.requestApproval(input);
         return decision === 'approve' ? 'approve' : 'reject';
@@ -401,6 +429,7 @@ export class Agent {
 
   private finish(run: LightRun, outcome: RunOutcome): RunOutcome {
     run.finished = true;
+    this.log?.(`run ${run.runId} ${outcome.reason}${outcome.error ? `: ${outcome.error}` : ''}`);
     return outcome;
   }
 }

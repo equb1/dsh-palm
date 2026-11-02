@@ -6,8 +6,12 @@
  */
 import * as SecureStore from 'expo-secure-store';
 
+// docx 依赖的 nanoid 要 crypto.getRandomValues，just-bash 的 Buffer 也在这里补；
+// 只影响原生包，Node 测试不 import 这个文件。
+import './polyfills';
+
 import type { LightEngineSetup } from '../engine/light/config';
-import { LIGHT_CONFIG_KEY, normalizeSetup } from '../engine/light/config';
+import { imageConfigFrom, LIGHT_CONFIG_KEY, normalizeSetup } from '../engine/light/config';
 import { LightHost } from '../engine/light/host';
 import { createExpoFsApi, expoDataDir, expoWorkspaceDir } from '../engine/fs/expoFsApi';
 import { ExpoBackend } from '../engine/fs/expoBackend';
@@ -29,7 +33,9 @@ const SELF_CHECK_CASES = [
 ];
 
 export async function createLightHost(setup: LightEngineSetup): Promise<LightHost> {
+  const startedAt = Date.now();
   const normalized = normalizeSetup(setup);
+  const image = imageConfigFrom(normalized);
 
   const workspaceBackend = new ExpoBackend({ api: createExpoFsApi(expoWorkspaceDir()) });
   const mount = await createWorkspaceMount({ backend: workspaceBackend });
@@ -40,6 +46,7 @@ export async function createLightHost(setup: LightEngineSetup): Promise<LightHos
   const dataBackend = new ExpoBackend({ api: createExpoFsApi(expoDataDir()) });
   const dataFs = await createDataSandbox(dataBackend);
   console.log('[light] workspace=' + mount.workspace.rootLabel + ' model=' + normalized.model);
+  console.log('[light] ready=' + (Date.now() - startedAt) + 'ms image=' + (image ? image.model : 'none'));
 
   return new LightHost({
     workspace: mount.workspace,
@@ -51,8 +58,10 @@ export async function createLightHost(setup: LightEngineSetup): Promise<LightHos
       model: normalized.model,
       ...(normalized.providerName ? { providerName: normalized.providerName } : {}),
     },
+    ...(image ? { image } : {}),
     hostName: '锦囊轻引擎（本机）',
     onWarn: (message) => console.warn('[light]', message),
+    onLog: (message) => console.log('[light] ' + message),
   });
 }
 

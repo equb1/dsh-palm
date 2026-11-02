@@ -35,11 +35,19 @@ const BASE = process.env.LIGHT_BASE ?? '';
 const MODEL = process.env.LIGHT_MODEL ?? '';
 const KEY = process.env.LIGHT_KEY ?? '';
 const NAME = process.env.LIGHT_NAME ?? 'DeepSeek';
-const REPORT_DIR = 'artifacts/m1';
-
+const IMAGE_BASE = process.env.LIGHT_IMAGE_BASE ?? '';
+const IMAGE_MODEL = process.env.LIGHT_IMAGE_MODEL ?? '';
+const IMAGE_KEY = process.env.LIGHT_IMAGE_KEY ?? '';
+const IMAGE_SIZE = process.env.LIGHT_IMAGE_SIZE ?? '';
 const PROMPT =
+  process.env.LIGHT_PROMPT ??
   'Use the bash tool to create hello.txt in the workspace with exactly the text real-model-ok, ' +
-  'then cat it. Keep the final answer short and in Chinese.';
+    'then cat it. Keep the final answer short and in Chinese.';
+/** 结束时界面上应该出现的字（真机模型/假模型返回不同） */
+const EXPECT = process.env.LIGHT_EXPECT ?? '真机链路跑通了';
+/** 回答里应该出现的内容（比如真实文件内容 / 生成的文件名） */
+const VERIFY = process.env.LIGHT_VERIFY ?? 'real-model-ok';
+const REPORT_DIR = 'artifacts/m1';
 
 interface Step {
   name: string;
@@ -120,6 +128,10 @@ async function typeAscii(label: string, text: string): Promise<void> {
 
 function deepLink(): string {
   const params = new URLSearchParams({ base: BASE, model: MODEL, key: KEY, name: NAME });
+  if (IMAGE_BASE) params.set('imageBase', IMAGE_BASE);
+  if (IMAGE_MODEL) params.set('imageModel', IMAGE_MODEL);
+  if (IMAGE_KEY) params.set('imageKey', IMAGE_KEY);
+  if (IMAGE_SIZE) params.set('imageSize', IMAGE_SIZE);
   return `dshpalm://light?${params.toString()}`;
 }
 
@@ -153,27 +165,42 @@ async function main(): Promise<void> {
     hideKeyboard();
     await delay(300);
     if (!tryTap('发送')) throw new Error('点不到「发送」');
-    const card = await waitForAny(['执行命令', '需要你确认'], 120);
+    const card = await waitForAny(['批准'], 180);
     if (!card) throw new Error('等不到审批卡');
     await delay(400);
     screenshot('11-real-approval');
     note(`收到审批卡：${logcat('ReactNativeJS', 40).slice(-2).join(' ')}`);
   });
 
-  await step('批准并等流式收尾', async () => {
-    const approve = findNode(dumpNodes(), '批准');
-    if (!approve) throw new Error('找不到「批准」');
-    tapNode(approve);
-    // 流式中间截一张，证明不是等整段
-    await delay(1200);
-    screenshot('12-real-stream');
-    const done = await waitForAny(['就绪'], 180);
-    if (!done) throw new Error('180s 内没有回到就绪');
+  await step('逐个批准并等流式收尾', async () => {
+    let approved = 0;
+    for (let round = 0; round < 8; round += 1) {
+      const hit = await waitForAny(['批准', EXPECT, '就绪'], 180);
+      if (!hit) throw new Error('180s 内既没有审批卡也没有收尾');
+      if (hit === '批准') {
+        const approve = findNode(dumpNodes(), '批准');
+        if (!approve) continue;
+        tapNode(approve);
+        approved += 1;
+        note(`批准第 ${approved} 个审批`);
+        await delay(1000);
+        screenshot(`12-real-approve-${approved}`);
+        continue;
+      }
+      if (hit === EXPECT) {
+        note(`看到预期文本：${EXPECT}`);
+        await waitForAny(['就绪'], 60);
+        break;
+      }
+      // 先看到「就绪」：run 已经结束
+      break;
+    }
     await delay(600);
     screenshot('13-real-done');
     const nodes = dumpNodes();
-    const sawContent = findNode(nodes, 'real-model-ok');
-    note(sawContent ? '回答里看到了真实文件内容' : '回答里没直接出现 real-model-ok（模型可能只复述）');
+    const sawContent = findNode(nodes, VERIFY);
+    note(sawContent ? `回答里看到了 ${VERIFY}` : `回答里没直接出现 ${VERIFY}（模型可能只复述）`);
+    if (!sawContent) note('（只记警告，不算失败：不同模型的措辞不一定回显原文）');
     const text = nodes
       .filter((node) => node.text.length > 20)
       .map((node) => node.text)

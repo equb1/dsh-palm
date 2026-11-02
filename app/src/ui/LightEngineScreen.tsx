@@ -29,6 +29,10 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
   const [model, setModel] = React.useState(DEEPSEEK_DEFAULT.model);
   const [apiKey, setApiKey] = React.useState('');
   const [showKey, setShowKey] = React.useState(false);
+  const [imageBaseURL, setImageBaseURL] = React.useState('');
+  const [imageModel, setImageModel] = React.useState('');
+  const [imageApiKey, setImageApiKey] = React.useState('');
+  const [imageSize, setImageSize] = React.useState('1024x1024');
   const [note, setNote] = React.useState<string | null>(null);
   const [checking, setChecking] = React.useState(false);
   const [check, setCheck] = React.useState<WorkspaceSelfCheck | null>(null);
@@ -40,6 +44,10 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
       setBaseURL(config.baseURL);
       setModel(config.model);
       setApiKey(config.apiKey);
+      if (config.imageBaseURL) setImageBaseURL(config.imageBaseURL);
+      if (config.imageModel) setImageModel(config.imageModel);
+      if (config.imageApiKey) setImageApiKey(config.imageApiKey);
+      if (config.imageSize) setImageSize(config.imageSize);
     });
   }, []);
 
@@ -48,6 +56,10 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
     model,
     apiKey,
     providerName: DEEPSEEK_DEFAULT.providerName,
+    imageBaseURL,
+    imageModel,
+    imageApiKey,
+    imageSize,
   });
 
   const runCheck = async (): Promise<void> => {
@@ -208,25 +220,89 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
             <Text style={styles.hint}>
               手机端默认限额：单条命令 30s 超时、输出截断 24k 字符、循环/命令数有上限。
             </Text>
-            <View style={styles.actions}>
-              <Btn label="填入 DeepSeek 默认" kind="ghost" onPress={fillDefault} style={{ flex: 1 }} />
-              <Btn
-                label={connecting ? '连接中…' : '连接轻引擎'}
-                onPress={() => void connect()}
-                disabled={connecting || Platform.OS === 'web'}
-                style={{ flex: 1.2 }}
-              />
-            </View>
-            {Platform.OS === 'web' ? (
-              <Text style={styles.hint}>web 上没有真实工作区，请在 Android 真机上试。</Text>
-            ) : null}
           </Card>
+
+          <Card>
+            <View style={styles.rowTop}>
+              <Text style={styles.cardTitle}>3 · 生图（可选）</Text>
+              <Pill>
+                <Text style={styles.badge}>images/generations</Text>
+              </Pill>
+            </View>
+            <Text style={styles.hint}>
+              官方 DeepSeek 账号没有图像模型，要另配一个 OpenAI 兼容的生图渠道；不配的话
+              generate_image 会直接说"没配置"，不会假装画了。三项要么全填，要么全空。
+            </Text>
+
+            <Text style={styles.label}>生图 Base URL</Text>
+            <TextInput
+              style={styles.input}
+              value={imageBaseURL}
+              onChangeText={setImageBaseURL}
+              placeholder="https://api.openai.com/v1（可留空）"
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="生图 Base URL"
+            />
+
+            <Text style={styles.label}>生图模型</Text>
+            <TextInput
+              style={styles.input}
+              value={imageModel}
+              onChangeText={setImageModel}
+              placeholder="gpt-image-1 / flux-schnell …（可留空）"
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="生图模型"
+            />
+
+            <Text style={styles.label}>生图 API Key</Text>
+            <TextInput
+              style={styles.input}
+              value={imageApiKey}
+              onChangeText={setImageApiKey}
+              placeholder="sk-…（可留空）"
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              accessibilityLabel="生图 API Key"
+            />
+
+            <Text style={styles.label}>尺寸</Text>
+            <TextInput
+              style={styles.input}
+              value={imageSize}
+              onChangeText={setImageSize}
+              placeholder="1024x1024"
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="生图尺寸"
+            />
+          </Card>
+
+          <View style={styles.actions}>
+            <Btn label="填入 DeepSeek 默认" kind="ghost" onPress={fillDefault} style={{ flex: 1 }} />
+            <Btn
+              label={connecting ? '连接中…' : '连接轻引擎'}
+              onPress={() => void connect()}
+              disabled={connecting || Platform.OS === 'web'}
+              style={{ flex: 1.2 }}
+            />
+          </View>
+          {Platform.OS === 'web' ? (
+            <Text style={styles.hint}>web 上没有真实工作区，请在 Android 真机上试。</Text>
+          ) : null}
 
           {note ? <Text style={styles.note}>{note}</Text> : null}
 
           <Text style={styles.footer}>
-            连接后主界面不变：会话、流式、审批、提问都走同一份协议。区别只是引擎在进程内，
-            以及工具只有 bash / read_file / write_file / list_dir / ask_user_question。
+            连接后主界面不变：会话、流式、审批、提问都走同一份协议。工具：bash / read_file /
+            write_file / list_dir / create_docx / create_xlsx / read_docx / read_xlsx /
+            generate_image / ask_user_question。
           </Text>
         </ScrollView>
       </SmoothKeyboardAvoid>

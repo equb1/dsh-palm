@@ -21,6 +21,15 @@ export interface LightModelConfig {
   reasoning?: boolean;
 }
 
+/** 生图渠道（可选）。和文本模型分开配，因为官方账号默认没有图像模型。 */
+export interface LightImageConfig {
+  baseURL: string;
+  apiKey: string;
+  model: string;
+  /** 默认 1024x1024 */
+  size?: string;
+}
+
 export type PermissionPreset = 'read-only' | 'workspace-write' | 'danger-full-access';
 
 export interface ToolCall {
@@ -59,6 +68,8 @@ export interface ToolContext {
   fs: SandboxFs;
   bash: ShellRunner;
   permission: PermissionPreset;
+  /** 生图渠道；没配时 generate_image 会返回可读错误 */
+  image?: LightImageConfig;
   requestApproval(input: {
     title: string;
     command: string;

@@ -1,15 +1,21 @@
 /**
  * 轻引擎的工具集。
  *
- * 只有五个，够 M1 的「文档 / 票据 / 纪要」跑起来：
+ * 覆盖 M1 的「文档 / 票据 / 纪要」：
  *  - bash：just-bash，落真实工作区（审批）
- *  - read_file / list_dir：读
- *  - write_file：写（审批）
+ *  - read_file / list_dir：读文本
+ *  - write_file：写文本（审批）
+ *  - create_docx / create_xlsx：结构化内容 → 真实 Office 文件（审批）
+ *  - read_docx / read_xlsx：把用户已有的文档读回文本
+ *  - generate_image：可选生图渠道（审批；没配就明确报错）
  *  - ask_user_question：把选择交回给界面
  *
  * 刻意不做「工具白名单之外的兼容层」：DSH 的老插件不在这里跑（docs/23 §4.4）。
  */
 import type { AgentTool, AgentTool as Tool, PermissionPreset, ToolContext } from './types';
+import { buildDocx, extractDocxText, type DocxBlock } from '../docs/docx';
+import { buildXlsx, extractXlsxText, type SheetSpec } from '../docs/xlsx';
+import { generateImage, pngSize } from './image';
 import { joinPath, normalizePath } from '../fs/path';
 import { truncateMiddle } from '../shell/bash';
 
@@ -264,12 +270,341 @@ const askUserTool: Tool = {
   },
 };
 
-export const LIGHT_TOOLS: AgentTool[] = [bashTool, readFileTool, writeFileTool, listDirTool, askUserTool];
+/* ------------------------------------------------------------------ *
+ * 文档 / 表格 / 图片
+ * ------------------------------------------------------------------ */
+
+function ensureExtension(target: string, extension: string): string {
+  return target.toLowerCase().endsWith(extension) ? target : `${target}${extension}`;
+}
+
+function parseBlocks(input: unknown): DocxBlock[] {
+  const list = Array.isArray(input) ? (input as unknown[]) : [];
+  const blocks: DocxBlock[] = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as Record<string, unknown>;
+    const type = asString(item.type);
+    const text = asString(item.text);
+    switch (type) {
+      case 'heading':
+        if (text) blocks.push({ type: 'heading', text, ...(typeof item.level === 'number' ? { level: item.level } : {}) });
+        break;
+      case 'paragraph':
+        if (text) blocks.push({ type: 'paragraph', text });
+        break;
+      case 'bullet':
+        if (text) blocks.push({ type: 'bullet', text });
+        break;
+      case 'numbered':
+        if (text) blocks.push({ type: 'numbered', text });
+        break;
+      case 'code':
+        if (text) blocks.push({ type: 'code', text });
+        break;
+      case 'pageBreak':
+        blocks.push({ type: 'pageBreak' });
+        break;
+      case 'table': {
+        const rows = Array.isArray(item.rows) ? (item.rows as unknown[]) : [];
+        const normalized = rows
+          .map((row) => (Array.isArray(row) ? (row as unknown[]).map((value) => asString(value)) : []))
+          .filter((row) => row.length > 0);
+        if (normalized.length > 0) {
+          blocks.push({ type: 'table', rows: normalized, ...(item.header === false ? { header: false } : {}) });
+        }
+        break;
+      }
+      default:
+        throw new Error(`不支持的 block 类型：${type || '(空)'}`);
+    }
+  }
+  if (blocks.length === 0) throw new Error('blocks 为空');
+  return blocks;
+}
+
+function parseSheets(input: unknown): SheetSpec[] {
+  const list = Array.isArray(input) ? (input as unknown[]) : [];
+  const sheets: SheetSpec[] = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as Record<string, unknown>;
+    const rows = Array.isArray(item.rows) ? (item.rows as unknown[]) : [];
+    const normalized = rows.map((row) =>
+      (Array.isArray(row) ? row : [row]).map((value) => {
+        if (value == null) return null;
+        if (typeof value === 'number' || typeof value === 'boolean') return value;
+        return asString(value);
+      }),
+    );
+    if (normalized.length === 0) continue;
+    sheets.push({ name: asString(item.name) || `Sheet${sheets.length + 1}`, rows: normalized });
+  }
+  if (sheets.length === 0) throw new Error('sheets 为空');
+  return sheets;
+}
+
+const createDocxTool: Tool = {
+  name: 'create_docx',
+  description:
+    '把结构化内容写成 Word 文档（.docx）存到工作区。blocks 是有序数组：heading（可带 level 1-4）、' +
+    'paragraph、bullet、numbered、table（rows 二维数组）、code、pageBreak。中文没问题。',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '目标路径，例如 docs/会议纪要.docx（没有扩展名会自动补）' },
+      title: { type: 'string', description: '文档标题，可选' },
+      blocks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['heading', 'paragraph', 'bullet', 'numbered', 'table', 'code', 'pageBreak'],
+            },
+            text: { type: 'string' },
+            level: { type: 'number', description: 'heading 的层级，1-4' },
+            rows: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
+            header: { type: 'boolean', description: 'table 第一行是否当表头，默认是' },
+          },
+          required: ['type'],
+        },
+      },
+    },
+    required: ['path', 'blocks'],
+    additionalProperties: false,
+  },
+  needsApproval: true,
+  describeApproval(args) {
+    const path = asString(args.path);
+    let display = path;
+    try {
+      display = toDisplayPath(ensureExtension(toSandboxPath(path), '.docx'));
+    } catch {
+      display = path;
+    }
+    const blocks = Array.isArray(args.blocks) ? args.blocks.length : 0;
+    return {
+      title: '生成 Word 文档',
+      command: `${display}（${blocks} 个块）`,
+      risk: 'medium',
+      summary: '会在工作区里生成一个 .docx 文件；同名文件会被覆盖。',
+    };
+  },
+  async execute(args, ctx) {
+    const target = ensureExtension(toSandboxPath(args.path), '.docx');
+    const display = toDisplayPath(target);
+    try {
+      const blocks = parseBlocks(args.blocks);
+      const bytes = await buildDocx({
+        ...(typeof args.title === 'string' && args.title.trim() ? { title: args.title.trim() } : {}),
+        blocks,
+      });
+      const parent = target.slice(0, target.lastIndexOf('/')) || '/';
+      if (parent !== '/') await ctx.fs.mkdir(parent, { recursive: true });
+      await ctx.fs.writeFile(target, bytes);
+      return `已生成 Word 文档 ${display}（${blocks.length} 个块，${(bytes.length / 1024).toFixed(1)} KB）`;
+    } catch (error) {
+      return `[错误] ${error instanceof Error ? error.message : String(error)}`;
+    }
+  },
+};
+
+const readDocxTool: Tool = {
+  name: 'read_docx',
+  description: '读取工作区里的 .docx，抽取纯文本（段落换行、表格用制表符分隔）。不能还原图片和复杂样式。',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'docx 路径' },
+      max_chars: { type: 'number', description: '最多返回多少字符，默认 30000' },
+    },
+    required: ['path'],
+    additionalProperties: false,
+  },
+  async execute(args, ctx) {
+    const target = toSandboxPath(args.path);
+    const display = toDisplayPath(target);
+    try {
+      const bytes = await ctx.fs.readFileBuffer(target);
+      const text = extractDocxText(bytes);
+      const max = Math.max(500, Math.min(asInt(args.max_chars, 30_000), 60_000));
+      const clipped = truncateMiddle(text, max);
+      return `${display}（${text.split('\n').length} 行）\n${clipped.text}`;
+    } catch (error) {
+      return `[错误] ${error instanceof Error ? error.message : String(error)}`;
+    }
+  },
+};
+
+const createXlsxTool: Tool = {
+  name: 'create_xlsx',
+  description:
+    '把二维数据写成 Excel（.xlsx）存到工作区。sheets 是数组，每项 {name, rows}，rows 是二维数组' +
+    '（第一行通常是表头）。数字会按数字写入，其它按文本。',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '目标路径，例如 docs/报销单.xlsx' },
+      sheets: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: '工作表名，最多 31 字' },
+            rows: {
+              type: 'array',
+              description: '二维数组；单元格可以是字符串/数字/布尔/null',
+              items: { type: 'array', items: {} },
+            },
+          },
+          required: ['rows'],
+        },
+      },
+    },
+    required: ['path', 'sheets'],
+    additionalProperties: false,
+  },
+  needsApproval: true,
+  describeApproval(args) {
+    const path = asString(args.path);
+    let display = path;
+    try {
+      display = toDisplayPath(ensureExtension(toSandboxPath(path), '.xlsx'));
+    } catch {
+      display = path;
+    }
+    const sheets = Array.isArray(args.sheets) ? args.sheets.length : 0;
+    return {
+      title: '生成 Excel 表格',
+      command: `${display}（${sheets} 个工作表）`,
+      risk: 'medium',
+      summary: '会在工作区里生成一个 .xlsx 文件；同名文件会被覆盖。',
+    };
+  },
+  async execute(args, ctx) {
+    const target = ensureExtension(toSandboxPath(args.path), '.xlsx');
+    const display = toDisplayPath(target);
+    try {
+      const sheets = parseSheets(args.sheets);
+      const bytes = await buildXlsx(sheets);
+      const parent = target.slice(0, target.lastIndexOf('/')) || '/';
+      if (parent !== '/') await ctx.fs.mkdir(parent, { recursive: true });
+      await ctx.fs.writeFile(target, bytes);
+      const rows = sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0);
+      return `已生成 Excel ${display}（${sheets.length} 个工作表，${rows} 行，${(bytes.length / 1024).toFixed(1)} KB）`;
+    } catch (error) {
+      return `[错误] ${error instanceof Error ? error.message : String(error)}`;
+    }
+  },
+};
+
+const readXlsxTool: Tool = {
+  name: 'read_xlsx',
+  description: '读取工作区里的 .xlsx，按工作表输出文本表格（行内用 | 分隔）。',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'xlsx 路径' },
+      sheet: { type: 'string', description: '只看某个工作表，默认全部' },
+      max_rows: { type: 'number', description: '每个表最多多少行，默认 80' },
+      max_cols: { type: 'number', description: '最多多少列，默认 20' },
+    },
+    required: ['path'],
+    additionalProperties: false,
+  },
+  async execute(args, ctx) {
+    const target = toSandboxPath(args.path);
+    const display = toDisplayPath(target);
+    try {
+      const bytes = await ctx.fs.readFileBuffer(target);
+      const text = await extractXlsxText(bytes, {
+        ...(typeof args.sheet === 'string' && args.sheet ? { sheet: args.sheet } : {}),
+        maxRows: asInt(args.max_rows, 80),
+        maxCols: asInt(args.max_cols, 20),
+      });
+      return `${display}\n${text}`;
+    } catch (error) {
+      return `[错误] ${error instanceof Error ? error.message : String(error)}`;
+    }
+  },
+};
+
+const generateImageTool: Tool = {
+  name: 'generate_image',
+  description:
+    '调用生图渠道生成一张图片并保存到工作区。只有用户配置了生图渠道（Base URL / 模型 / Key）时才可用；' +
+    '没配就如实告诉用户去「设置 → M1 实验室」配。',
+  parameters: {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string', description: '图片描述；建议写清主体、风格、构图' },
+      path: { type: 'string', description: '保存路径，默认 images/<时间戳>.png' },
+      size: { type: 'string', description: '尺寸，例如 1024x1024 / 1024x1792，默认用渠道配置' },
+    },
+    required: ['prompt'],
+    additionalProperties: false,
+  },
+  needsApproval: true,
+  describeApproval(args) {
+    const prompt = asString(args.prompt);
+    const size = asString(args.size);
+    return {
+      title: '生成图片',
+      command: `${prompt.slice(0, 160)}${prompt.length > 160 ? '…' : ''}${size ? `（${size}）` : ''}`,
+      risk: 'medium',
+      summary: '会调用生图渠道（可能计费），并把图片存进工作区。',
+    };
+  },
+  async execute(args, ctx) {
+    if (!ctx.image) {
+      return '[错误] 没有配置生图渠道。告诉用户去「设置 → M1 实验室 → 生图（可选）」填 Base URL / 模型 / Key。';
+    }
+    const prompt = asString(args.prompt).trim();
+    if (!prompt) return '[错误] prompt 为空';
+    const extensionPath = asString(args.path).trim();
+    const target = extensionPath
+      ? toSandboxPath(extensionPath)
+      : `/images/img-${Date.now().toString(36)}.png`;
+    try {
+      const image = await generateImage(ctx.image, prompt, {
+        ...(typeof args.size === 'string' && args.size.trim() ? { size: args.size.trim() } : {}),
+        signal: ctx.signal,
+      });
+      const ext = image.mime === 'image/jpeg' ? '.jpg' : image.mime === 'image/webp' ? '.webp' : '.png';
+      const finalTarget = ensureExtension(target, ext);
+      const parent = finalTarget.slice(0, finalTarget.lastIndexOf('/')) || '/';
+      if (parent !== '/') await ctx.fs.mkdir(parent, { recursive: true });
+      await ctx.fs.writeFile(finalTarget, image.bytes);
+      const size = pngSize(image.bytes);
+      const dimensions = size ? `${size.width}×${size.height}` : image.mime;
+      return `已生成图片 ${toDisplayPath(finalTarget)}（${dimensions}，${(image.bytes.length / 1024).toFixed(1)} KB）`;
+    } catch (error) {
+      return `[错误] ${error instanceof Error ? error.message : String(error)}`;
+    }
+  },
+};
+
+export const LIGHT_TOOLS: AgentTool[] = [
+  bashTool,
+  readFileTool,
+  writeFileTool,
+  listDirTool,
+  createDocxTool,
+  createXlsxTool,
+  readDocxTool,
+  readXlsxTool,
+  generateImageTool,
+  askUserTool,
+];
+
+const WRITE_TOOLS = new Set(['bash', 'write_file', 'create_docx', 'create_xlsx', 'generate_image']);
 
 /** read-only 时不暴露写操作；workspace-write / danger-full-access 全给 */
 export function toolsForPermission(permission: PermissionPreset): AgentTool[] {
   if (permission === 'read-only') {
-    return LIGHT_TOOLS.filter((tool) => tool.name !== 'bash' && tool.name !== 'write_file');
+    return LIGHT_TOOLS.filter((tool) => !WRITE_TOOLS.has(tool.name));
   }
   return LIGHT_TOOLS;
 }
@@ -282,11 +617,11 @@ export function toolByName(name: string): AgentTool | undefined {
 export function permissionNote(permission: PermissionPreset): string {
   switch (permission) {
     case 'read-only':
-      return '当前是只读权限：只能 read_file / list_dir / ask_user_question，不能执行命令或写文件。';
+      return '当前是只读权限：只能 read_file / list_dir / read_docx / read_xlsx / ask_user_question，不能执行命令或写文件。';
     case 'workspace-write':
-      return '当前是工作区权限：可以执行 bash 和写文件，但每次都要用户批准。';
+      return '当前是工作区权限：可以执行 bash、写文件、生成文档，但每次都要用户批准。';
     case 'danger-full-access':
-      return '当前是完整权限：bash 和写文件不再逐次批准，但仍只能访问 /workspace。';
+      return '当前是完整权限：bash、写文件和生成文档不再逐次批准，但仍只能访问 /workspace。';
   }
 }
 
@@ -294,6 +629,9 @@ export const TOOL_CONTEXT_HELP: string = [
   '工具使用约定：',
   '- 工作区是 /workspace，shell 的当前目录也是 /workspace；路径优先写相对路径。',
   '- 查文件用 list_dir / read_file，改文件用 write_file，跑命令用 bash。',
+  '- 生成 Word 用 create_docx（blocks 结构化，不用手写 XML）；生成 Excel 用 create_xlsx（sheets.rows 二维数组）。',
+  '- 读用户已有的 docx/xlsx 用 read_docx / read_xlsx。生成完可以读回来核对。',
+  '- 需要配图时用 generate_image；没配置渠道时它会报错，别假装生成了。',
   '- 不要臆造工具；需要用户做选择时用 ask_user_question。',
 ].join('\n');
 
