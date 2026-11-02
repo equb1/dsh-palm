@@ -172,6 +172,11 @@ relay 只见密文；文件永不离家。
 - 原生依赖 koffi / node-pty / sharp / sherpa / require-builtin 都没有 Android prebuild；nodejs-mobile 也没有 fork/exec，PTY 与 subprocess 直接废。
 - 结论：L2 不设独立运行时，按 L3 或重写处理。
 
+**R2 · just-bash —— 条件可行（静态结论，待真机性能验证）。**
+- 实测 RN 0.88.1 的 Hermes：`TextEncoder` / `TextDecoder` / `atob` / `btoa` / `Intl` **有**；`Buffer` / `crypto` / `fetch` / `AbortController` / `performance` / `WebAssembly` **没有**（其中 fetch、AbortController 由 RN 运行时提供）。
+- just-bash 浏览器包（1.2MB）用到：`Buffer` 18 处、`TextEncoder/Decoder`（原生已有）、`crypto.getRandomValues/subtle`（需 polyfill）、`WebAssembly` 仅特性探测（浏览器构建本就不含 sqlite/js-exec）、`fetch`（RN 有）。
+- 结论：**需要 2–3 个小 shim（buffer / crypto.getRandomValues / performance）**，没有硬性平台阻塞；真正的未知是 Hermes 上 1.2MB bundle 的执行性能，以及 VFS 要自实现 `IFileSystem` 才能落到真实目录。
+
 ### 待答
 
 | 编号 | 风险 | 验证方式 | 不过则 |
