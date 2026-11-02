@@ -55,7 +55,7 @@
 | [docs/19-ui-research.md](docs/19-ui-research.md) | dsh-go 的 UI 调研、与锦囊的差距、三批施工顺序 | 动界面前 |
 | [docs/20-open-work.md](docs/20-open-work.md) | **非 UI 的欠账**：P0/P1/P2 + 工程债 | 排期时 |
 | [docs/21-git-workflow.md](docs/21-git-workflow.md) | 分支/提交规范：从 develop 开，一次一个分支 | 每次动代码前 |
-| [docs/22-cross-platform-ts-engine.md](docs/22-cross-platform-ts-engine.md) | **双端统一内嵌引擎调研**：纯 TS 核心 + 虚拟 Shell / Wasm 沙箱 | 规划 0.1s 秒开引擎与 iOS 独立宿主时 |
+| [docs/22-cross-platform-ts-engine.md](docs/22-cross-platform-ts-engine.md) | **双端纯 TS 统一引擎与官方账号全互联规范**：<50ms秒开、iOS对等独立宿主、Cordis热插拔、跨网互联 | 规划下一代引擎与双端互通时 |
 
 ## 跑起来
 

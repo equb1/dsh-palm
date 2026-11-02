@@ -1,160 +1,200 @@
-# 22 · 双端统一内嵌引擎调研（纯 TS 核心 + 虚拟 Shell / WASI 沙箱）
+# 22 · 双端纯 TS 统一引擎与官方账号全互联架构规范
 
-> 状态：**架构预研方案（2026-11-02）**。不改动现有阶段 1 代码，为下一代「0.1 秒秒开 + iOS/Android 双端完整独立宿主」提供技术选型与检索地图。
-
-## 一、背景：为什么要重新审视本机引擎？
-
-阶段 1 我们通过 `proot + Ubuntu 24.04 rootfs + Node 22 + @deepseek-ai/dsh + dsh-palm-bridge` 在 Android 真机上跑通了完整闭环（见 [17-handoff.md](17-handoff.md)）。但真机实测暴露出两个由底层路线决定的天花板：
-
-1. **冷启动物理下限高（9 ～ 14 秒）**
-   - `@deepseek-ai/dsh` 是面向桌面端设计的 Cordis 插件系统，启动时 Node 模块加载器需对 `/opt/dsh/node_modules` 下数百个包发起上万次 `stat` / `openat` / `readlink` 系统调用。
-   - 在 Android 非 Root 环境下，`proot` 通过 `ptrace` 拦截每一次系统调用（每次拦截伴随两次上下文切换），导致仅 `import` 完引擎模块就要消耗 **~9 秒**（对比：打成单文件的 `dsh-palm-bridge.cjs` 在 `proot` 下仅需 **0.18 秒**）。
-   - 同时还要背负 **~150 MB** 压缩镜像体积、**200 MB+** 额外常驻内存，以及 Android SELinux `link()` 限制、孤儿进程清理、各厂商后台强杀等维护成本。
-
-2. **iOS 端本机完全不可用（[00-decisions.md](00-decisions.md) 中 `D17` 的历史妥协）**
-   - **内核限制**：iOS XNU 沙箱严禁第三方 App 调用 `fork()` / `execve()` / `posix_spawn()` 拉起子进程，`proot`、`bash`、独立 `node` 二进制在非越狱 iOS 上物理不可行。
-   - **无主进程 JIT**：iOS 强制执行 `W^X`（写与执行互斥），App 主进程无法动态分配可执行内存页，常规 V8 JIT 无法运行。
-   - **App Store 审核条款 2.5.2**：禁止下载并执行原生机器码；**但苹果明确允许「内置自包含解释器或 WebAssembly 沙箱，用于处理用户本地文档与脚本」**（App Store 长期在架的 `a-Shell`、`Pythonista`、`Carnets` 均基于此合规路径）。
-
-3. **上游 `dsh` 反而在卡「锦囊」的核心设计**
-   - 如 [03-workspaces-presets.md](03-workspaces-presets.md) 与 [20-open-work.md](20-open-work.md) 记录：真 `dsh` 至今没有开放「会话删除」「正文全文检索」，也不支持「单会话级工具白名单（能力契约 `D09`/`D10`）」。
+> 状态：**架构演进终态规范（2026-11-02 定稿）**。
+> 本规范确立了「抛弃重型 Linux 模拟器，以纯 TypeScript 引擎驱动 iOS 与 Android 对等独立宿主，并依托 DeepSeek 官方账号实现跨网络双端全互联」的核心架构。
 
 ---
 
-## 二、五种候选方案全景对比
+## 〇、核心目标与设计原则
 
-得益于 `D26` 的分层边界——**前端 UI 完全不感知 `dsh`，只认项目自有的 [`app/src/protocol/index.ts`](../app/src/protocol/index.ts) 协议**——我们可以在不动 UI 的前提下替换本机引擎实现，同时保留 `dsh-palm-bridge` 用于连接桌面端真 `dsh`。
-
-| 维度 | 现状：`proot` + Ubuntu + 真 `dsh` | 方案 A：`nodejs-mobile` 静态嵌入真 `dsh` | **方案 B（推荐）：纯 TS 内嵌引擎 + 虚拟 Shell / Wasm 沙箱** | 方案 C：Rust 原生核心（`UniFFI/JSI`）+ WASI | 方案 D：端云混合（本地轻量大脑 + 云端微沙箱 E2B） |
-|---|---|---|---|---|---|
-| **冷启动耗时** | 9 ～ 14 s | 1.5 ～ 2.5 s | **< 0.1 s（字节码直映，真秒开）** | **< 0.03 s** | **< 0.1 s**（云端命令 ~0.2 s） |
-| **安装包增量** | +150 MB | +45 MB | **+2 ～ 5 MB**（重型库按需下发） | +6 ～ 10 MB | +1 MB |
-| **常驻内存增量** | +200 ～ 300 MB | +100 ～ 150 MB | **+15 ～ 30 MB** | **+10 MB** | +15 MB |
-| **Android 独立宿主** | ✅ | ✅ | **✅ 100%** | ✅ 100% | ✅ 100% |
-| **iOS 独立宿主 & 上架** | ❌ 不可用 | ⚠️ 半残（`--jitless` 可跑 JS，但 `child_process` 全崩） | **✅ 100% 可用且符合 2.5.2 上架规范** | **✅ 100% 可用且合规** | ✅ 100% |
-| **离线可用性** | ✅（除调模型） | ✅ | **✅** | ✅ | ⚠️ 重度命令依赖联网 |
-| **会话级能力契约** | ❌ 上游未支持 | ❌ 上游未支持 | **✅ 原生支持** | ✅ 原生支持 | ✅ 原生支持 |
-| **研发与维护成本** | 高（系统兼容泥潭） | 中高（需魔改上游去子进程） | **低～中（全栈 TS，单人可控）** | 高（双语言栈维护） | 低（但引入云端成本） |
-
-> **为什么淘汰方案 A（`nodejs-mobile`）？**
-> `nodejs-mobile` 虽然能用 V8 `--jitless` 模式在 iOS 跑起 JS，但 `@deepseek-ai/dsh` 内部大量工具（如 `tool-bash`）强依赖 `child_process.spawn`。在 iOS 上一调工具依然报 `EPERM`，最终还是得重写整套工具层，白白多背 45 MB 包体积和双 JS 引擎内存开销。
+1. **功能实质复刻**：不强求 100% 像素级复刻桌面版 Web 前端，但**完整复刻 DSH 的核心功能**（多轮会话、思考流式解析、工具调用、审批卡片、能力契约、工作区管理）。
+2. **极速冷启动（< 100ms）**：摆脱 `proot` 与系统调用拦截的性能泥潭，通过 Hermes AOT 字节码实现真正的秒开。
+3. **iOS 与 Android 完全对等**：iOS 绝不是单纯的远程监视器，而是拥有独立沙箱工作区、独立本地 Agent 循环、独立模型调用的**完整移动宿主**。
+4. **官方账号全网互联**：双端均使用 **DeepSeek 官方登录**，统一模型配置与额度；依托账号身份穿透不同网络（4G/5G 与家庭 Wi-Fi），实现跨端会话同屏管理、续跑与双向任务委派。
+5. **插件机制热插拔**：基于 Cordis IoC 架构，实现纯 JS/TS 插件在运行时的动态装载、配置与卸载。
+6. **极简兼容浏览器插件**：无论是调用电脑上的浏览器扩展，还是在手机内置 WebView 中执行页面交互，均通过统一的 `browser_*` 协议平滑兼容。
 
 ---
 
-## 三、推荐架构拆解：纯 TS 内嵌引擎 + 虚拟 Shell / WebAssembly 沙箱
-
-React Native 在 Android 与 iOS 上均内置了 **Hermes 引擎**。发版构建时，TypeScript 代码会被提前编译（AOT）为 `.hbc` 字节码文件，App 启动时通过 `mmap` 直接映射进内存执行——**不需要 JIT、不拉起外部进程、启动耗时在 50ms 以内**。
-
-整套架构自上而下分为四层：
+## 一、系统整体拓扑架构
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│  UI 层（React Native：HomeScreen / ChatScreen / SettingsScreen）  │
-├───────────────────────────────────────────────────────────────────┤
-│  统一协议客户端 EngineClient                                      │
-│   ├─ 本机模式：InMemoryTransport（进程内直连，0 端口、0 毫秒延迟） │
-│   └─ 远程模式：WebSocketTransport（连电脑 dsh-palm-bridge）       │
-├───────────────────────────────────────────────────────────────────┤
-│  本机纯 TS 引擎 PalmCore（跑在 Hermes，约 2500～3000 行 TS）       │
-│   ├─ LLM 适配：DeepSeek 账号 OAuth + OpenAI / Anthropic 兼容 SSE  │
-│   ├─ Agent 循环：多步工具流式调度、审批拦截、提问挂起、上下文压缩 │
-│   ├─ 能力契约：按会话 Preset 动态裁剪暴露给模型的 Tool Schema     │
-│   └─ 存储引擎：SQLite（会话持久化、秒级删除、FTS5 全文检索）      │
-├───────────────────────────────────────────────────────────────────┤
-│  双端无子进程工具与沙箱层（Android & iOS 100% 同构）               │
-│   ├─ 文件/网络：原生 FS 读写改 + ripgrep 搜索 + Web Search/Fetch  │
-│   ├─ 办公文档：纯 TS 读写 xlsx / docx / pdf + 端侧离线 OCR         │
-│   ├─ 虚拟 Shell：just-bash（纯 TS 实现 Bash AST + 管道 + 常用命令）│
-│   └─ 算力沙箱：隐藏 WebView 独立进程跑 WebAssembly（Pyodide/WASI）│
-└───────────────────────────────────────────────────────────────────┘
+                     ┌──────────────────────────────────────────────┐
+                     │         DeepSeek 官方账号与模型路由体系         │
+                     │  (统一身份、官方 OAuth 授权、模型目录与配额)   │
+                     └───────────────┬──────────────┬───────────────┘
+                                     │              │
+                       账号认证与穿透交换            账号认证与穿透交换
+                                     ▼              ▼
+ ┌────────────────────────────────────────┐    ┌────────────────────────────────────────┐
+ │ 📱 手机端：dsh-palm (iOS & Android)   │    │ 💻 电脑端：桌面版 DSH + 桥适配器       │
+ ├────────────────────────────────────────┤    ├────────────────────────────────────────┤
+ │ 【UI 层】React Native 原生交互界面      │    │ 【宿主界面】官方桌面前端 / 浏览器侧栏  │
+ │  - 抽屉同屏挂载双端会话与工作区        │    │  - 注册为配对宿主                      │
+ ├────────────────────────────────────────┤    ├────────────────────────────────────────┤
+ │ 【多宿主客户端】EngineClient 连接池     │    │ 【协议桥】dsh-palm-bridge              │
+ │  - 本地直连：InMemoryTransport        │    │  - 暴露标准 RPC & WebSocket 事件流     │
+ │  - 远程电脑：P2P / Relay Transport     │    │                                        │
+ ├────────────────────────────────────────┤    ├────────────────────────────────────────┤
+ │ 【移动端纯 TS 引擎】PalmCore (Hermes)  │◀───┼──▶【桌面引擎】原版 Node + Cordis       │
+ │  - Cordis 纯 TS 微内核 (插件热插拔)    │ P2P │  - 完整 Linux / 本地开发编译链         │
+ │  - just-bash 虚拟 Shell 沙箱           │通道 │  - 驱动桌面 Chrome 浏览器扩展          │
+ │  - 移动沙箱工作区 (Documents/)         │    │  - 电脑本地工作区 (~/projects, D:\code)│
+ └────────────────────────────────────────┘    └────────────────────────────────────────┘
 ```
 
-### 1. 核心大脑层（可直接检索调研的开源方案）
+---
 
-你可以重点搜索以下两个现成的纯 TS Agent 核心库作为参考或底座：
+## 二、纯 TS 内嵌引擎：PalmCore
 
-- **`@mariozechner/pi-ai` 与 `@mariozechner/pi-coding-agent`（仓库：`badlogic/pi-mono`）**
-  - **值得看的原因**：`@deepseek-ai/dsh` 自身的模型渠道层（`llm-pi-ai`）底层用的就是 `pi-ai`！`pi-mono` 是极简纯 TypeScript 编写的跨提供商 LLM 统一接口与 Coding Agent 循环参考实现，代码极其干净，几乎没有 Node 专属耦合。
-- **`Vercel AI SDK`（npm 包：`ai`，文档：`sdk.vercel.ai`）**
-  - **值得看的原因**：工业级纯 TS 流式状态机（`streamText` + `stopWhen` 多步工具循环），全部基于标准 Web `fetch` / `ReadableStream` 构建，支持 React Native / Expo 环境。
+### 1. 为什么纯 TS 能够承载 DSH 核心？
+- **Cordis 底座本身即纯 TS**：DSH 的底层插件框架 Cordis 没有任何 C++ 原生绑定，是一个 100% 纯 TypeScript 实现的依赖注入与服务总线容器，天然可直接运行在 React Native 的 **Hermes** 引擎内。
+- **Agent 工具的本质是 I/O 与逻辑**：
+  - 核心逻辑（提示词组装、思考块解析、上下文压缩）：纯 JS 算法；
+  - 联网与网页（Web Search、Web Fetch）：标准 Fetch / SSE；
+  - 移动存储：React Native 原生异步文件系统；
+  - 数据处理：纯 JS 文档库。
 
-### 2. 虚拟 Shell 沙箱（解决 iOS/Android 无 `bash` 子进程问题）
+### 2. 虚拟 Shell 沙箱：`just-bash`
+过去依赖 `proot` 的唯一原因是为了在 Android 上执行 `tool-bash`。在纯 TS 引擎中，采用 **`vercel-labs/just-bash`** 彻底替代子进程：
+- **纯 TS 实现**：内置完整的 Bash 语法分析器、管道（`|`）、重定向（`>`、`>>`）、环境变量与流程控制。
+- **内置标准 Unix 工具集**：内置 `cat`、`ls`、`grep`、`sed`、`awk`、`jq`、`find`、`tar`、`curl`、`sort` 等常用命令。
+- **虚拟文件系统桥接**：将虚拟 Shell 的根目录挂载到手机 App 内部真实的工作区沙箱目录，AI 像在普通终端中一样使用管道探索与处理数据，执行耗时仅微秒级，**零系统进程开销**。
 
-大模型经过海量训练，非常习惯用 `ls`、`grep`、`sed`、`awk`、`jq`、`find`、`sort`、`head`、`tail` 和管道 `|` 探索文本与处理数据。在没有 `fork()` 的手机端，最佳替代品是：
+### 3. 启动速度指标
+- React Native 构建发版时，TypeScript 代码通过 Hermes 工具链直接 AOT 编译为 `.hbc` 字节码。
+- App 启动时，Hermes 通过 `mmap` 直接将字节码映射入内存，**引擎冷启动就绪时间 < 50ms**，彻底解决原本 10~14 秒的卡顿。
 
-- **`just-bash`（仓库：`vercel-labs/just-bash`，官网：`justbash.dev`）**
-  - **原理**：Vercel 实验室专门为 AI Agent 打造的**纯 TypeScript 模拟 Bash 环境**。内置完整的 Bash 语法解析器（支持管道 `|`、重定向 `>` / `>>`、环境变量、循环与条件分支）、虚拟文件系统（可挂载并桥接到手机沙箱的工作区目录）以及数十个标准 Unix 工具（`grep`、`sed`、`awk`、`jq`、`find`、`tar`、`curl` 等）。
-  - **优势**：零原生依赖、毫秒级执行、iOS 与 Android 表现 100% 一致，且天然具备目录边界隔离，AI 绝对无法越权碰触宿主系统文件。
-- **`BusyBox-WASI` / `uutils coreutils`（WebAssembly 路线）**
-  - 将标准 Unix 工具集编译为 `.wasm` 模块，通过轻量 WASI 运行时加载，作为纯 TS 命令行的补充。
+---
 
-### 3. 代码执行与 Python 沙箱（合法利用 iOS 独立进程 WebAssembly JIT）
+## 三、iOS 与 Android 对等独立宿主落地
 
-处理复杂表格统计、科学计算或生成图表时，Agent 往往需要运行脚本（JS 或 Python）：
+iOS 绝不只是远程遥控器，它与 Android 具备完全对等的本机宿主能力：
 
-- **轻量级脚本沙箱：`QuickJS`（`quickjs-emscripten` / `react-native-quickjs`）**
-  - Fabrice Bellard 编写的超轻量 C 语言 JS 引擎（仅 ~600 KB，无 JIT，完全符合 iOS 审核），支持设置**最大内存上限**和**CPU 指令步数中断**，几毫秒内安全执行 AI 生成的数据转换脚本。
-- **完整 Python 沙箱：`Pyodide`（官网：`pyodide.org`，跑在隐藏的 `WKWebView` / Android `WebView` Worker 中）**
-  - **关键合规与性能技巧**：虽然 iOS 禁止 App 主进程使用 JIT，但 **iOS 系统自带的 `WKWebView` 运行在苹果系统签名的独立 `WebContent` 进程中，合法拥有完整的硬件级 WebAssembly JIT 加速**（这也是众多 iOS 离线编程工具过审的通用做法）。
-  - 在后台挂载一个 `0×0` 隐藏 `WebView` 作为算力协处理器按需唤醒，即可运行 `Pyodide`（完整 CPython 3.12 + `numpy` + `pandas` + `matplotlib` + `python-docx` + `openpyxl`）：
-    1. **真正的多进程隔离**：契合 [05-runtime.md](05-runtime.md)「重活必须离开主进程」的原则——Python 即使跑满 CPU 或死循环，UI 主线程依然 60fps 丝滑，超时直接销毁重建 WebView 即可；
-    2. **按需扩展包**：核心 App 只有 20～30 MB，用户启用「数据分析 / Python 锦囊」时再下载缓存 Pyodide 运行层到本地。
-- **纯 JS Git 客户端：`isomorphic-git`（官网：`isomorphic-git.org`）**
-  - 无需原生 `git` 二进制，纯 JS 在 iOS/Android 本地完成仓库 `clone`、`status`、`diff`、`commit`、`push`。
+```
+                    iOS / Android 移动端独立宿主架构
+ ┌─────────────────────────────────────────────────────────────────┐
+ │                   移动端独立沙箱工作区                           │
+ │     Android: /data/user/0/.../files/workspace/                  │
+ │     iOS:     /var/mobile/Containers/Data/.../Documents/         │
+ ├─────────────────────────────────────────────────────────────────┤
+ │                   PalmCore 纯 TS 核心循环                       │
+ │  ┌───────────────┐ ┌────────────────┐ ┌──────────────────────┐  │
+ │  │ LLM 驱动状态机 │ │ Cordis 插件总线│ │ just-bash 虚拟 Shell │  │
+ │  └───────────────┘ └────────────────┘ └──────────────────────┘  │
+ ├─────────────────────────────────────────────────────────────────┤
+ │                   本地原生能力与硬件桥接                        │
+ │  - SQLite FTS5 (历史对话与文档正文全文检索)                     │
+ │  - 离线办公处理 (SheetJS 表格 / Mammoth Word / pdf-lib)         │
+ │  - 离线硬件 OCR (iOS Vision / Android ML Kit)                   │
+ │  - 后台任务保证 (iOS BGContinuedProcessingTask / Android 前台服务) │
+ └─────────────────────────────────────────────────────────────────┘
+```
 
-### 4. 存储与办公文档工具链（纯 TS + 原生硬件能力）
+1. **独立沙箱文件工作区**：
+   - 手机具有完全属于自己的本地目录。拍照存入的单据、通过系统分享菜单导入的文件、或者让 Agent 整理生成的报告，全部在本地存储与处理。
+2. **真正的离线独立执行**：
+   - 只要有移动网络调用 DeepSeek API，整个 Agent 思考、工具循环、文件读写都在手机本机完成，即便电脑处于关机或离线状态，手机宿主一切正常运行。
+3. **后台任务连续性**：
+   - **iOS**：利用 iOS 的 `BGContinuedProcessingTask`（专门针对用户在前台主动发起的长时处理任务），在切至后台时维持执行，并在任务终结或触发审批时唤起本地通知；
+   - **Android**：继续沿用现有的轻量级前台服务（`ForegroundService`）保活机制。
+4. **App Store 审核 100% 合规**：
+   - 全套引擎运行在 Hermes JavaScript 虚拟机中，Shell 与办公解析全部基于 JS/Wasm 解释执行，完全符合 App Store 审核准则 2.5.2。
 
-彻底告别为了转换一个文档去拉起 `pandoc` 子进程：
+---
 
-| 能力领域 | 推荐库 / 原生接口 | 双端表现与优势 |
+## 四、DeepSeek 官方账号多端全互联机制
+
+### 1. 统一官方登录与凭据体系
+- **登录方式**：手机端与电脑端均走 **DeepSeek 官方 OAuth 授权**（`account/startSignIn`），系统浏览器打开官方页面授权后直接回调完成绑定。
+- **模型切换一致性**：双端同享官方导出的模型列表（`deepseek-chat`、`deepseek-reasoner`、思考档位）；如需配置第三方渠道，协议字段和结构完全同构。
+
+### 2. 跨网络自动互联与穿透
+手机无论处于移动蜂窝网络（5G）还是外部网络，只要与电脑登录了**同一个 DeepSeek 账号**，两端通过端到端加密的 P2P 穿透通道（基于 WebRTC / 安全 Relay 机制）自动建立安全互联：
+
+- **零配置穿透**：无需用户折腾公网 IP、动态域名或端口映射。
+- **设备身份与多宿主挂载**：App 的连接池 `EngineClientPool` 自动发现并挂载所有已登录设备。
+
+### 3. 会话抽屉同屏聚合与操作路由
+手机左侧抽屉打破单一设备视角，以多宿主形态统一聚合：
+
+```
+ ┌──────────────────────────────────────────────┐
+ │ 📁 会话列表                                  │
+ │                                              │
+ │ ▼ 📱 本机 (iPhone / Android)                │
+ │   ├─ 📄 发票与票据归集 (2 分钟前)            │
+ │   └─ 📝 会议纪要整理                         │
+ │                                              │
+ │ ▼ 💻 电脑 (MacBook Pro / Office PC)   [在线] │
+ │   ├─ ⚙️ dsh-palm 核心重构 (运行中...)        │
+ │   ├─ 🧪 单元测试回归                         │
+ │   └─ ＋ 在电脑工作区创建新会话...            │
+ └──────────────────────────────────────────────┘
+```
+
+- **无缝续跑电脑会话**：
+  - 点击电脑会话，手机界面拉取电脑端的实时投影；
+  - 手机在输入框发一条新消息，底层自动映射为发送给电脑宿主的 `mode: 'steer'` 或 `mode: 'queue'` 指令，电脑端引擎立刻接手继续执行。
+- **随时发起电脑重任务**：
+  - 在手机上点击「在电脑工作区创建新会话」，选择电脑上的物理路径（如 `D:\project`），即可让电脑的大算力和本地开发工具链开始干活。
+- **双向数据与文件引用**：
+  - 电脑向手机派发指令（例：要求拍一张发票）；
+  - 会话中通过 `dsh://<hostId>/<path>` 引用协议按需安全拉取对方设备上的文件，坚决**不同步整个工作区数据库**，保证单 writer 数据安全。
+
+---
+
+## 五、插件热插拔与浏览器插件兼容体系
+
+### 1. Cordis 插件热插拔规范
+- **插件粒度**：手机端插件为遵循 Cordis 规范的纯 TypeScript 模块。
+- **运行时动态管理**：
+  ```ts
+  // 插件热加载示例
+  await app.plugin(DocumentAssistantPlugin, { maxFileSizeMB: 50 });
+  // 插件热卸载示例
+  await app.dispose(DocumentAssistantPlugin);
+  ```
+- 开启/关闭插件只在内存服务总线中注册/注销，**零进程重启开销**，随时即开即用。
+
+### 2. 浏览器插件对接方案
+对于原版 DSH 浏览器插件（如 `dsh-browser`），提供两种无缝对接模式：
+
+| 运行场景 | 通信链路 | 运作机制 |
 |---|---|---|
-| **会话与检索存储** | `expo-sqlite` 或 `@op-engineering/op-sqlite` | 开启 SQLite `FTS5` 全文索引，毫秒级搜遍历史对话正文、支持单条会话秒删与文件夹归档 |
-| **Excel / CSV 表格** | `xlsx`（SheetJS） / `exceljs` | 纯 TS 解析与生成多 Sheet、公式、样式表格，耗时 < 20ms |
-| **Word 文档（`.docx`）** | `mammoth`（读取提取） + `docx`（排版生成） | 纯 TS 读写 Word 文档，无需 Python / LibreOffice / Pandoc |
-| **PDF 解析与批注** | `pdf-lib` + `pdfjs-dist` + 系统 `PDFKit` / `PdfRenderer` | 本地提取文本、拆分合并页面、渲染缩略图 |
-| **离线拍照 OCR** | iOS `Vision` 框架 / Android `ML Kit Text Recognition` | 零流量、端侧 NPU 硬件加速，发票/板书/说明书秒级提取文字 |
+| **电脑连同场景**<br>（手机指挥电脑浏览器） | `手机 ──P2P──▶ 电脑宿主 ──WS──▶ 电脑浏览器插件` | **零代码改动**。手机向电脑的会话发送操作网页指令，电脑端的原版插件自动唤起并执行。 |
+| **手机独立场景**<br>（手机自身访问并操作网页） | `PalmCore ──DOM RPC──▶ 手机内置隐藏 WebView` | 手机内置轻量 WebView，注入与浏览器插件相同的 Content Script，将页面 DOM 树结构暴露给 Agent，实现原版 `browser_click`、`browser_read` 工具逻辑的完整复刻。 |
 
 ---
 
-## 四、对现有架构决策（`00-decisions.md`）的影响评估
+## 六、演进阶段与实施路线图
 
-如果采纳本方案，原决策台账中绝大多数原则不仅得以保留，反而能真正落地：
+```
+ 阶段 1：纯 TS 最小内核 (PalmCore MVP)
+  ├─ 建立 InMemoryTransport，打通 EngineClient 与进程内引擎
+  ├─ 实现 Cordis 容器挂载与基础 Agent 状态机 (DeepSeek 官方 API 驱动)
+  └─ 达成 Android & iOS 双端 < 50ms 闪电秒开
 
-- **真正兑现的决策**：
-  - `D01`（手机是完整宿主，不是遥控器）—— **首次在 iOS 和 Android 双端同时兑现**；
-  - `D09` / `D10`（会话级能力契约，在工具注册层裁剪）—— 摆脱上游限制，**原生直接生效**；
-  - `D11` / `D12`（聚焦 L1 声明式锦囊与 L2 技能包）—— 纯配置 + 工具表裁剪天然契合内嵌引擎。
-- **被升级替换的阶段性妥协**：
-  - 废止 `D17`（*“iOS 只做遥控器”*）→ 升级为 **iOS 与 Android 对等独立宿主**；
-  - 升级 `D24` / `D27`（*“精简 rootfs + 忍受 13s 冷启动靠常驻掩盖”*）→ 升级为 **< 0.1s 字节码直启，无需后台高耗电常驻保活**（空闲即休眠，打开即就绪，只有正在跑任务时才申请后台短时保活 / Live Activity）。
-- **唯一的边界与兜底**：
-  - 手机本机不再直接运行桌面端 `dsh` 的 L3 任意 npm 插件或 `apt install` 原生 Linux 编译链（如本地跑 `gcc` / `docker` / `ffmpeg` 重编码）；
-  - 这类重度桌面开发需求，通过已有的 **WebSocket 远程连接电脑 `dsh-palm-bridge`**（或可选挂载 E2B / Daytona 云端微沙箱）无缝承接，完全符合「手机独立干活，重活随时叫电脑兄弟」的产品定位。
+ 阶段 2：虚拟 Shell 与本地办公工作区
+  ├─ 接入 just-bash 虚拟 Shell，打通本地文件系统的常用 Unix 工具
+  ├─ 接入纯 JS 表格 (SheetJS) / Word / PDF 工具链
+  └─ 落地 iOS Documents/ 与 Android files/ 独立沙箱工作区
 
----
+ 阶段 3：官方登录与跨网多宿主互联
+  ├─ 双端集成 DeepSeek 官方 OAuth 授权与统一模型切换
+  ├─ 实现多宿主连接池与 P2P 跨网络安全穿透
+  └─ 抽屉同屏挂载双端会话、实现手机续跑电脑会话与跨端任务派发
 
-## 五、平滑演进路径（不推倒重来，分三步走）
-
-因为前端 UI 与引擎之间隔着清晰的 [`EngineClient`](../app/src/lib/client.ts) 与协议层，迁移可以按增量分支推进，随时可回退：
-
-1. **阶段 A：增加进程内传输层（`InMemoryTransport`）**
-   - 让 `EngineClient` 支持不经过 WebSocket 端口、直接与内存中的引擎实例收发协议消息；保留 `ws://` 给远程连接电脑宿主使用。
-2. **阶段 B：实现 `PalmCore` 纯 TS 最小完备核心（跑通双端秒开）**
-   - 基于现有 [`engine/src/server.ts`](../engine/src/server.ts) 骨架，接入真实 LLM 流式驱动（DeepSeek 账号与自定义渠道）、SQLite 会话持久化、审批/提问挂起状态机，以及基础文件读写与联网工具。
-   - **里程碑**：此时 Android 与 iOS 即可同时达成 **< 0.1 秒冷启动** 与日常对话/文件/联网能力。
-3. **阶段 C：接入 `just-bash` 虚拟 Shell、纯 TS 办公套件与隐藏 WebView Python 沙箱**
-   - 补齐内置五大锦囊（文档助手、票据管家、读图问答、生图、会议纪要）所需的全部本地工具链；
-   - 验证稳定后，将 Android 端的 `proot + rootfs.bin` 从主包剥离（移除 150MB 载荷），完成轻量化收敛。
+ 阶段 4：Cordis 插件市场与浏览器交互适配
+  ├─ 落地移动端插件动态启停面板
+  └─ 落地移动端内嵌 WebView 浏览器工具，平滑承接网页浏览操作
+```
 
 ---
 
-## 六、检索关键词速查表（供进一步调研使用）
+## 七、架构结论
 
-- **纯 TS 跨模型与 Agent 底座**：`@mariozechner/pi-ai`、`badlogic/pi-mono`、`Vercel AI SDK streamText`
-- **纯 TS 虚拟 Bash 环境**：`vercel-labs/just-bash`、`justbash.dev`
-- **移动端无 JIT 安全脚本引擎**：`quickjs-emscripten`、`react-native-quickjs`
-- **WebAssembly Python 沙箱**：`pyodide`、`WKWebView WebAssembly Pyodide iOS`
-- **iOS 终端合规先例参考**：`holzschuch/a-shell`（参考其如何用 WASI 在 App Store 合规提供命令行工具）
-- **RN 高性能 SQLite（含 FTS5）**：`expo-sqlite`、`op-engineering/op-sqlite`
-- **纯 JS Git 与文档处理**：`isomorphic-git`、`SheetJS`、`exceljs`、`mammoth.js`、`docx`、`pdf-lib`
-
+通过切换至**纯 TypeScript 内嵌引擎（PalmCore + just-bash + Cordis）**：
+1. **彻底摆脱了 proot 10 秒以上的冷启动延迟**，启动直接降至 **50 毫秒以内**；
+2. **彻底打破了 iOS 只能当远程遥控器的物理壁垒**，让 iOS 获得与 Android 100% 对等的本地宿主工作能力；
+3. **通过 DeepSeek 官方账号的跨网互联**，将手机的随身灵活性与电脑的桌面算力完美结合。这才是「装进口袋的智能体，有事交给锦囊」的最优技术终态。
