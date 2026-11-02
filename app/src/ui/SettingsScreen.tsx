@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { store, useStore } from './useStore';
 import { Btn, IconButton, Pill } from './parts';
@@ -13,8 +13,20 @@ import {
   setHostSafeModeNext,
 } from '../lib/host';
 import { ProvidersCard } from './ProvidersCard';
+import { JustBashProbe } from './JustBashProbe';
+import { WebSurface } from './WebSurface';
 
 const REF = 'DEEPSEEK_API_KEY';
+
+/** 从宿主日志里捞本机引擎的 token（`dsh web: http://127.0.0.1:8787/?token=…`） */
+async function resolveEngineToken(): Promise<string | null> {
+  const lines = await hostLogs();
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const match = /dsh web: http:\/\/127\.0\.0\.1:8787\/\?token=([A-Za-z0-9_-]+)/.exec(lines[i] ?? '');
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
 
 /** 登录尝试的阶段 → 一句人能看懂的话 */
 function attemptText(phase: string | undefined, errorCode: string | undefined): string | null {
@@ -51,6 +63,10 @@ export function SettingsScreen(): React.ReactElement {
   const [showKey, setShowKey] = React.useState(false);
   /** null = 问不到（非 Android / 老系统） */
   const [batteryOk, setBatteryOk] = React.useState<boolean | null>(null);
+  /** 实验室：L0（WebView 官方前端）/ L1（just-bash 前置）两个 spike */
+  const [lab, setLab] = React.useState<'none' | 'web' | 'bash'>('none');
+  const [webUrl, setWebUrl] = React.useState<string | null>(null);
+  const [labNote, setLabNote] = React.useState<string | null>(null);
   const status = state.credentials[REF];
   const configured = status?.configured === true;
   const preset = state.caps?.presets.find((p) => p.id === state.draftPresetId) ?? state.caps?.presets[0];
@@ -107,6 +123,32 @@ export function SettingsScreen(): React.ReactElement {
       setTimeout(() => setSaved(false), 2000);
     }
   };
+
+  const openWebSurface = async (): Promise<void> => {
+    setLabNote(null);
+    const token = await resolveEngineToken();
+    if (!token) {
+      setLabNote('还没抓到引擎 token：等「本机引擎」变成运行中再试。');
+      return;
+    }
+    setWebUrl(`http://127.0.0.1:8787/?token=${token}`);
+    setLab('web');
+  };
+
+  if (lab === 'bash') {
+    return <JustBashProbe onClose={() => setLab('none')} />;
+  }
+  if (lab === 'web' && webUrl) {
+    return (
+      <WebSurface
+        url={webUrl}
+        onClose={() => {
+          setLab('none');
+          setWebUrl(null);
+        }}
+      />
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -379,6 +421,22 @@ export function SettingsScreen(): React.ReactElement {
             ) : (
               <Text style={styles.hint}>当前是 Expo Go / web，起不了本机引擎；需要装原生构建的 APK。</Text>
             )}
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>实验室 · M1 spike</Text>
+            <Text style={styles.hint}>
+              验证两条兼容路径：L0 = 官方 web 界面（WebView，全部 web 插件原样），L1 = just-bash 在 Hermes 上的实测性能。
+            </Text>
+            {Platform.OS === 'web' ? (
+              <Text style={styles.hint}>web 上不跑 WebView / just-bash，请在 Android 真机试。</Text>
+            ) : (
+              <View style={styles.actions}>
+                <Btn label="打开完整界面" onPress={() => void openWebSurface()} style={{ flex: 1 }} />
+                <Btn label="just-bash 自检" kind="ghost" onPress={() => setLab('bash')} style={{ flex: 1 }} />
+              </View>
+            )}
+            {labNote ? <Text style={styles.hint}>{labNote}</Text> : null}
           </View>
 
           <View style={styles.card}>

@@ -56,6 +56,8 @@
 | [docs/20-open-work.md](docs/20-open-work.md) | **非 UI 的欠账**：P0/P1/P2 + 工程债 | 排期时 |
 | [docs/21-git-workflow.md](docs/21-git-workflow.md) | 分支/提交规范：从 develop 开，一次一个分支 | 每次动代码前 |
 | [docs/23-requirements.md](docs/23-requirements.md) | **v1 需求冻结 + 运行时分工 + 插件兼容体系** | 动手前必读 |
+| [docs/24-plugin-compat-matrix.md](docs/24-plugin-compat-matrix.md) | dsh 305 个包的手机兼容矩阵（L0–L4） | 判断插件能不能跑 |
+| [docs/25-m1-spike-results.md](docs/25-m1-spike-results.md) | **M1 spike 实测**：just-bash 在 Hermes、WebView 官方前端 | 接轻引擎前 |
 
 ## 跑起来
 
