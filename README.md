@@ -64,7 +64,8 @@
 | [docs/23-requirements.md](docs/23-requirements.md) | **v1 需求冻结 + 运行时分工 + 插件兼容体系** | 动手前必读 |
 | [docs/24-plugin-compat-matrix.md](docs/24-plugin-compat-matrix.md) | dsh 305 个包的手机兼容矩阵（L0–L4） | 判断插件能不能跑 |
 | [docs/25-m1-spike-results.md](docs/25-m1-spike-results.md) | **M1 spike 实测**：just-bash 在 Hermes、WebView 官方前端 | 接轻引擎前 |
-| [docs/26-light-engine.md](docs/26-light-engine.md) | **轻引擎 MVP + IFileSystem 适配**：真实工作区、shell、agent loop | 动轻引擎 / 工作区适配时 |
+| [docs/26-light-engine.md](docs/26-light-engine.md) | **轻引擎 MVP + IFileSystem 适配**：真实工作区、shell、文档、生图 | 动轻引擎 / 工作区适配时 |
+| [docs/27-remaining-work.md](docs/27-remaining-work.md) | **剩余工作清单**：M1 收尾 → M2/M3/M4、决策与工程债 | 排下一轮时 |
 
 ## 跑起来
 
