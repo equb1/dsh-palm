@@ -24,6 +24,14 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const userInteracting = React.useRef(false);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
+  // 最后一个助手回合没有 host duration 时，用 updatedAt-createdAt 兜底个大概
+  let lastAssistantIndex = -1;
+  for (let i = session.turns.length - 1; i >= 0; i--) {
+    if (session.turns[i]?.role === 'assistant') {
+      lastAssistantIndex = i;
+      break;
+    }
+  }
 
   // 从分享菜单带进来的图片：进到会话里就传上去
   React.useEffect(() => {
@@ -131,12 +139,17 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
                 <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
               </View>
             ) : (
-              session.turns.map((t) => (
+              session.turns.map((t, index) => (
                 <TurnView
                   key={t.id}
                   turn={t}
                   approvals={state.approvals}
                   onToggleThinking={handleToggleThinking}
+                  fallbackDurationMs={
+                    index === lastAssistantIndex && t.status !== 'streaming' && session.updatedAt > t.createdAt
+                      ? session.updatedAt - t.createdAt
+                      : undefined
+                  }
                 />
               ))
             )}

@@ -616,7 +616,10 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
           if (finalReason === 'error' && errMsg && liveTurn.blocks.length === 0) {
             liveTurn.blocks.push({ kind: 'text', id: liveRunId + '-err', text: `错误：${errMsg}` });
           }
-          liveTurn.meta = { steps: liveTurn.blocks.length };
+          liveTurn.meta = {
+            steps: liveTurn.blocks.length,
+            durationMs: Math.max(1, Date.now() - liveTurn.createdAt),
+          };
           for (let i = liveTurn.blocks.length - 1; i >= 0; i -= 1) {
             const b = liveTurn.blocks[i];
             if (b && b.kind === 'text' && b.text.trim()) {

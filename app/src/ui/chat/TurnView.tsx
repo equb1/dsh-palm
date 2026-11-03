@@ -22,7 +22,6 @@ function ThinkingRow({
   const shown = text.length > MAX_OPEN ? text.slice(-MAX_OPEN) : text;
   const truncated = text.length > MAX_OPEN;
   const preview = text.trim().split('\n')[0]?.replace(/\*\*/g, '').slice(0, 120) ?? '';
-  const ticker = text.slice(-800);
 
   // dsh-go 的做法：一轮结束就把展开的全文收回去，过程收进一行摘要。
   React.useEffect(() => {
@@ -58,19 +57,7 @@ function ThinkingRow({
   );
 
   if (!open) {
-    return (
-      <View>
-        {header}
-        {/* 流式中固定三行实时窗：不滚、不撑高列表，只跟最新写出来的字 */}
-        {live ? (
-          <View style={styles.tickerWrap}>
-            <Text style={styles.tickerText} numberOfLines={3} ellipsizeMode="head">
-              {ticker}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-    );
+    return header;
   }
 
   return (
@@ -90,18 +77,36 @@ function ThinkingRow({
 }
 
 function ToolRow({ block }: { block: Extract<Block, { kind: 'tool' }> }): React.ReactElement {
+  const [open, setOpen] = React.useState(false);
+  const detail = block.detail?.slice(0, 4000);
   const color =
     block.state === 'running' ? colors.blue : block.state === 'error' ? colors.danger : colors.textFaint;
+
   return (
-    <View style={styles.row}>
-      <Text style={[styles.rowGlyph, { color }]}>▤</Text>
-      <Text style={styles.toolName}>{block.name}</Text>
-      <Text style={styles.rowText} numberOfLines={1}>
-        {block.summary}
-      </Text>
-      <Text style={[styles.rowState, { color }]}>
-        {block.state === 'running' ? '·' : block.state === 'error' ? '×' : '✓'}
-      </Text>
+    <View>
+      <Pressable
+        onPress={detail ? () => setOpen((v) => !v) : undefined}
+        accessibilityRole={detail ? 'button' : undefined}
+        accessibilityLabel={detail ? `${block.name} 详情` : undefined}
+        style={styles.row}
+      >
+        <Text style={[styles.rowGlyph, { color }]}>▤</Text>
+        <Text style={styles.toolName}>{block.name}</Text>
+        <Text style={styles.rowText} numberOfLines={1}>
+          {block.summary}
+        </Text>
+        {detail ? <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text> : null}
+        <Text style={[styles.rowState, { color }]}>
+          {block.state === 'running' ? '·' : block.state === 'error' ? '×' : '✓'}
+        </Text>
+      </Pressable>
+      {open && detail ? (
+        <View style={styles.toolDetail}>
+          <Text style={styles.toolDetailText} selectable>
+            {detail}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -157,14 +162,111 @@ function AssistantActions({ text }: { text: string }): React.ReactElement | null
   );
 }
 
-export function TurnView({
+function formatDuration(ms?: number): string {
+  if (!ms || ms <= 0) return '';
+  const total = Math.max(1, Math.round(ms / 1000));
+  if (total < 60) return `${total} 秒`;
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  if (minutes < 60) return `${minutes} 分 ${seconds} 秒`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} 小时 ${minutes % 60} 分`;
+}
+
+function processSummary(blocks: Block[]): string {
+  const tools = blocks
+    .filter((b): b is Extract<Block, { kind: 'tool' }> => b.kind === 'tool')
+    .map((b) => b.name.toLowerCase());
+  const has = (names: string[]): boolean => tools.some((t) => names.some((n) => t.includes(n)));
+  const parts: string[] = [];
+  if (has(['bash', 'exec', 'shell', 'command', 'terminal'])) parts.push('执行了命令');
+  if (has(['write', 'edit', 'patch', 'apply'])) parts.push('修改了文件');
+  if (has(['read', 'glob', 'grep', 'search', 'find', 'ls'])) parts.push('读取了文件');
+  if (has(['present', 'deliver', 'share'])) parts.push('交付了文件');
+  const thinking = blocks.filter((b) => b.kind === 'thinking').length;
+  if (parts.length === 0) {
+    if (tools.length > 0) parts.push(`运行了 ${tools.length} 个工具`);
+    else if (thinking > 0) parts.push(`思考了 ${thinking} 次`);
+  }
+  return parts.length > 0 ? parts.join('，') + '等' : '';
+}
+
+function AssistantTurn({
   turn,
   approvals,
   onToggleThinking,
+  fallbackDurationMs,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
   onToggleThinking?: () => void;
+  fallbackDurationMs?: number;
+}): React.ReactElement {
+  const [open, setOpen] = React.useState(false);
+  const completed = turn.status !== 'streaming';
+  const processBlocks = turn.blocks.filter((b) => b.kind === 'thinking' || b.kind === 'tool');
+  const answerBlocks = turn.blocks.filter((b) => b.kind === 'text');
+  const answerText = answerBlocks
+    .filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text')
+    .map((b) => b.text)
+    .join('\n');
+  const duration = formatDuration(turn.meta?.durationMs ?? fallbackDurationMs);
+  const summary = processSummary(turn.blocks);
+
+  return (
+    <View style={styles.assistant}>
+      {completed ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={open ? '收起过程' : '展开过程'}
+          onPress={() => setOpen((v) => !v)}
+          style={styles.summary}
+        >
+          <View style={styles.summaryHead}>
+            <Text style={styles.summaryCheck}>✓</Text>
+            <Text style={styles.summaryTitle}>
+              {turn.status === 'stopped' ? '已停止' : turn.status === 'error' ? '出错' : '已完成'}
+            </Text>
+            {duration ? <Text style={styles.summaryDuration}>，用时 {duration}</Text> : null}
+            <View style={{ flex: 1 }} />
+            <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+          </View>
+          {summary ? <Text style={styles.summarySub}>{summary}</Text> : null}
+        </Pressable>
+      ) : null}
+
+      {(!completed || open) &&
+        processBlocks.map((b, i) => (
+          <React.Fragment key={`${b.id}-${i}`}>
+            {renderBlock(b, approvals, onToggleThinking, false)}
+          </React.Fragment>
+        ))}
+
+      {completed
+        ? answerBlocks.map((b, i) => (
+            <React.Fragment key={`${b.id}-${i}`}>{renderBlock(b, approvals, onToggleThinking)}</React.Fragment>
+          ))
+        : turn.blocks.map((b, i) => (
+            <React.Fragment key={`${b.id}-${i}`}>
+              {renderBlock(b, approvals, onToggleThinking, true)}
+            </React.Fragment>
+          ))}
+
+      {completed ? <AssistantActions text={answerText} /> : null}
+    </View>
+  );
+}
+
+export function TurnView({
+  turn,
+  approvals,
+  onToggleThinking,
+  fallbackDurationMs,
+}: {
+  turn: Turn;
+  approvals: Record<string, Approval>;
+  onToggleThinking?: () => void;
+  fallbackDurationMs?: number;
 }): React.ReactElement {
   if (turn.role === 'user') {
     const text = turn.blocks
@@ -180,28 +282,13 @@ export function TurnView({
     );
   }
 
-  const hasDoneDuration = Boolean(turn.status === 'done' && turn.meta?.durationMs);
-  const answerText = turn.blocks
-    .filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text')
-    .map((b) => b.text)
-    .join('\n');
   return (
-    <View style={styles.assistant}>
-      {turn.blocks.map((b, i) => (
-        <React.Fragment key={`${b.id}-${i}`}>
-          {renderBlock(b, approvals, onToggleThinking, turn.status === 'streaming')}
-        </React.Fragment>
-      ))}
-      {turn.status === 'done' || turn.status === 'stopped' ? (
-        <AssistantActions text={answerText} />
-      ) : null}
-      {turn.status === 'stopped' ? <Text style={styles.turnMeta}>已停止</Text> : null}
-      {hasDoneDuration ? (
-        <Text style={styles.turnMeta}>
-          {(turn.meta!.durationMs! / 1000).toFixed(0)} 秒 · {turn.meta?.steps ?? 1} 步
-        </Text>
-      ) : null}
-    </View>
+    <AssistantTurn
+      turn={turn}
+      approvals={approvals}
+      onToggleThinking={onToggleThinking}
+      fallbackDurationMs={fallbackDurationMs}
+    />
   );
 }
 
@@ -217,7 +304,17 @@ const styles = StyleSheet.create({
   userText: { color: colors.text, fontSize: 14, lineHeight: 22 },
 
   assistant: { gap: 8 },
-  turnMeta: { color: colors.textFaint, fontSize: 10.5 },
+  summary: {
+    paddingVertical: 8,
+    gap: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  summaryHead: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  summaryCheck: { color: colors.ok, fontSize: 12, fontWeight: '700' },
+  summaryTitle: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  summaryDuration: { color: colors.textDim, fontSize: 12 },
+  summarySub: { color: colors.textFaint, fontSize: 11.5, lineHeight: 16 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingVertical: 2 },
   actionGlyph: { color: colors.textFaint, fontSize: 15 },
 
@@ -235,16 +332,6 @@ const styles = StyleSheet.create({
   },
   thinkingActive: { color: colors.blue },
   liveDot: { color: colors.blue, fontSize: 8, paddingHorizontal: 2 },
-  tickerWrap: {
-    height: 57,
-    overflow: 'hidden',
-    marginLeft: 18,
-    paddingLeft: 12,
-    paddingTop: 2,
-    borderLeftWidth: 2,
-    borderLeftColor: colors.border,
-  },
-  tickerText: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
   thinkingBodyWrap: {
     marginLeft: 18,
     paddingLeft: 12,
@@ -254,4 +341,15 @@ const styles = StyleSheet.create({
   },
   thinkingBody: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
   thinkingMore: { color: colors.textFaint, fontSize: 11, lineHeight: 16, paddingTop: 6 },
+  toolDetail: {
+    marginLeft: 18,
+    marginTop: 2,
+    marginBottom: 4,
+    padding: 8,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.bgElevated,
+  },
+  toolDetailText: { color: colors.textDim, fontFamily: font.mono, fontSize: 11.5, lineHeight: 17 },
 });

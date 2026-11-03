@@ -173,6 +173,8 @@ export class Store {
   /** 流式增量先攒 50ms 再合并，避免每个 token 复制整棵字符串树 */
   private pendingDelta = new Map<string, string>();
   private deltaTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 客户端兜底计时：宿主没带 durationMs 时，run.started 到 run.finished 的耗时 */
+  private runStartedAt: number | null = null;
 
   private state: AppState = {
     version: 0,
@@ -1294,6 +1296,7 @@ export class Store {
 
       case 'run.started': {
         // 回合开始：界面要变成"生成中"，发送键变成停止键
+        this.runStartedAt = Date.now();
         const d = this.state.detail;
         if (d && data.sessionId === currentId) this.patch({ detail: { ...d, status: 'running' }, busy: true });
         return;
@@ -1308,10 +1311,31 @@ export class Store {
         for (const [id, a] of Object.entries(approvals)) {
           if (!runId || a.runId === runId) delete approvals[id];
         }
+        const durationMs = this.runStartedAt ? Math.max(1, Date.now() - this.runStartedAt) : null;
+        this.runStartedAt = null;
+        let nextDetail = d;
+        if (d && data.sessionId === currentId) {
+          let turns = d.turns;
+          if (durationMs !== null) {
+            for (let i = turns.length - 1; i >= 0; i--) {
+              const t = turns[i]!;
+              if (t.role !== 'assistant') continue;
+              if (!t.meta?.durationMs) {
+                turns = turns.slice();
+                turns[i] = {
+                  ...t,
+                  meta: { ...t.meta, durationMs, steps: t.meta?.steps ?? t.blocks.length },
+                };
+              }
+              break;
+            }
+          }
+          nextDetail = { ...d, turns, status: 'idle' };
+        }
         this.patch({
           approvals,
           busy: false,
-          ...(d && data.sessionId === currentId ? { detail: { ...d, status: 'idle' as const } } : {}),
+          ...(nextDetail ? { detail: nextDetail } : {}),
         });
         return;
       }
