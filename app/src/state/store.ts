@@ -1035,8 +1035,11 @@ export class Store {
     if (!this.client) return;
     try {
       const { models, default: fallback } = await this.client.request('models.list', {});
-      // 已经选过模型就不要被这次刷新覆盖；首页刚切完 Max 再刷新会回退成宿主默认
-      this.patch({ models, ...(this.state.defaultModel ? {} : { defaultModel: fallback }) });
+      // 缓存里可能是旧宿主的模型 id（例如 flash）；不在列表里就回退到宿主默认
+      const current = this.state.defaultModel;
+      const valid =
+        current && models.some((m) => m.provider === current.provider && m.id === current.model);
+      this.patch({ models, ...(valid ? {} : { defaultModel: fallback }) });
     } catch {
       /* 宿主没实现就当没有模型可选 */
     }
