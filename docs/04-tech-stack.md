@@ -80,7 +80,7 @@ dsh-palm/
 │   │   └── ui/              # 首页/聊天/抽屉/设置/输入区…
 │   └── android/             # Expo prebuild 产物 + 原生宿主（host/*.kt）
 ├── engine/                  # mock 引擎 + 真 dsh 桥（engine/src/real/）
-├── test/                    # e2e / 审批卡 / 单元测试（22 条）
+├── test/                    # e2e / 审批卡 / 单元测试
 ├── scripts/                 # 探针、建桥、安卓构建准备
 ├── runtime/                 # rootfs 分层与 profile
 └── docs/

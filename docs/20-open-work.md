@@ -24,8 +24,8 @@
 
 | # | 债 | 状态 |
 |---|---|---|
-| 16 | 没有 CI | ✅ `.github/workflows/ci.yml`（装依赖 + app typecheck + 22 条测试） |
-| 17 | `approval-card` 没进 npm test | ✅ `npm test` 跑 `test/*.test.ts`，22/22 通过 |
+| 16 | 没有 CI | ✅ `.github/workflows/ci.yml`（装依赖 + app typecheck + `npm run verify`，数量以输出为准） |
+| 17 | `approval-card` 没进 npm test | ✅ `npm test` 跑 `test/*.test.ts`，全部通过 |
 | 18 | docs/04、06、13 过时 | ✅ 已按现状改写 |
 | 19 | 两套锁文件 | ✅ 删掉未跟踪的 pnpm 锁/工作区文件，统一 npm |
 | 20 | 没有单元测试 | ✅ `test/unit.test.ts`（协议判别、事件投影、标题） |

@@ -151,7 +151,7 @@ files/runtime     →  rootfs + node + dsh 本体（换 VERSION 重解压的就�
 ## 5. 验证
 
 ```bash
-npm run verify     # tsc --noEmit + 13 条端到端测试，实测 13/13
+npm run verify     # tsc --noEmit + 全部测试（数量以命令输出为准）
 ```
 
 （第 12 条是账号：读状态 → 登录 → 退出，验证 `account.*` 的协议形状和事件。）

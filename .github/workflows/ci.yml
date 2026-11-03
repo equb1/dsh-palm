@@ -18,5 +18,5 @@ jobs:
         run: npm --prefix app install
       - name: App 类型检查
         run: npm --prefix app run typecheck
-      - name: 协议层验证（typecheck + 22 条测试）
+      - name: 协议层验证（typecheck + 测试）
         run: npm run verify

@@ -30,8 +30,8 @@
 | 能力 | 运行时 | 具体实现 | 备注 |
 |---|---|---|---|
 | 问答 / 写作 / 推理 / 多轮会话 | 轻 TS 引擎 | Hermes + Cordis + 自带 agent loop | 流式/思考/审批/提问 |
-| 文档生成与解析（docx/xlsx/pdf） | 轻 TS | docx、SheetJS、pdf-lib、pdf.js | 覆盖率主路径 |
-| 文档格式转换与渲染（office→pdf/png） | 完整引擎 / 电脑端 | Android：proot 里的真 LibreOffice；双端：电脑端 LibreOfficeKit 服务；可选 WKWebView + ZetaOffice（仅小文档） | Hermes 无 WASM（实测 RN 0.88 的 `libhermesvm.so` 里没有 `WebAssembly` 符号）；LO wasm 要 pthreads + GB 级堆，手机必 OOM（见 R1） |
+| 文档生成与解析（docx/xlsx；PDF 暂缓） | 轻 TS | docx、SheetJS（PDF 的 pdf-lib/pdf.js 暂缓） | 覆盖率主路径 |
+| 文档格式转换与渲染（office→pdf/png） | 完整引擎 / 电脑端 | Android：proot 里的真 LibreOffice；双端：电脑端 LibreOfficeKit 服务；可选 WKWebView + ZetaOffice（仅小文档） | **v1 暂缓（见 28 C8）**；Hermes 无 WASM（实测 RN 0.88 的 `libhermesvm.so` 里没有 `WebAssembly` 符号）；LO wasm 要 pthreads + GB 级堆，手机必 OOM（见 R1） |
 | 生成图像 | 轻 TS | 调图像模型 API + 落盘 | 官方账号只有文本模型，需另配 provider |
 | 图像理解 / OCR | 原生 | ML Kit / Vision | |
 | 录音 / 转写 | 原生 | sherpa-onnx（DSH 已有 sensevoice 包） | |
@@ -170,6 +170,7 @@ relay 只见密文；文件永不离家。
 - Hermes 没有 WebAssembly：RN 0.84 起官方在把 WASM 带进 Hermes，但本项目 RN 0.88.1 的 `libhermesvm.so` 里搜不到 `WebAssembly` 符号；RN 的 WASM 方案只有 JSI 解释器（wasm3，单内存）和构建期 AOT（polygen，不支持 threads/exceptions）两类。
 - LibreOffice 的真正阻塞是运行时契约：Emscripten pthreads 需要 SharedArrayBuffer/COOP-COEP；`libreoffice-kit-wasm 0.2.3` 48MB tgz / 152MB 解包，同类浏览器版首下 ~240MB、GB 级堆 → 手机必 OOM。
 - 结论：office→pdf 放 **proot（Android）** 或 **电脑端 LibreOfficeKit（双端）**；iOS 只能电脑端或商业原生 SDK。
+  **v1 暂缓，见 [28](28-engine-routing.md) C8。**
 
 **R4 · 内嵌 Node —— 不可行。**
 - `nodejs-mobile-react-native` 最新 18.20.4（2024-10 发布），没有 22.x 分支；DSH 启动即用 Node 22.15+ API（`node:zlib` 的 zstd、`node:sqlite`），Node 18 直接 SyntaxError。
