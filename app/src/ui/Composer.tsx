@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { AttachmentKind } from '../lib/pickImage';
 import type { Preset } from '../protocol';
@@ -73,6 +73,8 @@ export function Composer({
   const canSend = (hasText || hasAttachments) && !anyUploading && (!running || canSteer);
   const [contentHeight, setContentHeight] = React.useState(32);
   const [attachMenuOpen, setAttachMenuOpen] = React.useState(false);
+  const [presetMenuOpen, setPresetMenuOpen] = React.useState(false);
+  const activePreset = presets.find((p) => p.id === activePresetId) ?? presets[0];
 
   // 当内容被清空（发送后），高度自动重置为单行初始高度 32（与左右 32x32 按钮严格等高）
   React.useEffect(() => {
@@ -192,34 +194,57 @@ export function Composer({
           </Pressable>
         </View>
 
-        {showPresets ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipRow}
-            keyboardShouldPersistTaps="handled"
-          >
-            {presets.map((p) => {
-              const active = p.id === activePresetId;
-              return (
-                <Pressable
-                  key={p.id}
-                  onPress={() => onPickPreset(p.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={p.name}
-                  style={({ pressed }) => [
-                    styles.chip,
-                    active && styles.chipActive,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {p.glyph} {p.name}
-                  </Text>
+        {showPresets && presets.length > 0 ? (
+          <>
+            <View style={styles.toolbar}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`当前锦囊：${activePreset?.name ?? '标准'}`}
+                onPress={() => setPresetMenuOpen(true)}
+                style={({ pressed }) => [styles.presetBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.presetGlyph}>{activePreset?.glyph ?? '·'}</Text>
+                <Text style={styles.presetName}>{activePreset?.name ?? '标准'}</Text>
+                <Text style={styles.presetChevron}>▾</Text>
+              </Pressable>
+            </View>
+
+            <Modal
+              visible={presetMenuOpen}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setPresetMenuOpen(false)}
+            >
+              <Pressable style={styles.sheetBackdrop} onPress={() => setPresetMenuOpen(false)}>
+                <Pressable style={styles.sheet} onPress={() => undefined}>
+                  <Text style={styles.sheetTitle}>选择锦囊</Text>
+                  {presets.map((p) => {
+                    const active = p.id === activePresetId;
+                    return (
+                      <Pressable
+                        key={p.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={p.name}
+                        onPress={() => {
+                          onPickPreset(p.id);
+                          setPresetMenuOpen(false);
+                        }}
+                        style={({ pressed }) => [
+                          styles.sheetItem,
+                          active && styles.sheetItemActive,
+                          pressed && { opacity: 0.75 },
+                        ]}
+                      >
+                        <Text style={styles.sheetGlyph}>{p.glyph}</Text>
+                        <Text style={[styles.sheetName, active && styles.sheetNameActive]}>{p.name}</Text>
+                        {active ? <Text style={styles.sheetCheck}>✓</Text> : null}
+                      </Pressable>
+                    );
+                  })}
                 </Pressable>
-              );
-            })}
-          </ScrollView>
+              </Pressable>
+            </Modal>
+          </>
         ) : null}
       </View>
     </View>
@@ -357,16 +382,41 @@ const styles = StyleSheet.create({
   attachBadgeText: { color: colors.blue, fontSize: 10, fontWeight: '700', includeFontPadding: false },
   attachChipText: { color: colors.textDim, fontSize: 12, flexShrink: 1 },
   attachChipClose: { color: colors.textFaint, fontSize: 14, paddingLeft: 2 },
-  chipRow: { gap: 6, paddingRight: space.sm },
-  chip: {
+  toolbar: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  presetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    height: 28,
     paddingHorizontal: 10,
-    height: 26,
     borderRadius: radius.pill,
     backgroundColor: colors.glassStrong,
   },
-  chipActive: { backgroundColor: colors.blueSoft },
-  chipText: { color: colors.textDim, fontSize: 12 },
-  chipTextActive: { color: colors.blue, fontWeight: '600' },
+  presetGlyph: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
+  presetName: { color: colors.text, fontSize: 12, fontWeight: '500' },
+  presetChevron: { color: colors.textFaint, fontSize: 10 },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(15,17,21,0.28)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    paddingBottom: space.xl,
+    gap: 4,
+  },
+  sheetTitle: { color: colors.textFaint, fontSize: 12, lineHeight: 18, marginBottom: 4 },
+  sheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: radius.sm,
+  },
+  sheetItemActive: { backgroundColor: colors.blueSoft },
+  sheetGlyph: { color: colors.textDim, fontSize: 13, width: 18 },
+  sheetName: { flex: 1, color: colors.text, fontSize: 14, lineHeight: 22 },
+  sheetNameActive: { color: colors.blue, fontWeight: '600' },
+  sheetCheck: { color: colors.blue, fontSize: 14, fontWeight: '700' },
 });
