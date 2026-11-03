@@ -254,6 +254,28 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
           })()
         : null;
     const links = (v.links ?? {}) as Record<string, unknown>;
+    const rawUser = (v.user ?? v.profile) as Record<string, unknown> | undefined;
+    const user = {
+      ...(rawUser && typeof rawUser === 'object' && typeof rawUser.phone === 'string'
+        ? { phone: rawUser.phone }
+        : {}),
+      ...(rawUser && typeof rawUser === 'object' && typeof rawUser.phoneNumber === 'string'
+        ? { phoneNumber: rawUser.phoneNumber }
+        : {}),
+      ...(rawUser && typeof rawUser === 'object' && typeof rawUser.maskedPhone === 'string'
+        ? { maskedPhone: rawUser.maskedPhone }
+        : {}),
+      ...(rawUser && typeof rawUser === 'object' && typeof rawUser.email === 'string'
+        ? { email: rawUser.email }
+        : {}),
+      ...(rawUser && typeof rawUser === 'object' && typeof rawUser.name === 'string'
+        ? { name: rawUser.name }
+        : {}),
+      ...(typeof v.phone === 'string' ? { phone: v.phone } : {}),
+      ...(typeof v.phoneNumber === 'string' ? { phoneNumber: v.phoneNumber } : {}),
+      ...(typeof v.maskedPhone === 'string' ? { maskedPhone: v.maskedPhone } : {}),
+      ...(typeof v.email === 'string' ? { email: v.email } : {}),
+    };
     return {
       status: v.status,
       attempt,
@@ -261,6 +283,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         usageUrl: typeof links.usageUrl === 'string' ? links.usageUrl : 'https://platform.deepseek.com/usage',
         topUpUrl: typeof links.topUpUrl === 'string' ? links.topUpUrl : 'https://platform.deepseek.com/top_up',
       },
+      ...(user && Object.keys(user).length > 0 ? { user } : {}),
     };
   }
 

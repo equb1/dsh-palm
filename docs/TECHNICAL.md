@@ -262,19 +262,24 @@ C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期�
 
 ### 8.1 设计 token
 
+对齐官方 DSH `packages/client/ui-theme` 的 light alias（默认；dark 是系统深色模式的另一套），取值不是近似色：
+
 | 项 | 值 |
 |---|---|
-| 背景 | `#0A0B0F`；浮层 `#101218` |
-| 玻璃 | `rgba(255,255,255,.045)` / `.075` / 按下 `.09` |
-| 描边 | `rgba(255,255,255,.075)` / 强 `.12` |
-| 文字 | `#E9EBEF` / `#9AA3B2` / `#6B7385` |
-| 交互色 | 蓝 `#6C8AF0`；品牌金 `#D8A94B` 只给标识 |
-| 状态 | 成功 `#57B37A`、警告 `#E0A94A`、危险 `#E5645C` |
-| 圆角 | 10 / 14 / 20 / 24 / 999（胶囊） |
+| 背景 | `#FFFFFF`；侧栏 `#F9FAFB`；浮层 `#F9FAFB` |
+| 卡片/气泡/输入 | `#FFFFFF`；hover `#F1F3F5`；按下 `#EBEEF2`；用户气泡 `#EDF3FE` |
+| 描边 | `rgba(0,0,0,.08)` / 强 `.12` |
+| 文字 | `#0F1115` / `#4D5258` / `#6B7076` / 说明 `#6B7076` |
+| 交互色 | deepseek 蓝 `#4176E6`；浅蓝底 `#E4EDFD`；品牌字标黑 `#0F1115` |
+| 状态 | 成功 `#22C55E`、警告 `#F59E0B`、危险 `#EC1313` |
+| 圆角 | 4 / 8 / 12 / 16 / 20 / 28 / 999（胶囊） |
 | 间距 | 4 / 8 / 12 / 16 / 20 / 28 |
-| 字体 | 系统字体；等宽 `monospace`；正文 13–14，标题 15–20 |
+| 字体 | 系统字体；等宽 `monospace`；正文 14/22、次级 13/20、说明 12/18，标题 16–24 |
+| 动效 | 100 / 200 / 300ms，`cubic-bezier(.4,0,.2,1)` |
 
-不用阴影，层次靠半透明叠加；不做模糊玻璃（RN 上代价高）。
+浅色层次靠 白 → `#F9FAFB` → `#F1F3F5` 叠，卡片用黑色 hairline 区分；
+官方 light 的次级文字偏淡，真机上按 DeepSeek App 的对比度加深一档
+（secondary `#61666B → #4D5258`，tertiary `#81858C → #6B7076`）。深色主题以后只换这一层，不动屏幕代码。
 
 ### 8.2 屏幕与组件（现状）
 
@@ -282,13 +287,14 @@ C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期�
 |---|---|
 | 启动层 `LaunchOverlay` | 品牌 + 进度，覆盖首屏，就绪后淡出 |
 | 首页 `HomeScreen` | 品牌、时段问候、预设胶囊、最近会话、单输入框 |
-| 抽屉 `SessionDrawer` | 搜索、运行中/今天/更早、行内状态、长按菜单、底部主机/设置 |
+| 抽屉 `SessionDrawer` | 工作区、搜索、运行中/今天/更早、行内状态、长按菜单、底部账号/设置 |
 | 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区 |
 | 设置 `SettingsScreen` | 账号 → API Key（折叠）→ 提供商 → 本机引擎 → 宿主/实验室 |
-| 模型 `ModelSheet` | 模型列表 + 默认项 |
+| 模型 `ModelSheet` | 按提供商分组 + 搜索 + 当前/默认标记 + 未配置禁用态 |
 | 提供商 `ProvidersCard` | 目录/自定义两个 tab、发现模型、增删 |
 
-基础组件在 `app/src/ui/parts.tsx`（`Btn` / `Pill`）与 `SmoothKeyboardAvoid.tsx`；
+基础组件在 `app/src/ui/parts.tsx`（`Btn` / `Pill`）与 `app/src/ui/components/*`
+（`Card` / `Chip` / `IconButton` / `Skeleton` / `EmptyState` / `SectionHeader`）与 `SmoothKeyboardAvoid.tsx`；
 Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向滚动）、表格、链接（http/https/mailto/dshpalm）、图片、流式光标（`streaming` 属性，待接线）。
 代码高亮在 `syntax.ts`（js/ts、py、sh、json、html；未知语言回退纯文本）。
 

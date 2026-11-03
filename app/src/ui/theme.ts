@@ -1,72 +1,98 @@
 import { Easing, Platform, StatusBar } from 'react-native';
 
 /**
- * 设计语言对齐 DSH 官方 / dsh-go：
- *  - 近黑背景 + 半透明玻璃层（靠 rgba 叠出层次，不用阴影）
- *  - 胶囊形状：头部控件、输入框、芯片全用全圆角
- *  - 蓝色是交互色，金色只留给品牌标识
+ * 设计 token 对齐官方 DSH（packages/client/ui-theme）。
+ *
+ * 官方默认是浅色（白底），电脑深色模式才会走 dark alias；这里以 light 为默认：
+ *  - 背景 #FFFFFF，侧栏 #F9FAFB，卡片/输入区 #FFFFFF + 黑色 hairline
+ *  - 文字 #0F1115 / #61666B / #81858C / 说明 #ADB2B8
+ *  - 交互 deepseek 蓝 #4176E6，浅蓝底 #E4EDFD
+ *  - 圆角 4 / 8 / 12 / 16 / 20 / 28；正文 14/22，次级 13/20，说明 12/18
+ *  - 动效 100 / 200 / 300ms，cubic-bezier(.4,0,.2,1)
  */
 
 export const colors = {
-  bg: '#0A0B0F',
-  bgElevated: '#101218',
-  /** 玻璃层：叠在 bg 上就是卡片 */
-  glass: 'rgba(255,255,255,0.045)',
-  glassStrong: 'rgba(255,255,255,0.075)',
-  glassPressed: 'rgba(255,255,255,0.09)',
-  bubble: 'rgba(255,255,255,0.08)',
-  border: 'rgba(255,255,255,0.075)',
-  borderStrong: 'rgba(255,255,255,0.12)',
+  /** 官方 --dsw-alias-bg-base（light） */
+  bg: '#FFFFFF',
+  /** 官方 --dsw-alias-bg-layer-1：浮层/设置卡 */
+  bgElevated: '#F9FAFB',
+  /** 官方 --dsw-specific-input-major：卡片、气泡、输入区 */
+  glass: '#FFFFFF',
+  /** 官方 --dsw-static-neutral-bluish-75：hover / 次级块 */
+  glassStrong: '#F1F3F5',
+  glassPressed: '#EBEEF2',
+  /** 官方 --dsw-specific-bubble（light）= deepseek-50 */
+  bubble: '#EDF3FE',
+  /** 官方 border-l1 / border-l2（light）；文字对比度按 DeepSeek App 调深一档 */
+  border: 'rgba(0,0,0,0.08)',
+  borderStrong: 'rgba(0,0,0,0.12)',
 
-  text: '#E9EBEF',
-  textDim: '#9AA3B2',
-  textFaint: '#6B7385',
+  text: '#0F1115',
+  textDim: '#4D5258',
+  textFaint: '#6B7076',
 
-  blue: '#6C8AF0',
-  blueHover: '#7C97F5',
-  blueSoft: 'rgba(108,138,240,0.16)',
-  gold: '#D8A94B',
-  goldSoft: 'rgba(216,169,75,0.14)',
+  /** deepseek-500：链接、发送、主交互 */
+  blue: '#4176E6',
+  /** deepseek-400：hover */
+  blueHover: '#7AAAFF',
+  blueSoft: '#E4EDFD',
+  /** 官方品牌字标是黑色；保留 key 兼容旧代码 */
+  gold: '#0F1115',
+  goldSoft: '#F1F3F5',
 
-  ok: '#57B37A',
-  okSoft: 'rgba(87,179,122,0.14)',
-  warn: '#E0A94A',
-  warnSoft: 'rgba(224,169,74,0.14)',
-  danger: '#E5645C',
-  dangerSoft: 'rgba(229,100,92,0.14)',
+  ok: '#22C55E',
+  okSoft: 'rgba(34,197,94,0.12)',
+  warn: '#F59E0B',
+  warnSoft: 'rgba(245,158,11,0.12)',
+  danger: '#EC1313',
+  dangerSoft: 'rgba(236,19,19,0.08)',
 } as const;
 
 export const font = {
-  mono: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'ui-monospace, SFMono-Regular, Menlo, monospace' }),
+  family: Platform.select({
+    ios: 'System',
+    android: 'sans-serif',
+    default: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+  }),
+  mono: Platform.select({
+    ios: 'Menlo',
+    android: 'monospace',
+    default: '"SF Mono", "JetBrains Mono", "Fira Code", Consolas, Menlo, monospace',
+  }),
 } as const;
 
-export const radius = { sm: 10, md: 14, lg: 20, xl: 24, pill: 999 } as const;
+/** 官方圆角阶梯：xs 4 / sm 8 / md 12 / lg 16 / xl 20 / panel 28 */
+export const radius = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, panel: 28, pill: 999 } as const;
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 } as const;
 
 /**
- * A2：字号层级（只新增，不动旧导出）。
- * 正文 13–14，标题 15–20；行高按 1.4–1.5 倍给，等宽用于代码/命令/路径。
+ * 官方字号：xl 24/32 · l 20/28 · m 16/28 · s 14/22 · xs 13/20 · xxs 12/18；
+ * 等宽按官方 code 11/16。
  */
 export const typography = {
-  hero: { fontSize: 30, lineHeight: 40, fontWeight: '700' },
-  title: { fontSize: 20, lineHeight: 28, fontWeight: '600' },
-  heading: { fontSize: 17, lineHeight: 24, fontWeight: '600' },
-  subheading: { fontSize: 15, lineHeight: 22, fontWeight: '600' },
+  hero: { fontSize: 24, lineHeight: 32, fontWeight: '600' },
+  title: { fontSize: 20, lineHeight: 28, fontWeight: '500' },
+  heading: { fontSize: 16, lineHeight: 28, fontWeight: '500' },
+  subheading: { fontSize: 14, lineHeight: 22, fontWeight: '500' },
   body: { fontSize: 14, lineHeight: 22, fontWeight: '400' },
   bodySmall: { fontSize: 13, lineHeight: 20, fontWeight: '400' },
-  caption: { fontSize: 12, lineHeight: 17, fontWeight: '400' },
-  meta: { fontSize: 11, lineHeight: 15, fontWeight: '500' },
-  micro: { fontSize: 10, lineHeight: 13, fontWeight: '500' },
-  mono: { fontSize: 12.5, lineHeight: 18, fontFamily: font.mono },
+  caption: { fontSize: 12, lineHeight: 18, fontWeight: '400' },
+  meta: { fontSize: 11, lineHeight: 16, fontWeight: '400' },
+  micro: { fontSize: 10, lineHeight: 14, fontWeight: '400' },
+  mono: { fontSize: 11, lineHeight: 16, fontFamily: font.mono },
 } as const;
 
 /**
- * A2：语义色（只新增）。
- * 组件只认语义名；U7 换浅色主题时改这里的映射，不用逐屏改颜色。
+ * 语义色：组件只认语义名；深色主题以后只换这一层。
+ * 取值来自官方 light alias。
  */
 export const semantic = {
   surface: colors.bg,
+  /** 官方侧栏 --dsw-specific-sidebar-fill（light）= bluish-50 */
+  sidebar: '#F9FAFB',
+  sidebarHover: '#F1F3F5',
+  sidebarActive: '#EBEEF2',
   surfaceRaised: colors.bgElevated,
   card: colors.glass,
   cardStrong: colors.glassStrong,
@@ -76,6 +102,7 @@ export const semantic = {
   textPrimary: colors.text,
   textSecondary: colors.textDim,
   textTertiary: colors.textFaint,
+  textCaption: '#6B7076',
   accent: colors.blue,
   accentStrong: colors.blueHover,
   accentSoft: colors.blueSoft,
@@ -87,13 +114,16 @@ export const semantic = {
   warningSoft: colors.warnSoft,
   danger: colors.danger,
   dangerSoft: colors.dangerSoft,
+  link: colors.blue,
+  codeBlock: '#F9FAFB',
+  codeInline: '#FAFAFA',
 } as const;
 
-/** A2：动效时长（ms）与曲线；组件不再写死 200 / 450 / Easing.quad。 */
+/** 官方动效：100 / 200 / 300ms，标准曲线 cubic-bezier(.4,0,.2,1) */
 export const motion = {
-  duration: { fast: 120, base: 200, slow: 320, breathing: 450 },
+  duration: { fast: 100, base: 200, slow: 300, breathing: 450 },
   easing: {
-    standard: Easing.bezier(0.2, 0, 0, 1),
+    standard: Easing.bezier(0.4, 0, 0.2, 1),
     decelerate: Easing.out(Easing.cubic),
     accelerate: Easing.in(Easing.cubic),
     emphasis: Easing.inOut(Easing.quad),

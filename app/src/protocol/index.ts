@@ -186,10 +186,21 @@ export interface AccountAttempt {
   errorCode?: 'expired' | 'no-response' | 'network' | 'protocol' | 'storage';
 }
 
+export interface AccountUser {
+  phone?: string;
+  phoneNumber?: string;
+  /** 宿主如果已经脱敏，直接透传 */
+  maskedPhone?: string;
+  email?: string;
+  name?: string;
+}
+
 export interface AccountState {
   status: 'signed-out' | 'credential-stored';
   attempt: AccountAttempt | null;
   links: { usageUrl: string; topUpUrl: string };
+  /** 账号资料；官方宿主登录后会带手机号，轻引擎没有 */
+  user?: AccountUser;
 }
 
 export interface SessionDetail extends SessionSummary {

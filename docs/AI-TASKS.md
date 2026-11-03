@@ -12,6 +12,8 @@
 - 账号：官方 OAuth 真机可用；提供商目录（43）+ 自定义渠道可用。
 - 已完成的重活：工作区/设备密钥/`.dsh` 外置；通知、冷启动分享、`dshpalm://` 深链；
   会话改名/置顶/归档；日志导出；错误人话化；图片压缩；桥走 APK 补丁。
+- UI token 已对齐官方 DSH 默认浅色（2026-11-04）：`#FFFFFF` 基底、`#F9FAFB` 侧栏、
+  deepseek 蓝 `#4176E6`、8/12/16/20/28 圆角；深色 alias 后续按系统开关接。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
 
@@ -108,8 +110,8 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 
 | ID | 分支 | 任务 | 文件 | 留槽要求 |
 |---|---|---|---|---|
-| B1 | `ui/session-drawer-polish` | 行高/搜索聚焦/空状态/主机条吸底 | `ui/SessionDrawer.tsx` | 主机条右侧留空槽，不写死内容；不读新 store 字段 |
-| B2 | `ui/home-polish` | 问候、最近卡片、预设胶囊、空状态 | `ui/HomeScreen.tsx` | 顶栏右侧留槽位；不改连接/引擎逻辑 |
+| [x] B1 | `ui/session-drawer-polish` | 行高/搜索聚焦/空状态/主机条吸底 | `ui/SessionDrawer.tsx` | 主机条右侧留空槽，不写死内容；不读新 store 字段 |
+| [x] B2 | `ui/home-polish` | 问候、最近卡片、预设胶囊、空状态 | `ui/HomeScreen.tsx` | 顶栏右侧留槽位；不改连接/引擎逻辑 |
 | B3 | `ui/chat-components` | 把回合/思考/工具渲染拆到 `ui/chat/*`，ChatScreen 只组装 | 新文件 + `ChatScreen.tsx` **只改 import** | 不改 store/protocol；1.4 之后再加新 block 类型 |
 
 **C. 现在不要做**

@@ -17,7 +17,7 @@ import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { MarkdownView } from './MarkdownView';
 import { ModelSheet } from './ModelSheet';
 import { pickAttachments } from '../lib/pickImage';
-import { colors, font, radius, riskTone, space, topInset } from './theme';
+import { colors, font, radius, riskTone, semantic, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
  * 行内格式：**粗体** 和 `代码`
@@ -511,11 +511,18 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     maxWidth: '84%',
   },
-  userText: { color: colors.text, fontSize: 15, lineHeight: 23 },
+  userText: { color: colors.text, fontSize: 14, lineHeight: 22 },
 
   assistant: { gap: 8 },
-  body: { color: colors.text, fontSize: 15, lineHeight: 25 },
-  inlineCode: { fontFamily: font.mono, fontSize: 13, color: colors.text, backgroundColor: colors.glassStrong },
+  body: { color: colors.text, fontSize: 14, lineHeight: 22 },
+  inlineCode: {
+    fontFamily: font.mono,
+    fontSize: 13,
+    color: colors.text,
+    backgroundColor: semantic.codeInline,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
   turnMeta: { color: colors.textFaint, fontSize: 10.5 },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
@@ -527,7 +534,7 @@ const styles = StyleSheet.create({
   chevron: { color: colors.textFaint, fontSize: 11 },
 
   thinkingOpenBox: {
-    backgroundColor: 'rgba(255,255,255,0.035)',
+    backgroundColor: colors.bgElevated,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,

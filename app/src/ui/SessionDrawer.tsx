@@ -3,8 +3,10 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 
 import type { SessionSummary } from '../protocol';
 import { store, useStore } from './useStore';
-import { Dot, IconButton } from './parts';
-import { colors, radius, space, topInset } from './theme';
+import { IconButton } from './parts';
+import { EmptyState } from './components';
+import { loadAccountPhone } from '../lib/accountPhone';
+import { colors, motion, radius, semantic, space, topInset } from './theme';
 
 const PANEL_WIDTH = 302;
 
@@ -25,6 +27,13 @@ function startOfToday(): number {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d.getTime();
+}
+
+/** 11 位手机号脱敏成 159****70；宿主已脱敏的直接透传 */
+function maskPhone(raw: string): string {
+  const digits = raw.replace(/[\s-]/g, '');
+  if (/^\d{11}$/.test(digits)) return `${digits.slice(0, 3)}****${digits.slice(-4)}`;
+  return raw;
 }
 
 function StatusTag({ s }: { s: SessionSummary }): React.ReactElement | null {
@@ -57,22 +66,41 @@ export function SessionDrawer({
   onClose: () => void;
 }): React.ReactElement | null {
   const state = useStore();
+  const account = state.account;
+  const [localPhone, setLocalPhone] = React.useState('');
+  const phone =
+    account?.user?.maskedPhone ??
+    account?.user?.phone ??
+    account?.user?.phoneNumber ??
+    localPhone;
+  const accountLabel = phone
+    ? account?.user?.maskedPhone
+      ? phone
+      : maskPhone(phone)
+    : 'DeepSeek 账号';
   const [mounted, setMounted] = React.useState(visible);
   const [q, setQ] = React.useState('');
   const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
+  const [searchFocused, setSearchFocused] = React.useState(false);
 
   React.useEffect(() => {
     if (visible) setMounted(true);
     Animated.timing(anim, {
       toValue: visible ? 1 : 0,
-      duration: 200,
-      useNativeDriver: false,
+      duration: motion.duration.base,
+      easing: motion.easing.standard,
+      useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished && !visible) setMounted(false);
     });
   }, [visible, anim]);
+
+  React.useEffect(() => {
+    if (!visible) return;
+    void loadAccountPhone().then(setLocalPhone);
+  }, [visible]);
 
   if (!mounted) return null;
 
@@ -111,11 +139,8 @@ export function SessionDrawer({
           setMenuFor(menuFor === s.id ? null : s.id);
           setRenameText(s.title);
         }}
-        style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.glassPressed }]}
+        style={({ pressed }) => [styles.row, s.id === state.currentId && styles.rowActive, pressed && styles.rowPressed]}
       >
-        <View style={styles.glyph}>
-          <Text style={styles.glyphText}>{preset?.glyph ?? '·'}</Text>
-        </View>
         <View style={{ flex: 1, gap: 2 }}>
           <View style={styles.rowTop}>
             <Text style={styles.rowTitle} numberOfLines={1}>
@@ -162,12 +187,16 @@ export function SessionDrawer({
   };
 
   return (
-    <View style={styles.overlay} pointerEvents="box-none">
-      <Animated.View style={[styles.backdrop, { opacity: anim }]}>
+    <View style={styles.overlay}>
+      <Animated.View
+        renderToHardwareTextureAndroid
+        style={[styles.backdrop, { opacity: anim }]}
+      >
         <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="关闭会话抽屉" />
       </Animated.View>
 
       <Animated.View
+        renderToHardwareTextureAndroid
         style={[
           styles.panel,
           {
@@ -184,7 +213,7 @@ export function SessionDrawer({
           <IconButton glyph="✕" label="关闭" onPress={onClose} size={32} />
         </View>
 
-        <View style={styles.searchWrap}>
+        <View style={[styles.searchWrap, searchFocused && styles.searchWrapFocused]}>
           <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
             style={styles.search}
@@ -193,12 +222,41 @@ export function SessionDrawer({
             placeholder="搜索会话"
             placeholderTextColor={colors.textFaint}
             accessibilityLabel="搜索会话"
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
           />
         </View>
 
-        <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        <View style={styles.workspaceBlock}>
+          <Text style={styles.workspaceLabel}>工作区</Text>
+          {state.workspaces.length === 0 ? (
+            <Text style={styles.workspaceEmpty}>宿主没有报告工作区</Text>
+          ) : (
+            state.workspaces.map((ws) => (
+              <View key={ws.id} style={styles.workspaceRow}>
+                <Text style={styles.workspaceGlyph}>▢</Text>
+                <View style={styles.workspaceTexts}>
+                  <Text style={styles.workspaceName} numberOfLines={1}>
+                    {ws.name}
+                  </Text>
+                  <Text style={styles.workspacePath} numberOfLines={1}>
+                    {ws.root}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+          <Text style={styles.workspaceHint}>工作区限制可访问目录与可用锦囊</Text>
+        </View>
+
+        <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
           {groups.length === 0 ? (
-            <Text style={styles.empty}>{keyword ? '没有匹配的会话' : '还没有会话'}</Text>
+            <EmptyState
+              glyph="🗂"
+              title={keyword ? '没有匹配的会话' : '还没有会话'}
+              description={keyword ? '换个关键词试试。' : '发第一条消息，或从锦囊里选一个开始。'}
+              style={styles.emptyState}
+            />
           ) : (
             groups.map((g) => (
               <View key={g.title} style={{ gap: 6 }}>
@@ -209,53 +267,53 @@ export function SessionDrawer({
           )}
         </ScrollView>
 
-        <View style={styles.footer}>
-          <View style={{ flex: 1 }}>
-            <View style={styles.connRow}>
-              <Dot color={state.conn === 'connected' ? colors.ok : colors.danger} size={5} />
-              <Text style={styles.connText} numberOfLines={1}>
-                {state.caps?.host.name ?? '未连接'}
-              </Text>
-            </View>
-            <Text style={styles.connSub}>{state.caps?.host.engineVersion ?? ''}</Text>
+        <Pressable
+          onPress={() => {
+            onClose();
+            void store.openSettings();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="账号与设置"
+          style={({ pressed }) => [styles.account, pressed && styles.accountPressed]}
+        >
+          <View style={styles.accountInfo}>
+            <Text style={styles.accountName}>{accountLabel}</Text>
+            <Text style={styles.accountSub}>
+              {account?.status === 'credential-stored' ? '已登录' : '未登录'} · 账号与设置
+            </Text>
           </View>
-          <Pressable
-            onPress={() => {
-              onClose();
-              void store.openSettings();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="模型与凭据"
-            style={({ pressed }) => [styles.settingsBtn, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.settingsText}>模型与凭据</Text>
-          </Pressable>
-          <Pressable onPress={() => store.disconnect()} accessibilityRole="button" accessibilityLabel="断开连接">
-            <Text style={styles.disconnect}>断开</Text>
-          </Pressable>
-        </View>
+          <Text style={styles.accountGear}>⚙</Text>
+        </Pressable>
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-start' },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-start',
+    pointerEvents: 'box-none',
+  },
   backdrop: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(15,17,21,0.28)',
   },
   panel: {
     width: PANEL_WIDTH,
     height: '100%',
-    backgroundColor: '#12151A',
+    backgroundColor: semantic.sidebar,
     borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: colors.borderStrong,
-    paddingTop: topInset,
+    borderRightColor: colors.border,
+    paddingTop: topInset + 12,
   },
   panelHeader: {
     flexDirection: 'row',
@@ -265,34 +323,67 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
     paddingBottom: space.sm,
   },
-  panelTitle: { color: colors.text, fontSize: 17, fontWeight: '700', letterSpacing: 0.5 },
+  panelTitle: { color: colors.text, fontSize: 16, lineHeight: 28, fontWeight: '500', letterSpacing: 0.2 },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginHorizontal: space.md,
-    paddingHorizontal: 10,
-    height: 34,
-    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glass,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchWrapFocused: {
+    borderColor: colors.blue,
     backgroundColor: colors.glass,
   },
   searchIcon: { color: colors.textFaint, fontSize: 13 },
-  search: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 0 },
-  list: { padding: space.md, gap: 14, paddingBottom: space.xl },
-  groupTitle: { color: colors.textFaint, fontSize: 10.5, letterSpacing: 0.5, marginLeft: 2 },
-  empty: { color: colors.textFaint, fontSize: 12.5, textAlign: 'center', marginTop: space.xl },
+  search: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 20, paddingVertical: 0 },
+  listScroll: { flex: 1 },
+  list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
+  workspaceBlock: {
+    marginTop: space.md,
+    marginHorizontal: space.md,
+    padding: space.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    gap: 6,
+  },
+  workspaceLabel: { color: semantic.textSecondary, fontSize: 12, lineHeight: 18, fontWeight: '500' },
+  workspaceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  workspaceGlyph: { color: colors.textFaint, fontSize: 14 },
+  workspaceTexts: { flex: 1 },
+  workspaceName: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  workspacePath: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
+  workspaceHint: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
+  workspaceEmpty: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
+  groupTitle: {
+    color: semantic.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    marginLeft: 8,
+    marginBottom: 4,
+  },
+  emptyState: { paddingTop: space.md },
   menu: {
     marginLeft: 46,
     marginBottom: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: colors.glass,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgElevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     gap: 4,
   },
-  menuItem: { color: colors.blue, fontSize: 12.5, paddingVertical: 5 },
+  menuItem: { color: colors.blue, fontSize: 13, lineHeight: 20, paddingVertical: 5 },
   renameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   renameInput: {
     flex: 1,
@@ -303,36 +394,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, paddingHorizontal: 6, borderRadius: radius.md },
-  glyph: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.glassStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glyphText: { color: colors.textDim, fontSize: 13, fontWeight: '600' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 8, borderRadius: radius.sm },
+  rowActive: { backgroundColor: semantic.sidebarActive },
+  rowPressed: { backgroundColor: semantic.sidebarHover },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rowTitle: { color: colors.text, fontSize: 13.5, fontWeight: '500', flex: 1 },
-  rowTime: { color: colors.textFaint, fontSize: 10 },
+  rowTitle: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500', flex: 1 },
+  rowTime: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
   rowBottom: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rowPreview: { color: colors.textFaint, fontSize: 11.5, flex: 1 },
-  tag: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill },
-  tagText: { fontSize: 9.5, fontWeight: '600' },
-  footer: {
+  rowPreview: { color: colors.textFaint, fontSize: 12, lineHeight: 18, flex: 1 },
+  tag: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.xs },
+  tagText: { fontSize: 10, fontWeight: '500' },
+  account: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: 10,
     paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+    backgroundColor: semantic.sidebar,
   },
-  connRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  connText: { color: colors.textDim, fontSize: 11.5 },
-  connSub: { color: colors.textFaint, fontSize: 10, marginTop: 2 },
-  settingsBtn: { paddingHorizontal: 8, paddingVertical: 4 },
-  settingsText: { color: colors.textDim, fontSize: 12.5 },
-  disconnect: { color: colors.danger, fontSize: 12.5 },
+  accountPressed: { backgroundColor: semantic.sidebarHover },
+  accountInfo: { flex: 1 },
+  accountName: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  accountSub: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
+  accountGear: { color: colors.textFaint, fontSize: 16 },
 });
