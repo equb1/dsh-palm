@@ -13,6 +13,7 @@ import type { SessionSummary } from '../protocol';
 import { pickAttachments, type AttachmentKind } from '../lib/pickImage';
 import { store, useStore } from './useStore';
 import { Dot, IconButton } from './parts';
+import { EmptyState } from './components';
 import { SessionDrawer } from './SessionDrawer';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
@@ -131,6 +132,8 @@ export function HomeScreen(): React.ReactElement {
             <Text style={styles.connText}>{connLabel}</Text>
           </Pressable>
         </View>
+        {/* 顶栏右侧留槽：1.2 接 EngineBadge/状态，不写死内容 */}
+        <View style={styles.headerSlot} />
       </View>
 
       {state.pendingShare?.imagePath ? (
@@ -176,9 +179,6 @@ export function HomeScreen(): React.ReactElement {
                     onPress={() => void store.openSession(s.id)}
                     style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.glassPressed }]}
                   >
-                    <View style={styles.glyph}>
-                      <Text style={styles.glyphText}>{p?.glyph ?? '·'}</Text>
-                    </View>
                     <View style={{ flex: 1, gap: 3 }}>
                       <View style={styles.rowTop}>
                         <Text style={styles.rowTitle} numberOfLines={1}>
@@ -197,7 +197,13 @@ export function HomeScreen(): React.ReactElement {
                 );
               })}
             </View>
-          ) : null}
+          ) : (
+            <EmptyState
+              glyph="💬"
+              title="还没有会话"
+              description="发第一条消息，或者从下面的锦囊开始。"
+            />
+          )}
 
           {Boolean(state.error) ? (
             <Pressable onPress={() => store.clearError()}>
@@ -236,6 +242,7 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     paddingBottom: space.sm,
   },
+  headerSlot: { width: 36, height: 36 },
   brandMark: {
     width: 40,
     height: 40,
@@ -275,15 +282,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  glyph: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.glassStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glyphText: { color: colors.textDim, fontSize: 15, fontWeight: '600' },
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   rowTitle: { color: colors.text, fontSize: 14, lineHeight: 22, fontWeight: '500', flex: 1 },
   rowTime: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
