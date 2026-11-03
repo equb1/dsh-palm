@@ -73,11 +73,15 @@ export function HomeScreen(): React.ReactElement {
   const presets = state.caps?.presets ?? [];
   const preset = presets.find((p) => p.id === state.draftPresetId) ?? presets[0];
   const activeModel = state.defaultModel;
-  const modelLabel = (
-    state.models.find((m) => m.provider === activeModel?.provider && m.id === activeModel?.model)?.name ??
-    activeModel?.model ??
-    '模型'
-  ).replace(/^DeepSeek-?/i, '');
+  const activeModelOption = state.models.find(
+    (m) => m.provider === activeModel?.provider && m.id === activeModel?.model
+  );
+  const effortName = activeModelOption?.efforts?.find(
+    (e) => e.id === (activeModel?.reasoningEffort ?? activeModelOption?.defaultEffort)
+  )?.name;
+  const modelLabel = `${(activeModelOption?.name ?? activeModel?.model ?? '模型').replace(/^DeepSeek-?/i, '')}${
+    effortName ? ' · ' + effortName : ''
+  }`;
   const hasText = draft.trim().length > 0;
 
   // 首装解压 + 引擎冷启动有 10 多秒，这段时间首页别只显示"未连接"
@@ -268,7 +272,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     height: 32,
-    maxWidth: 132,
+    maxWidth: 172,
     paddingHorizontal: 10,
     borderRadius: radius.pill,
     backgroundColor: colors.glassStrong,

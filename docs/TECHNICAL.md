@@ -286,11 +286,11 @@ C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期�
 | 屏 | 内容 |
 |---|---|
 | 启动层 `LaunchOverlay` | 品牌 + 进度，覆盖首屏，就绪后淡出 |
-| 首页 `HomeScreen` | 品牌、时段问候、预设胶囊、最近会话、单输入框 |
+| 首页 `HomeScreen` | 品牌、时段问候、最近会话、Composer（权限/锦囊在输入框上方） |
 | 抽屉 `SessionDrawer` | 工作区、搜索、运行中/今天/更早、行内状态、长按菜单、底部账号/设置 |
 | 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区 |
 | 设置 `SettingsScreen` | 账号 → API Key（折叠）→ 提供商 → 本机引擎 → 宿主/实验室 |
-| 模型 `ModelSheet` | 按提供商分组 + 搜索 + 当前/默认标记 + 未配置禁用态 |
+| 模型 `ModelSheet` | 模型列表 + 推理等级；权限/工作区不在这里 |
 | 提供商 `ProvidersCard` | 目录/自定义两个 tab、发现模型、增删 |
 
 基础组件在 `app/src/ui/parts.tsx`（`Btn` / `Pill`）与 `app/src/ui/components/*`

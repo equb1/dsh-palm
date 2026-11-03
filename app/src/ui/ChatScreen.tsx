@@ -326,6 +326,12 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     const found = state.models.find((m) => m.provider === activeModel.provider && m.id === activeModel.model);
     return (found?.name ?? activeModel.model).replace(/^DeepSeek-?/i, '') || activeModel.model;
   }, [activeModel, state.models]);
+  const effortName = React.useMemo(() => {
+    if (!activeModel) return null;
+    const found = state.models.find((m) => m.provider === activeModel.provider && m.id === activeModel.model);
+    const id = activeModel.reasoningEffort ?? found?.defaultEffort;
+    return found?.efforts?.find((e) => e.id === id)?.name ?? null;
+  }, [activeModel, state.models]);
 
   React.useEffect(() => {
     const onShow = (): void => {
@@ -382,6 +388,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         <Pill onPress={() => store.openModelSheet()} style={styles.presetPill}>
           <Text style={styles.presetText} numberOfLines={1}>
             {shortModelName ?? '模型'}
+            {effortName ? ` · ${effortName}` : ''}
           </Text>
         </Pill>
         <View style={{ flex: 1 }} />
