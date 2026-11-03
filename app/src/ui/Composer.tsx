@@ -55,6 +55,7 @@ export function Composer({
   activePresetId,
   onPickPreset,
   showPresets = true,
+  presetsInteractive = true,
   permissions = [],
   activePermission,
   onPickPermission,
@@ -75,6 +76,8 @@ export function Composer({
   activePresetId: string | null;
   onPickPreset: (id: string) => void;
   showPresets?: boolean;
+  /** 宿主不支持会话内换锦囊时，只显示当前锦囊，不给点 */
+  presetsInteractive?: boolean;
   permissions?: PermissionOption[];
   activePermission?: string | null;
   onPickPermission?: (value: string) => void;
@@ -195,14 +198,15 @@ export function Composer({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`当前锦囊：${activePreset?.name ?? '标准'}`}
-              onPress={() => setPresetMenuOpen(true)}
+              onPress={presetsInteractive ? () => setPresetMenuOpen(true) : undefined}
+              disabled={!presetsInteractive}
               style={({ pressed }) => [styles.barPill, pressed && { opacity: 0.7 }]}
             >
               <Text style={styles.barPillGlyph}>{activePreset?.glyph ?? '·'}</Text>
               <Text style={styles.barPillText} numberOfLines={1}>
                 {activePreset?.name ?? '标准'}
               </Text>
-              <Text style={styles.barChevron}>▾</Text>
+              {presetsInteractive ? <Text style={styles.barChevron}>▾</Text> : null}
             </Pressable>
           ) : null}
         </ScrollView>

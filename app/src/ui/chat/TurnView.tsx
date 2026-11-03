@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Clipboard, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import type { Approval, Block, Turn } from '../../protocol';
 import { MarkdownView } from '../MarkdownView';
@@ -90,6 +90,33 @@ function renderBlock(
   }
 }
 
+function AssistantActions({ text }: { text: string }): React.ReactElement | null {
+  const [copied, setCopied] = React.useState(false);
+  if (!text.trim()) return null;
+
+  const copy = (): void => {
+    Clipboard.setString(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <View style={styles.actions}>
+      <Pressable accessibilityRole="button" accessibilityLabel="复制回答" onPress={copy} hitSlop={8}>
+        <Text style={[styles.actionGlyph, copied && { color: colors.ok }]}>{copied ? '✓' : '⧉'}</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="分享回答"
+        onPress={() => void Share.share({ message: text })}
+        hitSlop={8}
+      >
+        <Text style={styles.actionGlyph}>↗</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export function TurnView({
   turn,
   approvals,
@@ -114,9 +141,16 @@ export function TurnView({
   }
 
   const hasDoneDuration = Boolean(turn.status === 'done' && turn.meta?.durationMs);
+  const answerText = turn.blocks
+    .filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text')
+    .map((b) => b.text)
+    .join('\n');
   return (
     <View style={styles.assistant}>
       {turn.blocks.map((b) => renderBlock(b, approvals, onToggleThinking))}
+      {turn.status === 'done' || turn.status === 'stopped' ? (
+        <AssistantActions text={answerText} />
+      ) : null}
       {turn.status === 'stopped' ? <Text style={styles.turnMeta}>已停止</Text> : null}
       {hasDoneDuration ? (
         <Text style={styles.turnMeta}>
@@ -140,6 +174,8 @@ const styles = StyleSheet.create({
 
   assistant: { gap: 8 },
   turnMeta: { color: colors.textFaint, fontSize: 10.5 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingVertical: 2 },
+  actionGlyph: { color: colors.textFaint, fontSize: 15 },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
   rowGlyph: { color: colors.textFaint, fontSize: 11 },

@@ -3,11 +3,11 @@ import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 
 import type { SessionDetail } from '../protocol';
 import { store, useStore } from './useStore';
-import { Dot, IconButton, Pill } from './parts';
+import { IconButton, Pill } from './parts';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { ModelSheet } from './ModelSheet';
-import { TurnView } from './chat';
+import { TurnView, JumpButton } from './chat';
 import { pickAttachments } from '../lib/pickImage';
 import { colors, space, topInset } from './theme';
 
@@ -18,6 +18,7 @@ import { colors, space, topInset } from './theme';
 export function ChatScreen({ session }: { session: SessionDetail }): React.ReactElement {
   const state = useStore();
   const [draft, setDraft] = React.useState('');
+  const [showJump, setShowJump] = React.useState(false);
   const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
   const nearBottom = React.useRef(true);
   const userInteracting = React.useRef(false);
@@ -86,10 +87,6 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           <Text style={styles.titleText} numberOfLines={1}>
             {session.title}
           </Text>
-          <View style={styles.titleMeta}>
-            <Dot color={running ? colors.blue : colors.textFaint} size={5} />
-            <Text style={styles.titleMetaText}>{running ? '生成中' : '就绪'}</Text>
-          </View>
         </Pill>
         <Pill onPress={() => store.openModelSheet()} style={styles.presetPill}>
           <Text style={styles.presetText} numberOfLines={1}>
@@ -98,11 +95,6 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           </Text>
         </Pill>
         <View style={{ flex: 1 }} />
-        <IconButton
-          glyph="✎"
-          label="新建会话"
-          onPress={() => void store.createSession(session.presetId)}
-        />
       </View>
 
       <SmoothKeyboardAvoid style={styles.bodyWrap}>
@@ -112,13 +104,16 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           contentContainerStyle={styles.scrollOuter}
           onScroll={(e) => {
             const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-            nearBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 140;
+            const distance = contentSize.height - contentOffset.y - layoutMeasurement.height;
+            nearBottom.current = distance < 140;
+            setShowJump(distance > 220);
           }}
           scrollEventThrottle={64}
           onLayout={() => {
             if (nearBottom.current && !userInteracting.current) {
               // 伴随视口高度压缩实时定位，与输入框同帧贴合上移
               scrollRef.current?.scrollToEnd({ animated: false });
+              setShowJump(false);
             }
           }}
           onContentSizeChange={() => {
@@ -148,6 +143,18 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           </View>
         </ScrollView>
 
+        {showJump ? (
+          <View style={styles.jumpWrap}>
+            <JumpButton
+              running={running}
+              onPress={() => {
+                scrollRef.current?.scrollToEnd({ animated: true });
+                setShowJump(false);
+              }}
+            />
+          </View>
+        ) : null}
+
         {Boolean(state.error) ? (
           <Pressable onPress={() => store.clearError()}>
             <Text style={styles.error}>{state.error}</Text>
@@ -172,8 +179,9 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           }
           presets={state.caps?.presets ?? []}
           activePresetId={session.presetId}
-          // 真宿主没有会话内换预设的接口（capabilities.actions 里没有就不显示）
-          showPresets={state.caps?.actions.includes('switch_preset') ?? false}
+          // 真宿主没有会话内换预设的接口时，只显示当前锦囊，不给点
+          showPresets={(state.caps?.presets?.length ?? 0) > 0}
+          presetsInteractive={state.caps?.actions.includes('switch_preset') ?? false}
           onPickPreset={(id) => void store.setPreset(id)}
           permissions={state.permissions}
           activePermission={session.permission ?? state.defaultPermission}
@@ -209,15 +217,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  titlePill: { flexShrink: 1, flexDirection: 'column', alignItems: 'flex-start', gap: 2, paddingVertical: 6 },
+  titlePill: { flexShrink: 1, paddingVertical: 3 },
   titleText: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  titleMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  titleMetaText: { color: colors.textFaint, fontSize: 10.5 },
   presetPill: { flexShrink: 1 },
   presetText: { color: colors.textDim, fontSize: 12 },
 
   scrollOuter: { paddingBottom: space.lg },
   scroll: { paddingHorizontal: space.lg, paddingTop: space.md, gap: 14 },
+  jumpWrap: { position: 'absolute', right: space.lg, bottom: 128 },
 
   emptyChat: { paddingTop: 80, alignItems: 'center', gap: 6 },
   emptyChatTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
