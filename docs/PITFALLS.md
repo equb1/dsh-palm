@@ -299,9 +299,9 @@
 ### H4. 流式输出每个 delta 都 patch
 
 - 现象：长回答时代码侧每 token 触发一次 store 更新。
-- 原因：`block.delta` 直接 `patch({})`，没有合并/行缓存。
-- 处理：U3 做 32ms 合并 + 稳定 key 行缓存。
-- 验证：流式滚动不掉帧（主观 + 抽测）。
+- 历史处理：U3 曾计划 32ms 合并；实际先后试过 50ms 定时器、requestAnimationFrame（约 16ms）。
+- 现状（2026-11-04）：改成 `queueMicrotask`，同一事件栈内的 token 合并，其余逐 token 提交；Markdown 只重解析 stable/tail。
+- 结果：逐 token 已做到，但 20+ 分钟长会话仍会抖；剩余原因和未完成项见 **H7**。
 
 ### H5. adb 点击坐标与截图不一致
 
@@ -316,6 +316,54 @@
 - 原因：`adjustResize` + 自定义避让叠加。
 - 处理：统一走 `SmoothKeyboardAvoid`；底部安全区单独留；不重复加 padding。
 - 验证：1–6 行输入、中文候选都不遮。
+
+### H7. 长会话流式仍抖 / 思考重复（2026-11-04 未完全解决）
+
+**现象**
+
+- 20+ 分钟的长任务，思考或正文输出时界面一跳一跳，不是连续流；
+- 同一段思考出现两份（一份灰色已完成、一份蓝色思考中）；
+- 退出重进后正在进行的思考消失，或下面又冒出一段；
+- 列表页状态/预览不跟手，详情页和列表页状态割裂；
+- 极端情况下 JS 线程卡死、App 被系统杀掉。
+
+**已确认的根因**
+
+1. **快照 + 实时双回合**：`sessions.get` 的落盘回合和 `block.appended` 的实时回合 id 不同；宿主快照没有 runId 时，客户端只能按内容/时间猜，猜错就出现两份。
+2. **active 状态挂在 turn 上**：`ThinkingRow` 的 `live` 曾按整个 streaming 回合传给所有 thinking block，所以同一轮所有思考段都显示“思考中”。
+3. **重复 block**：快照里是前半段、实时里是完整段，id 和全文都不相等，普通按 id/全文去重认不出来；需要“前缀相同即同段”的合并。
+4. **渲染成本**：`block.text += delta` 是 O(n²) 字符串复制；每个 token 全量 `parseMarkdownBlocks`；整个消息列表用 `ScrollView`，最后一行不断长高。
+5. **布局竞争**：最后一行长高、键盘避让、用户滚动三方同时改 offset；Android 上即使每 token 更新，也会表现为跳动。
+6. **状态不同步**：`run.started/finished` 只改 detail，不改 `sessions` 列表；`refreshSessions` 也不收口 detail 里残留的 streaming 回合。
+7. **缓存脏数据**：重装/恢复后 UI 缓存可能还指向旧模型 id（如 `flash`），发消息 1 秒内被宿主拒绝，表现为“出错”。
+
+**已经做了**
+
+- 渲染前 `cleanTurns`：连续同 run/同 streaming 的 assistant 回合合并，重复 text/thinking 按内容去重，空 thinking 丢弃；
+- `sameBlock` 对 thinking 加前缀判定，保留更长的那份；
+- 只有最后一个 thinking block 显示“思考中”，之前显示灰色“思考”+首行预览；
+- `run.started/finished` 同步 `sessions`；`flushDeltas` 每次 flush 同步列表 preview；
+- `queueMicrotask` 逐 token 提交；Markdown 只全量解析 stable 前缀，tail 逐 token 解析；
+- 修复缓存模型 id 校验（不在 models.list 就回退宿主默认）；
+- 重新打包 bridge、卸载重装 APK，rootfs 里已确认是新 bridge。
+
+**仍未完成（按优先级）**
+
+1. **列表布局（最大头）**：`ChatScreen` 仍是 `ScrollView`，最后一行流式长高会触发整页 layout。需要换 `FlatList`/`KeyboardChatScrollView`/预留 `blankSpace`，把“增长”从 layout 操作变成滚动内容。
+2. **稳定块 memo**：目前 stable 前缀只缓存了解析结果，`blocks.map` 仍重建所有元素；需要 `React.memo` 的 BlockView + 只渲染 tail 增量。
+3. **文本拼接**：`block.text += delta` 仍是 O(n²)；需要 chunk 数组/rope，渲染时再 join。
+4. **滚动跟随策略**：用户上滑后必须冻结自动追底；目前只靠 `nearBottom` 阈值，长文里会抢。
+5. **宿主 runId**：bridge 里的 `project.ts` 已带 `turn:N`，但如果宿主跑的是旧 dsh 投影，快照仍可能没有 runId；需要确认部署的是新 bridge/新 dsh。
+6. **验证脚本**：需要一条 20+ 分钟、带工具和多次重进的回归用例，目前只能人工长任务观察。
+
+**验证方式**
+
+- 新会话发 20+ 分钟任务；
+- 流式期间：只应有一个蓝色“思考中”，其余灰色带预览；
+- 上滑应停住，不自动追底；回到底部后再跟随；
+- 退出重进：live 思考不丢、不重复；
+- 结束后：一个“已完成”、一个用时、列表 status=idle；
+- 观察 `adb logcat -s ReactNativeJS` 是否有 duplicate key / 长任务 OOM。
 
 ## G. 调试
 

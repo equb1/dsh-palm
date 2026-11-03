@@ -303,9 +303,10 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 
 **现状**：回合按 `role` 分气泡/全宽；思考与工具是行；审批/提问是卡片；
 输入区已按 dsh-go 几何：单行 56 / 28 圆角、左右 40 圆键，权限与锦囊在输入框上方，
-模型在顶栏；完成回合有复制/分享，回到底部键在生成中做脉冲描边；流式增量**每个事件一次 patch**（未做 32ms 合并）。
-**目标（dsh-go，未做）**：浮动玻璃顶栏、思考 3 行实时窗、工具行连续合并、
-整轮折叠、ChatCard 统一卡片、朗读（需要原生 TTS）。
+模型在顶栏；完成回合有复制/分享，回到底部键在生成中做脉冲描边；流式是**逐 token 微任务提交**，
+Markdown 只重解析 stable 前缀 + tail。长会话仍有布局抖动，根因/剩余项见 `PITFALLS.md` H7。
+**目标（未做）**：`ScrollView` 换 FlatList/KeyboardChatScrollView + 预留 blankSpace；
+稳定块 `React.memo`；文本 chunk 拼接；浮动玻璃顶栏、工具行连续合并、整轮折叠、ChatCard、朗读（需要原生 TTS）。
 完整调研见 [archive/19-ui-research.md](archive/19-ui-research.md)。
 
 ### 8.4 输入与键盘

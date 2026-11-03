@@ -16,6 +16,8 @@
   deepseek 蓝 `#4176E6`、8/12/16/20/28 圆角；深色 alias 后续按系统开关接。
 - 输入区按 dsh-go 几何（2026-11-04）：单行 56 / 28 圆角、40 圆键；权限与锦囊在输入框上方，
   模型回顶栏，`+` 走附件面板；B3 前先把 Chat 的回合/思考/工具渲染拆到 `ui/chat/*`。
+- 流式仍未完全解决（2026-11-04）：逐 token + Markdown stable/tail 已做，长会话布局仍抖；
+  根因和剩余项见 `PITFALLS.md` H7。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
 
@@ -121,7 +123,8 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 | 任务 | 原因 |
 |---|---|
 | U1 聊天页重排 | 改 ChatScreen + Composer，和 1.2/1.3/1.4 都撞 |
-| U3 流式 32ms 合并 | 改 `store.ts`，与 1.2/1.4 冲突最大 |
+| U3 流式 32ms 合并 | 已改为逐 token + 微任务；剩余布局/稳定块 memo 见 `PITFALLS.md` H7 |
+| U9 长会话流式布局 | `ScrollView` 末行长高 + 键盘竞争；需 FlatList/KeyboardChatScrollView + blankSpace，优先于其它 U 项 |
 | U4 设置 IA | 改 SettingsScreen，1.2 引擎卡/账号/提供商都在里面 |
 | U5 引擎页 | 需要 EngineManager 的状态字段 |
 | U6 全部功能页 | 要动 App/Settings 导航；等 1.2 入口定型 |
@@ -135,7 +138,7 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 2. A4 / A5（给 1.2/1.3 预留组件）；
 3. A6 / A7；
 4. B1 / B2 / B3（留槽，允许和引擎任务并行）；
-5. 等 1.2/1.3/1.4 合入后，再做 U1/U3/U4/U5/U6/U7/U8。
+5. 等 1.2/1.3/1.4 合入后，再做 U1/U3/U4/U5/U6/U7/U8；U9（长会话流式布局）优先于其它 U 项。
 
 每个分支都从最新 `develop` 切，一个分支一个任务，走 MR；不要直推 `develop`。
 
