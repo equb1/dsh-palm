@@ -23,13 +23,13 @@ export const colors = {
   glassPressed: '#EBEEF2',
   /** 官方 --dsw-specific-bubble（light）= deepseek-50 */
   bubble: '#EDF3FE',
-  /** 官方 border-l1 / border-l2（light） */
-  border: 'rgba(0,0,0,0.06)',
-  borderStrong: 'rgba(0,0,0,0.10)',
+  /** 官方 border-l1 / border-l2（light）；文字对比度按 DeepSeek App 调深一档 */
+  border: 'rgba(0,0,0,0.08)',
+  borderStrong: 'rgba(0,0,0,0.12)',
 
   text: '#0F1115',
-  textDim: '#61666B',
-  textFaint: '#81858C',
+  textDim: '#4D5258',
+  textFaint: '#6B7076',
 
   /** deepseek-500：链接、发送、主交互 */
   blue: '#4176E6',
@@ -102,7 +102,7 @@ export const semantic = {
   textPrimary: colors.text,
   textSecondary: colors.textDim,
   textTertiary: colors.textFaint,
-  textCaption: '#ADB2B8',
+  textCaption: '#6B7076',
   accent: colors.blue,
   accentStrong: colors.blueHover,
   accentSoft: colors.blueSoft,

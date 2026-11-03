@@ -28,6 +28,13 @@ function startOfToday(): number {
   return d.getTime();
 }
 
+/** 11 位手机号脱敏成 159****70；宿主已脱敏的直接透传 */
+function maskPhone(raw: string): string {
+  const digits = raw.replace(/[\s-]/g, '');
+  if (/^\d{11}$/.test(digits)) return `${digits.slice(0, 3)}****${digits.slice(-4)}`;
+  return raw;
+}
+
 function StatusTag({ s }: { s: SessionSummary }): React.ReactElement | null {
   if (s.status === 'waiting_approval') {
     return (
@@ -59,6 +66,13 @@ export function SessionDrawer({
 }): React.ReactElement | null {
   const state = useStore();
   const account = state.account;
+  const phone =
+    account?.user?.maskedPhone ?? account?.user?.phone ?? account?.user?.phoneNumber;
+  const accountLabel = phone
+    ? account?.user?.maskedPhone
+      ? phone
+      : maskPhone(phone)
+    : 'DeepSeek 账号';
   const [mounted, setMounted] = React.useState(visible);
   const [q, setQ] = React.useState('');
   const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
@@ -117,9 +131,6 @@ export function SessionDrawer({
         }}
         style={({ pressed }) => [styles.row, s.id === state.currentId && styles.rowActive, pressed && styles.rowPressed]}
       >
-        <View style={styles.glyph}>
-          <Text style={styles.glyphText}>{preset?.glyph ?? '·'}</Text>
-        </View>
         <View style={{ flex: 1, gap: 2 }}>
           <View style={styles.rowTop}>
             <Text style={styles.rowTitle} numberOfLines={1}>
@@ -255,14 +266,11 @@ export function SessionDrawer({
           accessibilityLabel="账号与设置"
           style={({ pressed }) => [styles.account, pressed && styles.accountPressed]}
         >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>我</Text>
-          </View>
           <View style={styles.accountInfo}>
-            <Text style={styles.accountName}>
-              {account?.status === 'credential-stored' ? '已登录' : '未登录'}
+            <Text style={styles.accountName}>{accountLabel}</Text>
+            <Text style={styles.accountSub}>
+              {account?.status === 'credential-stored' ? '已登录' : '未登录'} · 账号与设置
             </Text>
-            <Text style={styles.accountSub}>账号与设置</Text>
           </View>
           <Text style={styles.accountGear}>⚙</Text>
         </Pressable>
@@ -336,16 +344,16 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     gap: 6,
   },
-  workspaceLabel: { color: semantic.textCaption, fontSize: 12, lineHeight: 18, fontWeight: '500' },
+  workspaceLabel: { color: semantic.textSecondary, fontSize: 12, lineHeight: 18, fontWeight: '500' },
   workspaceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   workspaceGlyph: { color: colors.textFaint, fontSize: 14 },
   workspaceTexts: { flex: 1 },
   workspaceName: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
   workspacePath: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
-  workspaceHint: { color: semantic.textCaption, fontSize: 11, lineHeight: 16 },
+  workspaceHint: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
   workspaceEmpty: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
   groupTitle: {
-    color: semantic.textCaption,
+    color: semantic.textSecondary,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: '500',
@@ -379,14 +387,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 8, borderRadius: radius.sm },
   rowActive: { backgroundColor: semantic.sidebarActive },
   rowPressed: { backgroundColor: semantic.sidebarHover },
-  glyph: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glyphText: { color: colors.textDim, fontSize: 14, fontWeight: '500' },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rowTitle: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500', flex: 1 },
   rowTime: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
@@ -406,15 +406,6 @@ const styles = StyleSheet.create({
     backgroundColor: semantic.sidebar,
   },
   accountPressed: { backgroundColor: semantic.sidebarHover },
-  avatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.glassStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
   accountInfo: { flex: 1 },
   accountName: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
   accountSub: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
