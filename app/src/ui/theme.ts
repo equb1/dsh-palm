@@ -1,4 +1,4 @@
-import { Platform, StatusBar } from 'react-native';
+import { Easing, Platform, StatusBar } from 'react-native';
 
 /**
  * 设计语言对齐 DSH 官方 / dsh-go：
@@ -43,6 +43,62 @@ export const font = {
 export const radius = { sm: 10, md: 14, lg: 20, xl: 24, pill: 999 } as const;
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 } as const;
+
+/**
+ * A2：字号层级（只新增，不动旧导出）。
+ * 正文 13–14，标题 15–20；行高按 1.4–1.5 倍给，等宽用于代码/命令/路径。
+ */
+export const typography = {
+  hero: { fontSize: 30, lineHeight: 40, fontWeight: '700' },
+  title: { fontSize: 20, lineHeight: 28, fontWeight: '600' },
+  heading: { fontSize: 17, lineHeight: 24, fontWeight: '600' },
+  subheading: { fontSize: 15, lineHeight: 22, fontWeight: '600' },
+  body: { fontSize: 14, lineHeight: 22, fontWeight: '400' },
+  bodySmall: { fontSize: 13, lineHeight: 20, fontWeight: '400' },
+  caption: { fontSize: 12, lineHeight: 17, fontWeight: '400' },
+  meta: { fontSize: 11, lineHeight: 15, fontWeight: '500' },
+  micro: { fontSize: 10, lineHeight: 13, fontWeight: '500' },
+  mono: { fontSize: 12.5, lineHeight: 18, fontFamily: font.mono },
+} as const;
+
+/**
+ * A2：语义色（只新增）。
+ * 组件只认语义名；U7 换浅色主题时改这里的映射，不用逐屏改颜色。
+ */
+export const semantic = {
+  surface: colors.bg,
+  surfaceRaised: colors.bgElevated,
+  card: colors.glass,
+  cardStrong: colors.glassStrong,
+  cardPressed: colors.glassPressed,
+  border: colors.border,
+  borderStrong: colors.borderStrong,
+  textPrimary: colors.text,
+  textSecondary: colors.textDim,
+  textTertiary: colors.textFaint,
+  accent: colors.blue,
+  accentStrong: colors.blueHover,
+  accentSoft: colors.blueSoft,
+  brand: colors.gold,
+  brandSoft: colors.goldSoft,
+  success: colors.ok,
+  successSoft: colors.okSoft,
+  warning: colors.warn,
+  warningSoft: colors.warnSoft,
+  danger: colors.danger,
+  dangerSoft: colors.dangerSoft,
+} as const;
+
+/** A2：动效时长（ms）与曲线；组件不再写死 200 / 450 / Easing.quad。 */
+export const motion = {
+  duration: { fast: 120, base: 200, slow: 320, breathing: 450 },
+  easing: {
+    standard: Easing.bezier(0.2, 0, 0, 1),
+    decelerate: Easing.out(Easing.cubic),
+    accelerate: Easing.in(Easing.cubic),
+    emphasis: Easing.inOut(Easing.quad),
+  },
+} as const;
 
 export const topInset = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) : 0;
 
