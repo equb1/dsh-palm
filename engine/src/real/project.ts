@@ -120,9 +120,10 @@ export function projectRecords(records: RealRecord[]): Projection {
 
   const toolIndex = new Map<string, Extract<Block, { kind: 'tool' }>>();
 
-  const newTurn = (role: 'user' | 'assistant', createdAt: number, id?: string): Turn => {
+  const newTurn = (role: 'user' | 'assistant', createdAt: number, id?: string, runId?: string): Turn => {
     const turn: Turn = {
       id: id ?? `${role}-${turns.length + 1}`,
+      ...(runId ? { runId } : {}),
       role,
       createdAt,
       blocks: [],
@@ -155,10 +156,18 @@ export function projectRecords(records: RealRecord[]): Projection {
 
       case 'assistant/message': {
         const turnNo = typeof d.turn === 'number' ? d.turn : -1;
+        const runId = turnNo >= 0 ? `turn:${turnNo}` : undefined;
         const msg = (d.message ?? {}) as Record<string, any>;
         if (!current || current.role !== 'assistant' || currentTurnNo !== turnNo) {
-          current = newTurn('assistant', time, typeof msg.id === 'string' ? msg.id : undefined);
+          current = newTurn(
+            'assistant',
+            time,
+            typeof msg.id === 'string' ? msg.id : undefined,
+            runId
+          );
           currentTurnNo = turnNo;
+        } else if (runId && !current.runId) {
+          current.runId = runId;
         }
         current.blocks.push(...contentToBlocks(msg.content));
         if (d.usage) {
@@ -175,8 +184,15 @@ export function projectRecords(records: RealRecord[]): Projection {
 
       case 'tool/call': {
         if (!current || current.role !== 'assistant') {
-          current = newTurn('assistant', time);
+          current = newTurn(
+            'assistant',
+            time,
+            undefined,
+            typeof d.turn === 'number' ? `turn:${d.turn}` : undefined
+          );
           currentTurnNo = typeof d.turn === 'number' ? d.turn : -1;
+        } else if (typeof d.turn === 'number' && !current.runId) {
+          current.runId = `turn:${d.turn}`;
         }
         blockSeq += 1;
         const callName = str(d.name) || 'tool';

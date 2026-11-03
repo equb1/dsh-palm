@@ -575,10 +575,12 @@ export class Store {
         : undefined;
       if (live) {
         // 宿主快照里可能只有落盘的部分回合；同一 id 用缓存里的 live 回合，别画两份
-        const same = turns.findIndex((t) => t.id === live.id);
+        const same = turns.findIndex(
+          (t) => t.id === live.id || Boolean(live.runId && t.runId === live.runId)
+        );
         if (same >= 0) {
           turns = turns.slice();
-          turns[same] = live;
+          turns[same] = mergeTurn(turns[same]!, live);
         } else {
           // 快照里如果只有一个不等 id 的部分回合，宁可多一条也不要跨 run 合并
           turns = [...turns, live];

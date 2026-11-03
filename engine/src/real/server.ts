@@ -656,7 +656,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       liveRunId = String(frame.attemptId ?? crypto.randomUUID());
       liveTurn = {
         id: 'turn-' + liveRunId,
-        runId: liveRunId,
+        runId: typeof frame.turn === 'number' ? `turn:${frame.turn}` : liveRunId,
         role: 'assistant',
         createdAt: Date.now(),
         blocks: [],
