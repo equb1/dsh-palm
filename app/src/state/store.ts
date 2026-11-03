@@ -352,7 +352,27 @@ export class Store {
       }
     }
     this.pendingDelta.clear();
-    this.patch({});
+    const currentId = this.state.currentId;
+    let sessions = this.state.sessions;
+    if (currentId) {
+      let preview = '';
+      outer: for (let i = detail.turns.length - 1; i >= 0; i--) {
+        const blocks = detail.turns[i]!.blocks;
+        for (let j = blocks.length - 1; j >= 0; j--) {
+          const b = blocks[j]!;
+          if (b.kind === 'text' && b.text.trim()) {
+            preview = b.text.replace(/\s+/g, ' ').trim().slice(0, 80);
+            break outer;
+          }
+        }
+      }
+      sessions = sessions.map((s) =>
+        s.id === currentId
+          ? { ...s, status: 'running' as const, updatedAt: Date.now(), ...(preview ? { preview } : {}) }
+          : s
+      );
+    }
+    this.patch({ sessions });
   }
 
   private fail(err: unknown): void {
@@ -1441,10 +1461,13 @@ export class Store {
       }
 
       case 'run.started': {
-        // 回合开始：界面要变成"生成中"，发送键变成停止键
+        // 回合开始：界面要变成"生成中"，发送键变成停止键，列表也立刻变运行中
         this.runStartedAt = Date.now();
         const d = this.state.detail;
-        if (d && data.sessionId === currentId) this.patch({ detail: { ...d, status: 'running' }, busy: true });
+        const sessions = this.state.sessions.map((s) =>
+          s.id === data.sessionId ? { ...s, status: 'running' as const, updatedAt: Date.now() } : s
+        );
+        this.patch({ sessions, ...(d && data.sessionId === currentId ? { detail: { ...d, status: 'running' }, busy: true } : {}) });
         return;
       }
 

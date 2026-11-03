@@ -44,7 +44,7 @@ function ThinkingRow({
       <Text style={[styles.thinkingLabel, live && styles.thinkingActive]}>
         {live ? '思考中' : '思考'}
       </Text>
-      {!live && !open ? (
+      {!open ? (
         <Text style={styles.rowText} numberOfLines={1}>
           {preview}
         </Text>
@@ -205,7 +205,8 @@ function AssistantTurn({
   const [open, setOpen] = React.useState(false);
   const completed = turn.status !== 'streaming';
   const visible = (b: Block): boolean => !(b.kind === 'thinking' && !b.text.trim());
-  const processBlocks = turn.blocks.filter((b) => visible(b) && (b.kind === 'thinking' || b.kind === 'tool'));
+  const visibleBlocks = turn.blocks.filter(visible);
+  const processBlocks = visibleBlocks.filter((b) => b.kind === 'thinking' || b.kind === 'tool');
   const answerBlocks = turn.blocks.filter((b) => b.kind === 'text');
   const answerText = answerBlocks
     .filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text')
@@ -247,14 +248,13 @@ function AssistantTurn({
         ? answerBlocks.map((b, i) => (
             <React.Fragment key={`${b.id}-${i}`}>{renderBlock(b, approvals, onToggleThinking)}</React.Fragment>
           ))
-        : turn.blocks.filter(visible).map((b, i) => (
+        : visibleBlocks.map((b, i) => (
             <React.Fragment key={`${b.id}-${i}`}>
               {renderBlock(
                 b,
                 approvals,
                 onToggleThinking,
-                turn.status === 'streaming' &&
-                  !(b.kind === 'thinking' || b.kind === 'text' ? b.done : false)
+                turn.status === 'streaming' && i === visibleBlocks.length - 1 && b.kind === 'thinking'
               )}
             </React.Fragment>
           ))}
