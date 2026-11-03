@@ -263,9 +263,9 @@ function finalizeDetailTurn(detail: SessionDetail, at?: number): SessionDetail {
 }
 
 export class Store {
-  /** 流式增量按帧合并（约 16ms），不是固定 50ms 一批；一帧内到达的 token 一次提交 */
+  /** 流式增量在当前 JS 事件栈结束后立即提交；同一 tick 内的多个 token 才合并 */
   private pendingDelta = new Map<string, string>();
-  private deltaFrame: number | null = null;
+  private deltaScheduled = false;
   /** 客户端兜底计时：宿主没带 durationMs 时，run.started 到 run.finished 的耗时 */
   private runStartedAt: number | null = null;
   /** 退出会话时留住 detail，重进时把 live 回合并回去，避免 history + live 两份 */
@@ -337,15 +337,14 @@ export class Store {
   }
 
   private scheduleDeltaFlush(): void {
-    if (this.deltaFrame !== null) return;
+    if (this.deltaScheduled) return;
+    this.deltaScheduled = true;
     const run = (): void => {
-      this.deltaFrame = null;
+      this.deltaScheduled = false;
       this.flushDeltas();
     };
-    this.deltaFrame =
-      typeof requestAnimationFrame === 'function'
-        ? requestAnimationFrame(run)
-        : (setTimeout(run, 16) as unknown as number);
+    if (typeof queueMicrotask === 'function') queueMicrotask(run);
+    else Promise.resolve().then(run);
   }
 
   /** 把攒下的流式增量一次性拼进 block；thinking 只留最后 24000 字，防止无限增长 */
