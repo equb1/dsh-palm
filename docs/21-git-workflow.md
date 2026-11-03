@@ -18,6 +18,30 @@ main                发布分支：只接受从 develop 合入的发版（tag �
 - **不直接提交 `develop` / `main`**：本地可以改，但落库必须走分支 + PR。
 - 分支合入后删除；`main` 只在发版时从 `develop` 合并并打 tag。
 
+## 按任务分支（2026-11-03 起）
+
+后续开发**直接从最新 `develop` 切**，并且**一个方面的任务建一个分支**：
+
+| 方面 | 分支示例 |
+|---|---|
+| 引擎路由 / 加载 | `feat/engine-manager`、`feat/engine-routing` |
+| 附件收件 | `feat/attachment-intake` |
+| Office 三件套 | `feat/office-python` |
+| 能力门 / 交接 | `feat/capability-handoff` |
+| 会话 / 配置 | `feat/session-badge`、`feat/engine-profile` |
+| UI 改版 | `ui/chat-refactor`、`ui/settings-ia` |
+| 账号 / 互联 | `feat/oauth-loopback`、`feat/lan-pairing` |
+| 构建 / CI | `chore/ci-tests`、`chore/payload-python` |
+| 文档 | `docs/engine-routing`、`docs/readme` |
+
+规则：
+
+1. 开分支前：`git fetch origin && git switch develop && git pull`；
+2. 一个分支只做一个方面的任务；大任务可以拆子分支，但合并顺序要写清楚；
+3. 每个分支必须能编译、`npm run verify` 绿；
+4. 推到 `origin` → PR 到 `develop` → squash 合并 → 删分支；
+5. 不要在一个分支里顺手改别的方面；发现了就另开分支。
+
 ## 命名
 
 | 前缀 | 用途 | 例子 |
@@ -57,5 +81,7 @@ main                发布分支：只接受从 develop 合入的发版（tag �
 
 2026-11-02 的三轮改动（提供商目录、P0、P1+工程债）是在同一份未提交工作区里连续改的，
 多个文件被三轮同时改过（`store.ts`、`protocol/index.ts`、`SettingsScreen.tsx` 等），
-**无法无损拆成三个独立分支**。所以本轮合成一个分支 `feat/providers-and-stability` 落库；
-从下一轮开始，严格按「一次改动一个分支」执行。
+**无法无损拆成三个独立分支**，所以合并成了一个 `feat/providers-and-stability`。这是唯一一次例外。
+
+**从 2026-11-03 起严格执行「一个方面的任务一个分支」**；本文档本身走的是
+`docs/engine-routing` 分支。

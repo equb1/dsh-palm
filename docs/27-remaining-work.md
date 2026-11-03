@@ -3,19 +3,24 @@
 > 2026-11-03 整理。M1 主链路已真机验证（见 [26](26-light-engine.md)），
 > 本文只列**还没做的**，每条写清：现状 → 要做什么 → 验收 → 依赖/风险。
 > 阶段划分沿用 [23](23-requirements.md) §8；非 UI 工程债另见 [20](20-open-work.md)。
+> **引擎路由/加载策略已单独定稿，见 [28-engine-routing.md](28-engine-routing.md)**；
+> PDF 相关（附件与生成）按 2026-11-03 决策暂缓。
 
 ## 0. 现在的基线
 
 - 轻引擎：会话 / 流式 / 审批 / 提问 / 工具（bash、文件读写、docx/xlsx、生图），
   真机 PLR110 全链路通过；深链 `dshpalm://light?...` 可配置模型渠道；
 - IFileSystem：Node + expo-file-system 双后端，真实 `<filesDir>/workspace`；
-- 测试：`npm run verify` = typecheck + 78 条；
+- 测试：`npm run verify` = typecheck + 80 条；
 - 包体：JS 4.2MB / APK 14.7MB（含 docx/xlsx）；
 - 未完成：PDF、真生图渠道、WebView 联动、完整引擎按需、账号/互联/小组件、iOS。
 
 ## 1. P0 · M1 收尾（建议下一轮做完）
 
-### 1.1 PDF 生成（唯一硬缺口）
+### 1.1 PDF 生成（**暂缓**，2026-11-03）
+
+> 决策：PDF 附件与 PDF 生成都先不做，见 [28](28-engine-routing.md) 的 C13/C14。
+> 下面保留原方案，等重启这条线时再执行。
 
 - **现状**：`pdf-lib` 没接。标准字体（Helvetica 等）不含 CJK，中文会变空白/乱码。
 - **要做什么**：先拍板字体方案（见 §5 决策 D1），再实现
@@ -161,23 +166,26 @@
 | E6 | docs/18、20 有过时内容 | 新人上手踩坑 | 下一轮顺手更新 |
 | E7 | 无性能基准 | ttft/自检只有单次数据 | 加 `scripts/bench-light.ts`（多次取 P50/P90） |
 
-## 7. 建议顺序
+## 7. 建议顺序（按 28 的路由稿更新）
 
-1. **D1 拍板 → PDF 工具**（M1 收尾）；
-2. 真生图渠道 + 真模型 ttft/异常路径 + 文件面板（P0 剩余）；
-3. **插件徽章**（纯前端 + 已有矩阵，性价比最高）；
-4. 附件上传 → 多提供商（轻引擎完整性）；
-5. WebView 联动 + 完整引擎按需（M2 主线）；
-6. 账号/互联/系统入口（M3）。
+1. **Office 三件套 spike**（proot 补 Python）；同时做 **EngineManager + 预热/按需**；
+2. 附件收件管线（原生 → `uploads/` → 路径引用；PDF 只保存不解析）；
+3. 预路由 + 能力门 + Handoff v1；
+4. 真生图渠道、真模型 ttft、文件名边界、文件面板；
+5. 会话列表合并 + 配置共享；Office 路由接入；
+6. 插件徽章、WebView 联动、轻引擎附件/多提供商（M2）；
+7. 账号/互联/系统入口（M3）。
 
 ## 8. 交接：怎么跑
 
 ```bash
-# 分支
-git switch feat/m1-light-engine        # 7 个提交，M1 全部内容
+# 分支：从 develop 切，一个方面一个分支（见 docs/21）
+git switch develop
+git pull
+git switch -c feat/<task>
 
 # 验证
-npm run verify                         # typecheck + 78 条
+npm run verify                         # typecheck + 80 条
 
 # 真机（Android，无线 adb）
 node --import tsx scripts/mock-model-server.ts 8799            # 普通链路

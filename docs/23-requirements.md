@@ -211,4 +211,5 @@ relay 只见密文；文件永不离家。
 - `02-architecture.md`：分层与跨设备语义（本文沿用）。
 - `05-runtime.md` / `08-verification.md`：proot 的启动实测与"引擎常驻"决策（本文沿用）。
 - `17-handoff.md`：当前 Android 实现的现状与坑。
+- `28-engine-routing.md`：轻引擎/proot 的路由、加载、切换、附件与 Office 分流（2026-11-03 确认）。
 - `22-cross-platform-ts-engine.md`：方向（纯 TS + iOS）保留；"替换 proot""账号即通道""2.5.2 100% 合规"三处按本文修正。

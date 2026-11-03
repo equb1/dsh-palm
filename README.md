@@ -67,6 +67,7 @@
 | [docs/25-m1-spike-results.md](docs/25-m1-spike-results.md) | **M1 spike 实测**：just-bash 在 Hermes、WebView 官方前端 | 接轻引擎前 |
 | [docs/26-light-engine.md](docs/26-light-engine.md) | **轻引擎 MVP + IFileSystem 适配**：真实工作区、shell、文档、生图 | 动轻引擎 / 工作区适配时 |
 | [docs/27-remaining-work.md](docs/27-remaining-work.md) | **剩余工作清单**：M1 收尾 → M2/M3/M4、决策与工程债 | 排下一轮时 |
+| [docs/28-engine-routing.md](docs/28-engine-routing.md) | **引擎路由与加载策略**：何时用轻引擎/proot、切换交接、附件与 Office 分流 | 做引擎/附件/Office 前 |
 
 ## 跑起来
 
