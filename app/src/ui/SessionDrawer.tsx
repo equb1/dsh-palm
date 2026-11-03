@@ -3,7 +3,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 
 import type { SessionSummary } from '../protocol';
 import { store, useStore } from './useStore';
-import { Dot, IconButton } from './parts';
+import { IconButton } from './parts';
 import { EmptyState } from './components';
 import { colors, motion, radius, semantic, space, topInset } from './theme';
 
@@ -58,6 +58,7 @@ export function SessionDrawer({
   onClose: () => void;
 }): React.ReactElement | null {
   const state = useStore();
+  const account = state.account;
   const [mounted, setMounted] = React.useState(visible);
   const [q, setQ] = React.useState('');
   const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
@@ -70,7 +71,8 @@ export function SessionDrawer({
     Animated.timing(anim, {
       toValue: visible ? 1 : 0,
       duration: motion.duration.base,
-      useNativeDriver: false,
+      easing: motion.easing.standard,
+      useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished && !visible) setMounted(false);
     });
@@ -200,6 +202,28 @@ export function SessionDrawer({
           />
         </View>
 
+        <View style={styles.workspaceBlock}>
+          <Text style={styles.workspaceLabel}>工作区</Text>
+          {state.workspaces.length === 0 ? (
+            <Text style={styles.workspaceEmpty}>宿主没有报告工作区</Text>
+          ) : (
+            state.workspaces.map((ws) => (
+              <View key={ws.id} style={styles.workspaceRow}>
+                <Text style={styles.workspaceGlyph}>▢</Text>
+                <View style={styles.workspaceTexts}>
+                  <Text style={styles.workspaceName} numberOfLines={1}>
+                    {ws.name}
+                  </Text>
+                  <Text style={styles.workspacePath} numberOfLines={1}>
+                    {ws.root}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+          <Text style={styles.workspaceHint}>工作区限制可访问目录与可用锦囊</Text>
+        </View>
+
         <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
           {groups.length === 0 ? (
             <EmptyState
@@ -218,33 +242,26 @@ export function SessionDrawer({
           )}
         </ScrollView>
 
-        <View style={styles.footer}>
-          <View style={styles.hostInfo}>
-            <View style={styles.connRow}>
-              <Dot color={state.conn === 'connected' ? colors.ok : colors.danger} size={5} />
-              <Text style={styles.connText} numberOfLines={1}>
-                {state.caps?.host.name ?? '未连接'}
-              </Text>
-            </View>
-            <Text style={styles.connSub}>{state.caps?.host.engineVersion ?? ''}</Text>
+        <Pressable
+          onPress={() => {
+            onClose();
+            void store.openSettings();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="账号与设置"
+          style={({ pressed }) => [styles.account, pressed && styles.accountPressed]}
+        >
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>我</Text>
           </View>
-          {/* 引擎角标槽：1.2 接 EngineBadge，现在不写死内容 */}
-          <View style={styles.footerSlot} />
-          <Pressable
-            onPress={() => {
-              onClose();
-              void store.openSettings();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="模型与凭据"
-            style={({ pressed }) => [styles.settingsBtn, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.settingsText}>模型与凭据</Text>
-          </Pressable>
-          <Pressable onPress={() => store.disconnect()} accessibilityRole="button" accessibilityLabel="断开连接">
-            <Text style={styles.disconnect}>断开</Text>
-          </Pressable>
-        </View>
+          <View style={styles.accountInfo}>
+            <Text style={styles.accountName}>
+              {account?.status === 'credential-stored' ? '已登录' : '未登录'}
+            </Text>
+            <Text style={styles.accountSub}>账号与设置</Text>
+          </View>
+          <Text style={styles.accountGear}>⚙</Text>
+        </Pressable>
       </Animated.View>
     </View>
   );
@@ -258,7 +275,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(15,17,21,0.28)',
   },
   panel: {
     width: PANEL_WIDTH,
@@ -266,7 +283,7 @@ const styles = StyleSheet.create({
     backgroundColor: semantic.sidebar,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: colors.border,
-    paddingTop: topInset,
+    paddingTop: topInset + 8,
   },
   panelHeader: {
     flexDirection: 'row',
@@ -285,9 +302,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 36,
     borderRadius: radius.sm,
-    backgroundColor: colors.bgElevated,
+    backgroundColor: colors.glass,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: colors.border,
   },
   searchWrapFocused: {
     borderColor: colors.blue,
@@ -297,6 +314,24 @@ const styles = StyleSheet.create({
   search: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 20, paddingVertical: 0 },
   listScroll: { flex: 1 },
   list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
+  workspaceBlock: {
+    marginTop: space.md,
+    marginHorizontal: space.md,
+    padding: space.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    gap: 6,
+  },
+  workspaceLabel: { color: semantic.textCaption, fontSize: 12, lineHeight: 18, fontWeight: '500' },
+  workspaceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  workspaceGlyph: { color: colors.textFaint, fontSize: 14 },
+  workspaceTexts: { flex: 1 },
+  workspaceName: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  workspacePath: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
+  workspaceHint: { color: semantic.textCaption, fontSize: 11, lineHeight: 16 },
+  workspaceEmpty: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
   groupTitle: {
     color: semantic.textCaption,
     fontSize: 12,
@@ -347,22 +382,28 @@ const styles = StyleSheet.create({
   rowPreview: { color: colors.textFaint, fontSize: 12, lineHeight: 18, flex: 1 },
   tag: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.xs },
   tagText: { fontSize: 10, fontWeight: '500' },
-  footer: {
+  account: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: 10,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     backgroundColor: semantic.sidebar,
   },
-  hostInfo: { flex: 1 },
-  footerSlot: { flexDirection: 'row', alignItems: 'center' },
-  connRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  connText: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
-  connSub: { color: colors.textFaint, fontSize: 11, lineHeight: 16, marginTop: 1 },
-  settingsBtn: { paddingHorizontal: 8, paddingVertical: 4 },
-  settingsText: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
-  disconnect: { color: colors.danger, fontSize: 12, lineHeight: 18 },
+  accountPressed: { backgroundColor: semantic.sidebarHover },
+  avatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.glassStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
+  accountInfo: { flex: 1 },
+  accountName: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  accountSub: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
+  accountGear: { color: colors.textFaint, fontSize: 16 },
 });

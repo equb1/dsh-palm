@@ -515,7 +515,14 @@ const styles = StyleSheet.create({
 
   assistant: { gap: 8 },
   body: { color: colors.text, fontSize: 14, lineHeight: 22 },
-  inlineCode: { fontFamily: font.mono, fontSize: 13, color: colors.text, backgroundColor: semantic.codeInline },
+  inlineCode: {
+    fontFamily: font.mono,
+    fontSize: 13,
+    color: colors.text,
+    backgroundColor: semantic.codeInline,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
   turnMeta: { color: colors.textFaint, fontSize: 10.5 },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },

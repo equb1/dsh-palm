@@ -120,7 +120,7 @@ export default function App(): React.ReactElement {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webOuter}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="dark-content" />
         <View style={styles.webFrame}>
           {screen}
           {hostAvailable ? <LaunchOverlay state={state} /> : null}
@@ -131,7 +131,7 @@ export default function App(): React.ReactElement {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       {screen}
       {hostAvailable ? <LaunchOverlay state={state} /> : null}
     </View>

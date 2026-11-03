@@ -50,6 +50,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: radius.pill,
     alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: semantic.border,
   },
   chipMd: { paddingHorizontal: 12, paddingVertical: 5 },
   text: { fontSize: typography.meta.fontSize, fontWeight: '600', letterSpacing: 0.2 },

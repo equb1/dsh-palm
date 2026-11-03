@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   accent: { backgroundColor: semantic.accentSoft },
-  pressed: { backgroundColor: 'rgba(255,255,255,0.08)' },
+  pressed: { backgroundColor: 'rgba(0,0,0,0.06)' },
   disabled: { opacity: 0.4 },
   glyph: { color: semantic.textSecondary, fontSize: 16 },
   glyphAccent: { color: semantic.accent },

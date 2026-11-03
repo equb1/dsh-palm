@@ -115,6 +115,7 @@ export function HomeScreen(): React.ReactElement {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
+        <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
         <View style={styles.brandMark}>
           <Text style={styles.brandGlyph}>锦</Text>
         </View>
@@ -130,7 +131,6 @@ export function HomeScreen(): React.ReactElement {
             <Text style={styles.connText}>{connLabel}</Text>
           </Pressable>
         </View>
-        <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
       </View>
 
       {state.pendingShare?.imagePath ? (
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandGlyph: { color: colors.gold, fontSize: 18, fontWeight: '700' },
-  brand: { color: colors.text, fontSize: 19, fontWeight: '700', letterSpacing: 1.5 },
+  brand: { color: colors.text, fontSize: 16, fontWeight: '600', letterSpacing: 1.2 },
   shareHint: {
     color: colors.blue,
     fontSize: 11.5,
@@ -260,11 +260,11 @@ const styles = StyleSheet.create({
   scrollOuter: { paddingBottom: space.lg, flexGrow: 1 },
 
   greeting: { paddingHorizontal: space.xl, paddingTop: 64, paddingBottom: 40, alignItems: 'center', gap: 10 },
-  greetingTitle: { color: colors.text, fontSize: 26, fontWeight: '600', letterSpacing: 0.5 },
-  greetingSub: { color: colors.textFaint, fontSize: 13 },
+  greetingTitle: { color: colors.text, fontSize: 24, lineHeight: 32, fontWeight: '600', letterSpacing: 0.2 },
+  greetingSub: { color: colors.textFaint, fontSize: 13, lineHeight: 20 },
 
   list: { paddingHorizontal: space.lg, gap: 8 },
-  sectionTitle: { color: colors.textFaint, fontSize: 11.5, letterSpacing: 0.5, marginBottom: 2 },
+  sectionTitle: { color: colors.textFaint, fontSize: 12, lineHeight: 18, letterSpacing: 0.2, marginBottom: 2 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -285,10 +285,10 @@ const styles = StyleSheet.create({
   },
   glyphText: { color: colors.textDim, fontSize: 15, fontWeight: '600' },
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
-  rowTitle: { color: colors.text, fontSize: 15, fontWeight: '600', flex: 1 },
-  rowTime: { color: colors.textFaint, fontSize: 10.5 },
+  rowTitle: { color: colors.text, fontSize: 14, lineHeight: 22, fontWeight: '500', flex: 1 },
+  rowTime: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
   rowBottom: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rowPreview: { color: colors.textDim, fontSize: 12.5, flex: 1 },
+  rowPreview: { color: colors.textDim, fontSize: 13, lineHeight: 20, flex: 1 },
   tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill },
   tagText: { fontSize: 10, fontWeight: '600' },
 

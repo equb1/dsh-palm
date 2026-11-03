@@ -1,47 +1,51 @@
 import { Easing, Platform, StatusBar } from 'react-native';
 
 /**
- * 设计 token 对齐官方 DSH（packages/client/ui-theme 的 dark alias）：
- *  - 暖中性灰层次：base #151517 / layer1 #232324 / layer2 #2C2C2E / layer3 #353638
- *  - 文字：primary #F9FAFB / secondary #CFD3D6 / tertiary #ADB2B8 / caption #81858C
- *  - 交互：deepseek 蓝 #7AAAFF（发送、链接、焦点），实心按钮 #4176E6
- *  - 圆角：4 / 8 / 12 / 16 / 20 / 28；动效：100 / 200 / 300ms，cubic-bezier(.4,0,.2,1)
+ * 设计 token 对齐官方 DSH（packages/client/ui-theme）。
+ *
+ * 官方默认是浅色（白底），电脑深色模式才会走 dark alias；这里以 light 为默认：
+ *  - 背景 #FFFFFF，侧栏 #F9FAFB，卡片/输入区 #FFFFFF + 黑色 hairline
+ *  - 文字 #0F1115 / #61666B / #81858C / 说明 #ADB2B8
+ *  - 交互 deepseek 蓝 #4176E6，浅蓝底 #E4EDFD
+ *  - 圆角 4 / 8 / 12 / 16 / 20 / 28；正文 14/22，次级 13/20，说明 12/18
+ *  - 动效 100 / 200 / 300ms，cubic-bezier(.4,0,.2,1)
  */
 
 export const colors = {
-  /** 官方 --dsw-alias-bg-base（dark） */
-  bg: '#151517',
-  /** 官方 --dsw-alias-bg-layer-1，用于浮层/设置卡 */
-  bgElevated: '#232324',
-  /** 官方 --dsw-alias-bg-layer-2：卡片、气泡、输入区 */
-  glass: '#2C2C2E',
-  /** 官方 --dsw-alias-bg-layer-3 */
-  glassStrong: '#353638',
-  glassPressed: '#3A3A3C',
-  bubble: '#2C2C2E',
-  /** 官方 border-l1 / border-l2 */
-  border: 'rgba(255,255,255,0.06)',
-  borderStrong: 'rgba(255,255,255,0.12)',
+  /** 官方 --dsw-alias-bg-base（light） */
+  bg: '#FFFFFF',
+  /** 官方 --dsw-alias-bg-layer-1：浮层/设置卡 */
+  bgElevated: '#F9FAFB',
+  /** 官方 --dsw-specific-input-major：卡片、气泡、输入区 */
+  glass: '#FFFFFF',
+  /** 官方 --dsw-static-neutral-bluish-75：hover / 次级块 */
+  glassStrong: '#F1F3F5',
+  glassPressed: '#EBEEF2',
+  /** 官方 --dsw-specific-bubble（light）= deepseek-50 */
+  bubble: '#EDF3FE',
+  /** 官方 border-l1 / border-l2（light） */
+  border: 'rgba(0,0,0,0.06)',
+  borderStrong: 'rgba(0,0,0,0.10)',
 
-  text: '#F9FAFB',
-  textDim: '#CFD3D6',
-  textFaint: '#ADB2B8',
+  text: '#0F1115',
+  textDim: '#61666B',
+  textFaint: '#81858C',
 
-  /** deepseek-400：发送、链接、主交互 */
-  blue: '#7AAAFF',
-  /** deepseek-450：hover */
-  blueHover: '#5686FE',
-  blueSoft: 'rgba(122,170,255,0.16)',
-  /** 品牌字标改成官方的白色；保留 key 兼容旧代码 */
-  gold: '#F9FAFB',
-  goldSoft: 'rgba(249,250,251,0.08)',
+  /** deepseek-500：链接、发送、主交互 */
+  blue: '#4176E6',
+  /** deepseek-400：hover */
+  blueHover: '#7AAAFF',
+  blueSoft: '#E4EDFD',
+  /** 官方品牌字标是黑色；保留 key 兼容旧代码 */
+  gold: '#0F1115',
+  goldSoft: '#F1F3F5',
 
   ok: '#22C55E',
-  okSoft: 'rgba(34,197,94,0.14)',
+  okSoft: 'rgba(34,197,94,0.12)',
   warn: '#F59E0B',
-  warnSoft: 'rgba(245,158,11,0.14)',
-  danger: '#F25A5A',
-  dangerSoft: 'rgba(242,90,90,0.14)',
+  warnSoft: 'rgba(245,158,11,0.12)',
+  danger: '#EC1313',
+  dangerSoft: 'rgba(236,19,19,0.08)',
 } as const;
 
 export const font = {
@@ -80,15 +84,15 @@ export const typography = {
 } as const;
 
 /**
- * 语义色：组件只认语义名；以后做浅色主题只改这一层。
- * 取值来自官方 dark alias，不是随手调的近似色。
+ * 语义色：组件只认语义名；深色主题以后只换这一层。
+ * 取值来自官方 light alias。
  */
 export const semantic = {
   surface: colors.bg,
-  /** 官方侧栏 --dsw-specific-sidebar-fill */
-  sidebar: '#1B1B1C',
-  sidebarHover: '#2C2C2E',
-  sidebarActive: '#43454A',
+  /** 官方侧栏 --dsw-specific-sidebar-fill（light）= bluish-50 */
+  sidebar: '#F9FAFB',
+  sidebarHover: '#F1F3F5',
+  sidebarActive: '#EBEEF2',
   surfaceRaised: colors.bgElevated,
   card: colors.glass,
   cardStrong: colors.glassStrong,
@@ -98,7 +102,7 @@ export const semantic = {
   textPrimary: colors.text,
   textSecondary: colors.textDim,
   textTertiary: colors.textFaint,
-  textCaption: '#81858C',
+  textCaption: '#ADB2B8',
   accent: colors.blue,
   accentStrong: colors.blueHover,
   accentSoft: colors.blueSoft,
@@ -111,8 +115,8 @@ export const semantic = {
   danger: colors.danger,
   dangerSoft: colors.dangerSoft,
   link: colors.blue,
-  codeBlock: '#1B1B1C',
-  codeInline: '#292929',
+  codeBlock: '#F9FAFB',
+  codeInline: '#FAFAFA',
 } as const;
 
 /** 官方动效：100 / 200 / 300ms，标准曲线 cubic-bezier(.4,0,.2,1) */

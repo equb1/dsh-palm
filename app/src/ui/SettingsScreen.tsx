@@ -484,6 +484,14 @@ export function SettingsScreen(): React.ReactElement {
             <Text style={styles.hint}>
               锦囊决定 agent 的工作方式。真 dsh 宿主暂不提供工具白名单，别把这里当安全边界。
             </Text>
+            <View style={styles.actions}>
+              <Btn
+                label="断开当前连接"
+                kind="ghost"
+                onPress={() => store.disconnect()}
+                style={{ flex: 1 }}
+              />
+            </View>
           </View>
 
           <Text style={styles.footnote}>

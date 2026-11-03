@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: radius.pill,
   },
-  pillGlass: { backgroundColor: colors.glass },
+  pillGlass: { backgroundColor: colors.glassStrong },
   btn: {
     height: 40,
     paddingHorizontal: space.lg,

@@ -19,15 +19,15 @@ import { highlight, type SyntaxKind } from './syntax';
 
 const SYNTAX_STYLES: Record<SyntaxKind, { color?: string; fontStyle?: 'italic' }> = {
   plain: {},
-  comment: { color: '#6B7385', fontStyle: 'italic' },
-  string: { color: '#A5D6A7' },
-  keyword: { color: '#C792EA' },
-  literal: { color: '#FFCB6B' },
-  number: { color: '#F2C97D' },
-  function: { color: '#82AAFF' },
-  operator: { color: '#89DDFF' },
-  property: { color: '#FFCB6B' },
-  tag: { color: '#F07178' },
+  comment: { color: '#6E7781', fontStyle: 'italic' },
+  string: { color: '#0A7D32' },
+  keyword: { color: '#8250DF' },
+  literal: { color: '#0550AE' },
+  number: { color: '#0550AE' },
+  function: { color: '#0550AE' },
+  operator: { color: '#57606A' },
+  property: { color: '#0550AE' },
+  tag: { color: '#116329' },
 };
 
 /* ------------------------------------------------------------------ *
@@ -787,6 +787,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text,
     backgroundColor: semantic.codeInline,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     borderRadius: 4,
     paddingHorizontal: 5,
   },
@@ -850,7 +852,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   codeBlockHeader: {
-    backgroundColor: colors.glass,
+    backgroundColor: colors.glassStrong,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -870,7 +872,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radius.sm,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: colors.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
   },
   codeCopyBtnCopied: {
     backgroundColor: colors.okSoft,
@@ -892,7 +896,7 @@ const styles = StyleSheet.create({
     fontFamily: font.mono,
     fontSize: 11.5,
     lineHeight: 17,
-    color: '#D8DEE9',
+    color: '#1F2328',
   },
   /* 图片 */
   imageCard: {
@@ -900,7 +904,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: colors.bgElevated,
     overflow: 'hidden',
   },
   image: {
@@ -912,7 +916,7 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    backgroundColor: colors.bgElevated,
   },
   imageFallbackIcon: {
     fontSize: 28,
@@ -933,7 +937,7 @@ const styles = StyleSheet.create({
   imageCaptionWrap: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: colors.bgElevated,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
