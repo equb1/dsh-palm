@@ -480,11 +480,8 @@ export class Store {
       // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
       const { approvals } = await this.client.request('approvals.list', { sessionId: id });
       const map: Record<string, Approval> = {};
-      // 只在真的等审批时挂卡片；run 已经结束的“历史卡”会让用户点不动
-      if (session.status === 'waiting_approval') {
-        for (const a of approvals) {
-          if (a.sessionId === id) map[a.id] = a;
-        }
+      for (const a of approvals) {
+        if (a.sessionId === id) map[a.id] = a;
       }
       this.patch({ approvals: map });
     } catch (err) {
@@ -986,7 +983,8 @@ export class Store {
 
   async resolveApproval(approvalId: string, decision: ApprovalDecision): Promise<void> {
     if (!this.client) return;
-    if (this.state.detail?.status !== 'waiting_approval') {
+    const sessionStatus = this.state.detail?.status;
+    if (sessionStatus && sessionStatus !== 'running' && sessionStatus !== 'waiting_approval') {
       const next = { ...this.state.approvals };
       delete next[approvalId];
       this.patch({ approvals: next });
@@ -1014,7 +1012,8 @@ export class Store {
   async answerQuestion(callId: string, questionId: string, selected: string[], custom?: string): Promise<void> {
     const { currentId } = this.state;
     if (!this.client || !currentId) return;
-    if (this.state.detail?.status !== 'waiting_approval') {
+    const sessionStatus = this.state.detail?.status;
+    if (sessionStatus && sessionStatus !== 'running' && sessionStatus !== 'waiting_approval') {
       const next = { ...this.state.approvals };
       delete next[callId];
       this.patch({ approvals: next });
