@@ -191,3 +191,21 @@ CNB 的 OpenAPI 没有"改默认分支"的接口（分支只有查询和删除�
 | 发消息一直"生成中" | 看引擎日志；常见是镜像缺 `xdg-user-dir` 或 Android 禁止硬链接（修复已内置，见 `docs/17-handoff.md`） |
 | 绑 `-b /root/work` 后引擎起不来 | 客体里缺 `/root/work` 挂载点；本版 `ensureLayout()` 每次启动都会补，别用旧 APK 配新 rootfs |
 | 把 APK 装到真机后引擎起不来 | 多半是没跑 `bash scripts/fetch-proot.sh`：`*.so` 被 `.gitignore` 排除，jniLibs 里必须自己补 |
+
+### 加了原生依赖后，真机启动红屏 `RNCWebViewModule could not be found`
+
+- 现象：JS 报 `Invariant Violation: TurboModuleRegistry.getEnforcing('RNCWebViewModule')`，
+  但 `app/package.json` 里明明有 `react-native-webview`。
+- 原因：`app/node_modules` 还是 pnpm 的 `.pnpm` 结构，Expo 自动链接读到的
+  `autolinking.json` 指向旧路径，新模块没进 `PackageList.java`。
+- 处理：
+
+  ```bash
+  rm -rf app/node_modules
+  rm -rf app/android/build/generated/autolinking app/android/app/build/generated/autolinking
+  npm --prefix app install
+  cd app/android && sh gradlew :app:assembleDebug
+  ```
+
+- 验证：`app/android/app/build/generated/autolinking/src/main/java/com/facebook/react/PackageList.java`
+  里能看到 `RNCWebViewPackage`，再装包就不会红屏。
