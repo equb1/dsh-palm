@@ -443,7 +443,12 @@ export class Store {
       // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
       const { approvals } = await this.client.request('approvals.list', { sessionId: id });
       const map: Record<string, Approval> = {};
-      for (const a of approvals) map[a.id] = a;
+      // 只在真的等审批时挂卡片；run 已经结束的“历史卡”会让用户点不动
+      if (session.status === 'waiting_approval') {
+        for (const a of approvals) {
+          if (a.sessionId === id) map[a.id] = a;
+        }
+      }
       this.patch({ approvals: map });
     } catch (err) {
       this.fail(err);
@@ -944,12 +949,23 @@ export class Store {
 
   async resolveApproval(approvalId: string, decision: ApprovalDecision): Promise<void> {
     if (!this.client) return;
+    if (this.state.detail?.status !== 'waiting_approval') {
+      const next = { ...this.state.approvals };
+      delete next[approvalId];
+      this.patch({ approvals: next });
+      this.setError('这一轮已经结束，审批卡已失效；重新发一条消息继续。');
+      return;
+    }
     try {
       await this.client.request('approvals.resolve', { approvalId, decision });
       const next = { ...this.state.approvals };
       delete next[approvalId];
       this.patch({ approvals: next });
     } catch (err) {
+      // 卡片先撤掉，别让用户对着一个已经失效的审批反复点
+      const next = { ...this.state.approvals };
+      delete next[approvalId];
+      this.patch({ approvals: next });
       this.fail(err);
     }
   }
@@ -961,6 +977,13 @@ export class Store {
   async answerQuestion(callId: string, questionId: string, selected: string[], custom?: string): Promise<void> {
     const { currentId } = this.state;
     if (!this.client || !currentId) return;
+    if (this.state.detail?.status !== 'waiting_approval') {
+      const next = { ...this.state.approvals };
+      delete next[callId];
+      this.patch({ approvals: next });
+      this.setError('这一轮已经结束，选择卡已失效；重新发一条消息继续。');
+      return;
+    }
     try {
       await this.client.request('questions.answer', {
         sessionId: currentId,
@@ -971,6 +994,9 @@ export class Store {
       delete next[callId];
       this.patch({ approvals: next });
     } catch (err) {
+      const next = { ...this.state.approvals };
+      delete next[callId];
+      this.patch({ approvals: next });
       this.fail(err);
     }
   }
@@ -1189,14 +1215,21 @@ export class Store {
             blocks: [block],
           });
         }
-        this.patch({ approvals: nextApprovals, detail: { ...d, turns } });
+        this.patch({
+          approvals: nextApprovals,
+          detail: { ...d, turns, status: 'waiting_approval' as const },
+        });
         return;
       }
 
       case 'approval.resolved': {
         const next = { ...this.state.approvals };
         delete next[data.approvalId as string];
-        this.patch({ approvals: next });
+        const d = this.state.detail;
+        this.patch({
+          approvals: next,
+          ...(d && Object.keys(next).length === 0 ? { detail: { ...d, status: 'running' as const } } : {}),
+        });
         return;
       }
 
@@ -1225,7 +1258,13 @@ export class Store {
       case 'run.finished': {
         const d = this.state.detail;
         this.notifyRunFinished(data as { sessionId: string; reason: string });
+        const runId = (data as { runId?: string }).runId;
+        const approvals = { ...this.state.approvals };
+        for (const [id, a] of Object.entries(approvals)) {
+          if (!runId || a.runId === runId) delete approvals[id];
+        }
         this.patch({
+          approvals,
           busy: false,
           ...(d && data.sessionId === currentId ? { detail: { ...d, status: 'idle' as const } } : {}),
         });

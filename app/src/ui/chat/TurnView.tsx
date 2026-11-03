@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clipboard, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Clipboard, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 import type { Approval, Block, Turn } from '../../protocol';
 import { MarkdownView } from '../MarkdownView';
@@ -10,6 +10,11 @@ function ThinkingRow({ text, onToggle }: { text: string; onToggle?: () => void }
   const [userOpen, setUserOpen] = React.useState<boolean | null>(null);
   const open = userOpen ?? false;
   const tail = text.slice(-120).replace(/\s+/g, ' ').trim();
+  // 长任务（20+ 分钟）的思考可能有几十万字，整段 Markdown 渲染会把 JS 线程卡死；
+  // 展开时只渲染最后一段，够看思路，又不会 OOM。
+  const MAX_OPEN = 12000;
+  const shown = text.length > MAX_OPEN ? text.slice(-MAX_OPEN) : text;
+  const truncated = text.length > MAX_OPEN;
 
   const handleToggle = (): void => {
     onToggle?.();
@@ -47,7 +52,12 @@ function ThinkingRow({ text, onToggle }: { text: string; onToggle?: () => void }
         <View style={{ flex: 1 }} />
         <Text style={styles.chevron}>▴</Text>
       </View>
-      <MarkdownView text={text} />
+      <ScrollView style={styles.thinkingScroll} nestedScrollEnabled>
+        <MarkdownView text={shown} />
+        {truncated ? (
+          <Text style={styles.thinkingMore}>思考太长，这里只显示最后 {MAX_OPEN} 字。</Text>
+        ) : null}
+      </ScrollView>
     </Pressable>
   );
 }
@@ -198,4 +208,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 7,
   },
+  thinkingScroll: { maxHeight: 360 },
+  thinkingMore: { color: colors.textFaint, fontSize: 11, lineHeight: 16, paddingTop: 6 },
 });
