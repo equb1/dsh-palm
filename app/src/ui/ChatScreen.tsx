@@ -462,6 +462,11 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           // 真宿主没有会话内换预设的接口（capabilities.actions 里没有就不显示）
           showPresets={state.caps?.actions.includes('switch_preset') ?? false}
           onPickPreset={(id) => void store.setPreset(id)}
+          permissions={state.permissions}
+          activePermission={session.permission ?? state.defaultPermission}
+          onPickPermission={(value) => void store.setPermission(value)}
+          modelLabel={shortModelName ?? '模型'}
+          onOpenModel={() => store.openModelSheet()}
           attachments={state.pendingAttachments}
           onRemoveAttachment={(id) => store.removeAttachment(id)}
           onPickAttachment={(kind) => {

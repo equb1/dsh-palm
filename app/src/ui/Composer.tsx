@@ -1,8 +1,9 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { AttachmentKind } from '../lib/pickImage';
-import type { Preset } from '../protocol';
+import type { PermissionOption, Preset } from '../protocol';
+import { PickerSheet } from './components';
 import { colors, radius, space } from './theme';
 
 export interface ComposerAttachment {
@@ -26,8 +27,23 @@ const ATTACH_TYPES: Array<{ kind: AttachmentKind; label: string; sub: string }> 
   { kind: 'audio', label: '音频', sub: '录音/MP3/语音' },
 ];
 
+const PERMISSION_SHORT: Record<string, string> = {
+  'read-only': '只读',
+  'workspace-write': '可写',
+  'danger-full-access': '完全',
+  auto: '自动',
+  custom: '自定义',
+};
+
+function permissionShort(option?: PermissionOption): string {
+  if (!option) return '权限';
+  return PERMISSION_SHORT[option.value] ?? option.name;
+}
+
 /**
- * 输入区：上排是附件预览/类型菜单，中排是左 `+` + 输入框 + 右发送键，下排是一排预设胶囊。
+ * 输入区对齐官方 DSH：
+ * 上排是输入框；下排是 `+`、工作权限、模型、锦囊 + 发送。
+ * 附件预览/类型菜单始终在输入框上方。
  */
 export function Composer({
   draft,
@@ -40,6 +56,11 @@ export function Composer({
   activePresetId,
   onPickPreset,
   showPresets = true,
+  permissions = [],
+  activePermission,
+  onPickPermission,
+  modelLabel = '模型',
+  onOpenModel,
   canStop = true,
   canSteer = true,
   attachments = [],
@@ -56,8 +77,13 @@ export function Composer({
   presets: Preset[];
   activePresetId: string | null;
   onPickPreset: (id: string) => void;
-  /** 宿主不支持会话内换预设时，聊天页把这一排收起来 */
+  /** 宿主不支持会话内换预设时，聊天页把锦囊收起来 */
   showPresets?: boolean;
+  permissions?: PermissionOption[];
+  activePermission?: string | null;
+  onPickPermission?: (value: string) => void;
+  modelLabel?: string;
+  onOpenModel?: () => void;
   /** 宿主能力：能不能停、能不能插话 */
   canStop?: boolean;
   canSteer?: boolean;
@@ -74,24 +100,21 @@ export function Composer({
   const [contentHeight, setContentHeight] = React.useState(32);
   const [attachMenuOpen, setAttachMenuOpen] = React.useState(false);
   const [presetMenuOpen, setPresetMenuOpen] = React.useState(false);
-  const activePreset = presets.find((p) => p.id === activePresetId) ?? presets[0];
+  const [permissionMenuOpen, setPermissionMenuOpen] = React.useState(false);
 
-  // 当内容被清空（发送后），高度自动重置为单行初始高度 32（与左右 32x32 按钮严格等高）
+  const activePreset = presets.find((p) => p.id === activePresetId) ?? presets[0];
+  const activePermissionOption =
+    permissions.find((p) => p.value === activePermission) ?? permissions[0];
+
   React.useEffect(() => {
-    if (!draft) {
-      setContentHeight(32);
-    }
+    if (!draft) setContentHeight(32);
   }, [draft]);
 
   const clampedHeight = Math.max(32, Math.min(120, contentHeight));
-  const isSingleLine = clampedHeight <= 38;
 
   const handlePressPlus = () => {
-    if (onPickAttachment) {
-      setAttachMenuOpen((v) => !v);
-    } else if (onAttach) {
-      onAttach();
-    }
+    if (onPickAttachment) setAttachMenuOpen((v) => !v);
+    else if (onAttach) onAttach();
   };
 
   return (
@@ -150,35 +173,85 @@ export function Composer({
           </View>
         ) : null}
 
-        <View style={[styles.inputRow, isSingleLine ? styles.inputRowCenter : styles.inputRowBottom]}>
+        <TextInput
+          style={[styles.input, { height: clampedHeight }]}
+          value={draft}
+          onChangeText={onChangeDraft}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textFaint}
+          multiline
+          textAlignVertical="center"
+          scrollEnabled={contentHeight >= 120}
+          onContentSizeChange={(e) => {
+            const h = e.nativeEvent.contentSize.height;
+            if (h > 0) setContentHeight(h);
+          }}
+          accessibilityLabel="输入框"
+        />
+
+        <View style={styles.toolbar}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="添加附件"
             onPress={handlePressPlus}
             style={({ pressed }) => [
-              styles.attachBtn,
-              attachMenuOpen && styles.attachBtnActive,
+              styles.toolBtn,
+              attachMenuOpen && styles.toolBtnActive,
               pressed && { opacity: 0.65 },
             ]}
           >
             <View style={[styles.plusBarH, attachMenuOpen && styles.plusBarActive]} />
             <View style={[styles.plusBarV, attachMenuOpen && styles.plusBarActive]} />
           </Pressable>
-          <TextInput
-            style={[styles.input, { height: clampedHeight }]}
-            value={draft}
-            onChangeText={onChangeDraft}
-            placeholder={placeholder}
-            placeholderTextColor={colors.textFaint}
-            multiline
-            textAlignVertical="center"
-            scrollEnabled={contentHeight >= 120}
-            onContentSizeChange={(e) => {
-              const h = e.nativeEvent.contentSize.height;
-              if (h > 0) setContentHeight(h);
-            }}
-            accessibilityLabel="输入框"
-          />
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.toolScroll}
+            contentContainerStyle={styles.toolScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {permissions.length > 0 && onPickPermission ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`工作权限：${activePermissionOption?.name ?? '默认'}`}
+                onPress={() => setPermissionMenuOpen(true)}
+                style={({ pressed }) => [styles.pill, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.pillText}>{permissionShort(activePermissionOption)}</Text>
+                <Text style={styles.chevron}>▾</Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`模型：${modelLabel}`}
+              onPress={onOpenModel}
+              disabled={!onOpenModel}
+              style={({ pressed }) => [styles.pill, styles.modelPill, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.pillText} numberOfLines={1}>
+                {modelLabel}
+              </Text>
+              <Text style={styles.chevron}>▾</Text>
+            </Pressable>
+
+            {showPresets && presets.length > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`当前锦囊：${activePreset?.name ?? '标准'}`}
+                onPress={() => setPresetMenuOpen(true)}
+                style={({ pressed }) => [styles.pill, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.pillGlyph}>{activePreset?.glyph ?? '·'}</Text>
+                <Text style={styles.pillText} numberOfLines={1}>
+                  {activePreset?.name ?? '标准'}
+                </Text>
+                <Text style={styles.chevron}>▾</Text>
+              </Pressable>
+            ) : null}
+          </ScrollView>
+
           <Pressable
             onPress={showStop ? onStop : onSend}
             disabled={!showStop && !canSend}
@@ -193,60 +266,24 @@ export function Composer({
             <Text style={[styles.sendGlyph, showStop && { color: colors.text }]}>{showStop ? '■' : '↑'}</Text>
           </Pressable>
         </View>
-
-        {showPresets && presets.length > 0 ? (
-          <>
-            <View style={styles.toolbar}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`当前锦囊：${activePreset?.name ?? '标准'}`}
-                onPress={() => setPresetMenuOpen(true)}
-                style={({ pressed }) => [styles.presetBtn, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={styles.presetGlyph}>{activePreset?.glyph ?? '·'}</Text>
-                <Text style={styles.presetName}>{activePreset?.name ?? '标准'}</Text>
-                <Text style={styles.presetChevron}>▾</Text>
-              </Pressable>
-            </View>
-
-            <Modal
-              visible={presetMenuOpen}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setPresetMenuOpen(false)}
-            >
-              <Pressable style={styles.sheetBackdrop} onPress={() => setPresetMenuOpen(false)}>
-                <Pressable style={styles.sheet} onPress={() => undefined}>
-                  <Text style={styles.sheetTitle}>选择锦囊</Text>
-                  {presets.map((p) => {
-                    const active = p.id === activePresetId;
-                    return (
-                      <Pressable
-                        key={p.id}
-                        accessibilityRole="button"
-                        accessibilityLabel={p.name}
-                        onPress={() => {
-                          onPickPreset(p.id);
-                          setPresetMenuOpen(false);
-                        }}
-                        style={({ pressed }) => [
-                          styles.sheetItem,
-                          active && styles.sheetItemActive,
-                          pressed && { opacity: 0.75 },
-                        ]}
-                      >
-                        <Text style={styles.sheetGlyph}>{p.glyph}</Text>
-                        <Text style={[styles.sheetName, active && styles.sheetNameActive]}>{p.name}</Text>
-                        {active ? <Text style={styles.sheetCheck}>✓</Text> : null}
-                      </Pressable>
-                    );
-                  })}
-                </Pressable>
-              </Pressable>
-            </Modal>
-          </>
-        ) : null}
       </View>
+
+      <PickerSheet
+        visible={presetMenuOpen}
+        title="选择锦囊"
+        options={presets.map((p) => ({ id: p.id, label: p.name, glyph: p.glyph }))}
+        activeId={activePresetId}
+        onSelect={onPickPreset}
+        onClose={() => setPresetMenuOpen(false)}
+      />
+      <PickerSheet
+        visible={permissionMenuOpen}
+        title="工作权限"
+        options={permissions.map((p) => ({ id: p.value, label: p.name }))}
+        activeId={activePermission}
+        onSelect={(value) => onPickPermission?.(value)}
+        onClose={() => setPermissionMenuOpen(false)}
+      />
     </View>
   );
 }
@@ -265,7 +302,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingTop: 8,
     paddingBottom: 8,
-    gap: 8,
+    gap: 6,
   },
   typeMenu: {
     flexDirection: 'row',
@@ -304,39 +341,7 @@ const styles = StyleSheet.create({
   typeTextCol: { flex: 1 },
   typeLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },
   typeSub: { color: colors.textFaint, fontSize: 10.5 },
-  inputRow: { flexDirection: 'row', gap: 8 },
-  inputRowCenter: { alignItems: 'center' },
-  inputRowBottom: { alignItems: 'flex-end' },
-  attachBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.glassStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attachBtnActive: {
-    backgroundColor: colors.blueSoft,
-  },
-  plusBarH: {
-    position: 'absolute',
-    width: 14,
-    height: 1.8,
-    borderRadius: 1,
-    backgroundColor: colors.textDim,
-  },
-  plusBarV: {
-    position: 'absolute',
-    width: 1.8,
-    height: 14,
-    borderRadius: 1,
-    backgroundColor: colors.textDim,
-  },
-  plusBarActive: {
-    backgroundColor: colors.blue,
-  },
   input: {
-    flex: 1,
     minHeight: 32,
     maxHeight: 120,
     paddingVertical: 4,
@@ -346,10 +351,51 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     includeFontPadding: false,
   },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  toolScroll: { flex: 1 },
+  toolScrollContent: { gap: 6, paddingRight: 4 },
+  toolBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.glassStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toolBtnActive: { backgroundColor: colors.blueSoft },
+  plusBarH: {
+    position: 'absolute',
+    width: 13,
+    height: 1.8,
+    borderRadius: 1,
+    backgroundColor: colors.textDim,
+  },
+  plusBarV: {
+    position: 'absolute',
+    width: 1.8,
+    height: 13,
+    borderRadius: 1,
+    backgroundColor: colors.textDim,
+  },
+  plusBarActive: { backgroundColor: colors.blue },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 28,
+    maxWidth: 132,
+    paddingHorizontal: 9,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glassStrong,
+  },
+  modelPill: { maxWidth: 112 },
+  pillGlyph: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
+  pillText: { color: colors.text, fontSize: 12, flexShrink: 1 },
+  chevron: { color: colors.textFaint, fontSize: 9 },
   sendBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: colors.blue,
     alignItems: 'center',
     justifyContent: 'center',
@@ -382,41 +428,4 @@ const styles = StyleSheet.create({
   attachBadgeText: { color: colors.blue, fontSize: 10, fontWeight: '700', includeFontPadding: false },
   attachChipText: { color: colors.textDim, fontSize: 12, flexShrink: 1 },
   attachChipClose: { color: colors.textFaint, fontSize: 14, paddingLeft: 2 },
-  toolbar: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  presetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 28,
-    paddingHorizontal: 10,
-    borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
-  },
-  presetGlyph: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
-  presetName: { color: colors.text, fontSize: 12, fontWeight: '500' },
-  presetChevron: { color: colors.textFaint, fontSize: 10 },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(15,17,21,0.28)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.xl,
-    gap: 4,
-  },
-  sheetTitle: { color: colors.textFaint, fontSize: 12, lineHeight: 18, marginBottom: 4 },
-  sheetItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: radius.sm,
-  },
-  sheetItemActive: { backgroundColor: colors.blueSoft },
-  sheetGlyph: { color: colors.textDim, fontSize: 13, width: 18 },
-  sheetName: { flex: 1, color: colors.text, fontSize: 14, lineHeight: 22 },
-  sheetNameActive: { color: colors.blue, fontWeight: '600' },
-  sheetCheck: { color: colors.blue, fontSize: 14, fontWeight: '700' },
 });

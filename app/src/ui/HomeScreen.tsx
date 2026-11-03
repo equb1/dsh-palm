@@ -71,6 +71,12 @@ export function HomeScreen(): React.ReactElement {
 
   const presets = state.caps?.presets ?? [];
   const preset = presets.find((p) => p.id === state.draftPresetId) ?? presets[0];
+  const activeModel = state.defaultModel;
+  const modelLabel = (
+    state.models.find((m) => m.provider === activeModel?.provider && m.id === activeModel?.model)?.name ??
+    activeModel?.model ??
+    '模型'
+  ).replace(/^DeepSeek-?/i, '');
   const hasText = draft.trim().length > 0;
 
   // 首装解压 + 引擎冷启动有 10 多秒，这段时间首页别只显示"未连接"
@@ -220,6 +226,11 @@ export function HomeScreen(): React.ReactElement {
           presets={presets}
           activePresetId={state.draftPresetId}
           onPickPreset={(id) => store.setDraftPreset(id)}
+          permissions={state.permissions}
+          activePermission={state.defaultPermission}
+          onPickPermission={(value) => void store.setPermission(value)}
+          modelLabel={modelLabel}
+          onOpenModel={() => store.openModelSheet()}
           attachments={state.pendingAttachments}
           onPickAttachment={handlePickAttachment}
           onRemoveAttachment={(id) => store.removeAttachment(id)}

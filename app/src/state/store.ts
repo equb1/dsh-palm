@@ -691,6 +691,8 @@ export class Store {
       return;
     }
     const presetId = this.state.draftPresetId ?? this.state.caps?.presets[0]?.id ?? 'standard';
+    const draftModel = this.state.defaultModel;
+    const draftPermission = this.state.defaultPermission;
     const rawTitle = trimmed || this.state.pendingAttachments[0]?.name || '新会话';
     this.patch({ busy: true, error: null });
     try {
@@ -699,6 +701,9 @@ export class Store {
         title: rawTitle.length > 18 ? `${rawTitle.slice(0, 18)}…` : rawTitle,
       });
       await this.openSession(session.id);
+      // 首页选的模型/权限带进新会话
+      if (draftPermission) await this.setPermission(draftPermission);
+      if (draftModel) await this.setModel(draftModel.provider, draftModel.model, draftModel.reasoningEffort);
       if (this.state.pendingShare?.imagePath) await this.attachSharedImage();
       await this.send(trimmed);
     } catch (err) {
@@ -896,10 +901,14 @@ export class Store {
     }
   }
 
-  /** 切当前会话的权限（沙箱 + 审批策略一起换） */
+  /** 切当前会话的权限（沙箱 + 审批策略一起换）；还没开会话时记成默认 */
   async setPermission(preset: string): Promise<void> {
     const { currentId } = this.state;
-    if (!this.client || !currentId) return;
+    if (!this.client) return;
+    if (!currentId) {
+      this.patch({ defaultPermission: preset });
+      return;
+    }
     try {
       const { session } = await this.client.request('sessions.setPermission', { sessionId: currentId, preset });
       this.patch({ detail: session });
@@ -908,10 +917,17 @@ export class Store {
     }
   }
 
-  /** 切当前会话的模型（写进会话事件，换设备/重开都一样） */
+  /** 切当前会话的模型；还没开会话时记成默认，发第一条消息时带进新会话 */
   async setModel(provider: string, model: string, reasoningEffort?: string): Promise<void> {
     const { currentId } = this.state;
-    if (!this.client || !currentId) return;
+    if (!this.client) return;
+    if (!currentId) {
+      this.patch({
+        defaultModel: { provider, model, ...(reasoningEffort ? { reasoningEffort } : {}) },
+        modelSheetOpen: false,
+      });
+      return;
+    }
     try {
       const { session } = await this.client.request('sessions.setModel', {
         sessionId: currentId,

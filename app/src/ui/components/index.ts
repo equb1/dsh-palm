@@ -15,3 +15,6 @@ export type { EmptyStateProps } from './EmptyState';
 
 export { SectionHeader } from './SectionHeader';
 export type { SectionHeaderProps } from './SectionHeader';
+
+export { PickerSheet } from './PickerSheet';
+export type { PickerOption, PickerSheetProps } from './PickerSheet';
