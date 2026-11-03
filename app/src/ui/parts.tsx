@@ -3,39 +3,7 @@ import { Pressable, StyleSheet, Text, View, type TextStyle, type ViewStyle } fro
 
 import { colors, font, radius, space } from './theme';
 
-/* ------------------------------------------------------------------ *
- * 圆形图标按钮：头部的 ☰ / ✎ / ⋯ 都用它
- * ------------------------------------------------------------------ */
-
-export function IconButton({
-  glyph,
-  onPress,
-  label,
-  size = 36,
-  tone = 'default',
-}: {
-  glyph: string;
-  onPress: () => void;
-  label: string;
-  size?: number;
-  tone?: 'default' | 'accent';
-}): React.ReactElement {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.iconBtn,
-        { width: size, height: size, borderRadius: size / 2 },
-        tone === 'accent' && { backgroundColor: colors.blueSoft },
-        pressed && { backgroundColor: colors.glassPressed },
-      ]}
-    >
-      <Text style={[styles.iconGlyph, tone === 'accent' && { color: colors.blue }]}>{glyph}</Text>
-    </Pressable>
-  );
-}
+export { Card, Chip, IconButton } from './components';
 
 /* ------------------------------------------------------------------ *
  * 胶囊：标题条、状态、模型选择
@@ -64,22 +32,6 @@ export function Pill({
     >
       {body}
     </Pressable>
-  );
-}
-
-export function Chip({
-  label,
-  color = colors.textDim,
-  bg = colors.glass,
-}: {
-  label: string;
-  color?: string;
-  bg?: string;
-}): React.ReactElement {
-  return (
-    <View style={[styles.chip, { backgroundColor: bg }]}>
-      <Text style={[styles.chipText, { color }]}>{label}</Text>
-    </View>
   );
 }
 
@@ -125,16 +77,6 @@ export function Btn({
   );
 }
 
-export function Card({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: ViewStyle;
-}): React.ReactElement {
-  return <View style={[styles.card, style]}>{children}</View>;
-}
-
 export function Mono({ children, style }: { children: React.ReactNode; style?: TextStyle }): React.ReactElement {
   return <Text style={[styles.mono, style]}>{children}</Text>;
 }
@@ -142,8 +84,6 @@ export function Mono({ children, style }: { children: React.ReactNode; style?: T
 /* ------------------------------------------------------------------ */
 
 const styles = StyleSheet.create({
-  iconBtn: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.glass },
-  iconGlyph: { color: colors.textDim, fontSize: 16 },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -153,8 +93,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   pillGlass: { backgroundColor: colors.glass },
-  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, alignSelf: 'flex-start' },
-  chipText: { fontSize: 11, fontWeight: '600', letterSpacing: 0.2 },
   btn: {
     height: 42,
     paddingHorizontal: space.lg,
@@ -163,12 +101,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnLabel: { fontSize: 15, fontWeight: '600' },
-  card: {
-    backgroundColor: colors.glass,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    padding: space.md,
-  },
   mono: { fontFamily: font.mono, fontSize: 12, color: colors.textDim },
 });
