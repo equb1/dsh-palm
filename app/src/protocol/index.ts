@@ -128,6 +128,8 @@ export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'error';
 
 export interface Turn {
   id: string;
+  /** 这一轮属于哪次 run；同一 run 的快照/实时回合才能合并 */
+  runId?: string;
   role: 'user' | 'assistant';
   createdAt: number;
   blocks: Block[];

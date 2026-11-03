@@ -605,6 +605,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
           liveRunId = crypto.randomUUID();
           liveTurn = {
             id: 'turn-' + liveRunId,
+            runId: liveRunId,
             role: 'assistant',
             createdAt: Date.now(),
             blocks: errMsg ? [{ kind: 'text', id: liveRunId + '-err', text: `错误：${errMsg}` }] : [],
@@ -655,6 +656,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       liveRunId = String(frame.attemptId ?? crypto.randomUUID());
       liveTurn = {
         id: 'turn-' + liveRunId,
+        runId: liveRunId,
         role: 'assistant',
         createdAt: Date.now(),
         blocks: [],

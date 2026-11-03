@@ -187,6 +187,7 @@ function mergeTurn(prev: Turn, next: Turn): Turn {
   }
   return {
     ...prev,
+    runId: prev.runId ?? next.runId,
     blocks,
     status: prev.status === 'streaming' || next.status === 'streaming' ? 'streaming' : next.status,
     meta: prev.meta ?? next.meta,
@@ -195,20 +196,48 @@ function mergeTurn(prev: Turn, next: Turn): Turn {
   };
 }
 
-/** 宿主重放/重进会话时同一轮会出现两份 turn；连续的 assistant 合并成一份 */
+/** 只合并同一个 run 的快照/实时回合；跨 run 的连续 assistant 绝不合并 */
 function mergeNearbyTurns(turns: Turn[], incoming: Turn): Turn[] {
   if (incoming.role === 'user') {
     if (turns.some((t) => t.id === incoming.id)) return turns;
     return [...turns, incoming];
   }
   const last = turns[turns.length - 1];
-  // 一轮 run 只该有一个 assistant 回合；连续出现的 assistant 是快照+实时两份
-  if (last && last.role === 'assistant') {
+  const sameRun =
+    last?.role === 'assistant' &&
+    ((last.runId && incoming.runId && last.runId === incoming.runId) || last.id === incoming.id);
+  if (sameRun) {
     const next = turns.slice();
-    next[next.length - 1] = mergeTurn(last, incoming);
+    next[next.length - 1] = mergeTurn(last!, incoming);
     return next;
   }
   return [...turns, incoming];
+}
+
+/** 列表/会话事件说这一轮已经结束，但 detail 里还挂着 streaming 时，把它收口 */
+function finalizeDetailTurn(detail: SessionDetail, at?: number): SessionDetail {
+  let turns = detail.turns;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i]!;
+    if (t.role !== 'assistant') continue;
+    if (t.status !== 'streaming') break;
+    const duration =
+      t.meta?.durationMs ??
+      (at && t.createdAt && at > t.createdAt && at - t.createdAt < 6 * 60 * 60 * 1000
+        ? at - t.createdAt
+        : undefined);
+    turns = turns.slice();
+    turns[i] = {
+      ...t,
+      status: 'done',
+      meta: {
+        ...t.meta,
+        ...(duration ? { durationMs: duration, steps: t.meta?.steps ?? t.blocks.length } : {}),
+      },
+    };
+    break;
+  }
+  return turns === detail.turns ? detail : { ...detail, turns };
 }
 
 export class Store {
@@ -510,7 +539,22 @@ export class Store {
     if (!this.client) return;
     try {
       const { sessions } = await this.client.request('sessions.list', {});
-      this.patch({ sessions });
+      let detail = this.state.detail;
+      const current = sessions.find((s) => s.id === this.state.currentId);
+      if (detail && current) {
+        detail = { ...detail, ...current };
+        const last = detail.turns[detail.turns.length - 1];
+        if (
+          current.status !== 'running' &&
+          current.status !== 'waiting_approval' &&
+          last?.role === 'assistant' &&
+          last.status === 'streaming' &&
+          current.updatedAt >= last.createdAt
+        ) {
+          detail = { ...finalizeDetailTurn(detail, current.updatedAt), status: 'idle' };
+        }
+      }
+      this.patch({ sessions, ...(detail ? { detail } : {}) });
       this.persistUiCache();
     } catch (err) {
       this.fail(err);
@@ -536,22 +580,8 @@ export class Store {
           turns = turns.slice();
           turns[same] = live;
         } else {
-          let lastAssistant = -1;
-          for (let i = turns.length - 1; i >= 0; i--) {
-            if (turns[i]?.role === 'assistant') {
-              lastAssistant = i;
-              break;
-            }
-          }
-          const near =
-            lastAssistant >= 0 &&
-            Math.abs(turns[lastAssistant]!.createdAt - live.createdAt) < 120_000;
-          if (near) {
-            turns = turns.slice();
-            turns[lastAssistant] = live;
-          } else {
-            turns = [...turns, live];
-          }
+          // 快照里如果只有一个不等 id 的部分回合，宁可多一条也不要跨 run 合并
+          turns = [...turns, live];
         }
       }
       turns = turns.reduce<Turn[]>((acc, t) => mergeNearbyTurns(acc, t), []);
@@ -1255,7 +1285,13 @@ export class Store {
         else sessions.unshift(session);
         sessions.sort((a, b) => b.updatedAt - a.updatedAt);
         const patch: Partial<AppState> = { sessions };
-        if (detail && detail.id === session.id) patch.detail = { ...detail, ...session };
+        if (detail && detail.id === session.id) {
+          let nextDetail = { ...detail, ...session };
+          if (session.status !== 'running' && session.status !== 'waiting_approval') {
+            nextDetail = finalizeDetailTurn(nextDetail, session.updatedAt);
+          }
+          patch.detail = nextDetail;
+        }
         this.patch(patch);
         this.persistUiCache();
         return;
@@ -1393,27 +1429,40 @@ export class Store {
         }
         const durationMs = this.runStartedAt ? Math.max(1, Date.now() - this.runStartedAt) : null;
         this.runStartedAt = null;
+        const reason = (data as { reason?: string }).reason;
+        const finalStatus: Turn['status'] =
+          reason === 'stopped' ? 'stopped' : reason === 'error' ? 'error' : 'done';
         let nextDetail = d;
         if (d && data.sessionId === currentId) {
           let turns = d.turns;
-          if (durationMs !== null) {
-            for (let i = turns.length - 1; i >= 0; i--) {
-              const t = turns[i]!;
-              if (t.role !== 'assistant') continue;
-              if (!t.meta?.durationMs) {
-                turns = turns.slice();
-                turns[i] = {
-                  ...t,
-                  meta: { ...t.meta, durationMs, steps: t.meta?.steps ?? t.blocks.length },
-                };
-              }
-              break;
+          for (let i = turns.length - 1; i >= 0; i--) {
+            const t = turns[i]!;
+            if (t.role !== 'assistant') continue;
+            const needsStatus = t.status !== finalStatus;
+            const needsDuration = durationMs !== null && !t.meta?.durationMs;
+            if (needsStatus || needsDuration) {
+              turns = turns.slice();
+              turns[i] = {
+                ...t,
+                status: finalStatus,
+                meta: {
+                  ...t.meta,
+                  ...(needsDuration && durationMs !== null
+                    ? { durationMs, steps: t.meta?.steps ?? t.blocks.length }
+                    : {}),
+                },
+              };
             }
+            break;
           }
           nextDetail = { ...d, turns, status: 'idle' };
         }
+        const sessions = this.state.sessions.map((s) =>
+          s.id === data.sessionId ? { ...s, status: 'idle' as const, updatedAt: Date.now() } : s
+        );
         this.patch({
           approvals,
+          sessions,
           busy: false,
           ...(nextDetail ? { detail: nextDetail } : {}),
         });

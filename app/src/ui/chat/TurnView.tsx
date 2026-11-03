@@ -204,7 +204,8 @@ function AssistantTurn({
 }): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const completed = turn.status !== 'streaming';
-  const processBlocks = turn.blocks.filter((b) => b.kind === 'thinking' || b.kind === 'tool');
+  const visible = (b: Block): boolean => !(b.kind === 'thinking' && !b.text.trim());
+  const processBlocks = turn.blocks.filter((b) => visible(b) && (b.kind === 'thinking' || b.kind === 'tool'));
   const answerBlocks = turn.blocks.filter((b) => b.kind === 'text');
   const answerText = answerBlocks
     .filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text')
@@ -246,7 +247,7 @@ function AssistantTurn({
         ? answerBlocks.map((b, i) => (
             <React.Fragment key={`${b.id}-${i}`}>{renderBlock(b, approvals, onToggleThinking)}</React.Fragment>
           ))
-        : turn.blocks.map((b, i) => (
+        : turn.blocks.filter(visible).map((b, i) => (
             <React.Fragment key={`${b.id}-${i}`}>
               {renderBlock(b, approvals, onToggleThinking, true)}
             </React.Fragment>
