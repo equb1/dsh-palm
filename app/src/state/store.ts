@@ -172,7 +172,13 @@ type Listener = () => void;
 function sameBlock(a: Block, b: Block): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'text' && b.kind === 'text') return a.id === b.id || a.text === b.text;
-  if (a.kind === 'thinking' && b.kind === 'thinking') return a.id === b.id || a.text === b.text;
+  if (a.kind === 'thinking' && b.kind === 'thinking') {
+    if (a.id === b.id || a.text === b.text) return true;
+    const at = a.text.trim();
+    const bt = b.text.trim();
+    // 快照里是前半段、实时里是完整段：前缀相同就认作同一段思考
+    return at.length > 20 && bt.length > 20 && (at.startsWith(bt) || bt.startsWith(at));
+  }
   if (a.kind === 'tool' && b.kind === 'tool') {
     return a.id === b.id || (a.name === b.name && a.summary === b.summary);
   }
@@ -183,7 +189,15 @@ function sameBlock(a: Block, b: Block): boolean {
 function mergeTurn(prev: Turn, next: Turn): Turn {
   const blocks = prev.blocks.slice();
   for (const block of next.blocks) {
-    if (!blocks.some((b) => sameBlock(b, block))) blocks.push(block);
+    const i = blocks.findIndex((b) => sameBlock(b, block));
+    if (i >= 0) {
+      const old = blocks[i]!;
+      if (block.kind === 'thinking' && old.kind === 'thinking' && block.text.length > old.text.length) {
+        blocks[i] = block;
+      }
+      continue;
+    }
+    blocks.push(block);
   }
   return {
     ...prev,

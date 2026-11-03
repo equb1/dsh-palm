@@ -26,7 +26,21 @@ function dedupeBlocks(blocks: Block[]): Block[] {
   const out: Block[] = [];
   for (const b of blocks) {
     if (b.kind === 'thinking' && !b.text.trim()) continue;
-    if (out.some((x) => blockKey(x) === blockKey(b))) continue;
+    const i = out.findIndex((x) => {
+      if (blockKey(x) === blockKey(b)) return true;
+      if (x.kind === 'thinking' && b.kind === 'thinking') {
+        const xt = x.text.trim();
+        const bt = b.text.trim();
+        return xt.length > 20 && bt.length > 20 && (xt.startsWith(bt) || bt.startsWith(xt));
+      }
+      return false;
+    });
+    if (i >= 0) {
+      if (b.kind === 'thinking' && out[i]!.kind === 'thinking' && b.text.length > out[i]!.text.length) {
+        out[i] = b;
+      }
+      continue;
+    }
     out.push(b);
   }
   return out;
