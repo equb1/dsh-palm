@@ -1,29 +1,87 @@
 import React from 'react';
 import {
+  Animated,
+  Clipboard,
+  Image,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 
 import { colors, font, radius, space } from './theme';
+
+/* ------------------------------------------------------------------ *
+ * 剪贴板复制工具
+ * ------------------------------------------------------------------ */
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    Clipboard.setString(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 流式光标
+ * ------------------------------------------------------------------ */
+
+function StreamingCursor(): React.ReactElement {
+  const opacity = React.useRef(new Animated.Value(1)).current;
+
+  React.useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.15,
+          duration: 450,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 450,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
+
+  return (
+    <Animated.Text style={[styles.cursorText, { opacity }]}>
+      {' ▎'}
+    </Animated.Text>
+  );
+}
 
 /* ------------------------------------------------------------------ *
  * 行内词法解析
  * ------------------------------------------------------------------ */
 
 interface InlineToken {
-  type: 'text' | 'bold' | 'italic' | 'strike' | 'code' | 'link';
+  type: 'text' | 'bold' | 'italic' | 'strike' | 'code' | 'link' | 'image';
   content: string;
   url?: string;
+  alt?: string;
 }
 
 function parseInlineTokens(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
-  // 匹配：链接、加粗、删除线、行内代码、斜体
-  const regex = /(\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|~~([^~]+)~~|`([^`]+)`|\*([^*]+)\*)/g;
+  // 匹配：图片、链接、加粗、删除线、行内代码、斜体
+  const regex =
+    /(!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|~~([^~]+)~~|`([^`]+)`|\*([^*]+)\*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -36,31 +94,38 @@ function parseInlineTokens(text: string): InlineToken[] {
     }
 
     const fullMatch = match[0];
-    if (fullMatch.startsWith('[') && match[2] && match[3]) {
+    if (fullMatch.startsWith('![') && match[3]) {
       tokens.push({
-        type: 'link',
-        content: match[2],
+        type: 'image',
+        content: match[2] ?? '',
+        alt: match[2] ?? '',
         url: match[3],
       });
-    } else if (fullMatch.startsWith('**') && match[4]) {
+    } else if (fullMatch.startsWith('[') && match[4] && match[5]) {
+      tokens.push({
+        type: 'link',
+        content: match[4],
+        url: match[5],
+      });
+    } else if (fullMatch.startsWith('**') && match[6]) {
       tokens.push({
         type: 'bold',
-        content: match[4],
-      });
-    } else if (fullMatch.startsWith('~~') && match[5]) {
-      tokens.push({
-        type: 'strike',
-        content: match[5],
-      });
-    } else if (fullMatch.startsWith('`') && match[6]) {
-      tokens.push({
-        type: 'code',
         content: match[6],
       });
-    } else if (fullMatch.startsWith('*') && match[7]) {
+    } else if (fullMatch.startsWith('~~') && match[7]) {
+      tokens.push({
+        type: 'strike',
+        content: match[7],
+      });
+    } else if (fullMatch.startsWith('`') && match[8]) {
+      tokens.push({
+        type: 'code',
+        content: match[8],
+      });
+    } else if (fullMatch.startsWith('*') && match[9]) {
       tokens.push({
         type: 'italic',
-        content: match[7],
+        content: match[9],
       });
     }
 
@@ -77,7 +142,32 @@ function parseInlineTokens(text: string): InlineToken[] {
   return tokens;
 }
 
-function InlineText({ text, baseStyle }: { text: string; baseStyle?: object }): React.ReactElement {
+function handleOpenUrl(url?: string): void {
+  if (!url) return;
+  const target = url.trim();
+  Linking.canOpenURL(target)
+    .then((supported) => {
+      if (supported) {
+        Linking.openURL(target).catch(() => {});
+      } else {
+        // 部分 deep link 或协议可能 canOpenURL 返回 false，仍尝试唤起
+        Linking.openURL(target).catch(() => {});
+      }
+    })
+    .catch(() => {
+      Linking.openURL(target).catch(() => {});
+    });
+}
+
+function InlineText({
+  text,
+  baseStyle,
+  trailingCursor,
+}: {
+  text: string;
+  baseStyle?: object;
+  trailingCursor?: boolean;
+}): React.ReactElement {
   const tokens = parseInlineTokens(text);
 
   return (
@@ -113,19 +203,26 @@ function InlineText({ text, baseStyle }: { text: string; baseStyle?: object }): 
               <Text
                 key={idx}
                 style={styles.link}
-                onPress={() => {
-                  if (token.url) {
-                    Linking.openURL(token.url).catch(() => {});
-                  }
-                }}
+                onPress={() => handleOpenUrl(token.url)}
               >
                 {token.content}
+              </Text>
+            );
+          case 'image':
+            return (
+              <Text
+                key={idx}
+                style={styles.link}
+                onPress={() => handleOpenUrl(token.url)}
+              >
+                {`[图片: ${token.alt || '未命名'}]`}
               </Text>
             );
           default:
             return <Text key={idx}>{token.content}</Text>;
         }
       })}
+      {trailingCursor ? <StreamingCursor /> : null}
     </Text>
   );
 }
@@ -141,21 +238,14 @@ type BlockItem =
   | { type: 'ul'; items: string[] }
   | { type: 'ol'; items: string[] }
   | { type: 'hr' }
+  | { type: 'image'; alt: string; url: string }
   | { type: 'table'; header: string[]; align: Array<'left' | 'center' | 'right'>; rows: string[][] }
   | { type: 'p'; text: string };
-
-/* ---------------- 表格解析 ---------------- *
- * GFM：表头行 + 分隔行（|---|---|）+ 数据行。
- * 注意一个真实存在的坑（dsh-Go #208 也踩过）：表格紧贴在段落下面、中间没有空行时，
- * 按 GFM 它不能中断段落，整张表会被当成段落文字。这里我们直接把它当块级元素处理，
- * 不要求前面有空行——模型十次有八次不空行。
- */
 
 function splitTableRow(line: string): string[] {
   let s = line.trim();
   if (s.startsWith('|')) s = s.slice(1);
   if (s.endsWith('|')) s = s.slice(0, -1);
-  // 转义的竖线先换成占位符，再还原
   const cells = s.split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim());
   return cells;
 }
@@ -170,7 +260,6 @@ function parseAlign(cell: string): 'left' | 'center' | 'right' | null {
   return 'left';
 }
 
-/** 当前行是表头、下一行是分隔行 -> 返回整张表 */
 function tryParseTable(
   lines: string[],
   start: number,
@@ -191,10 +280,8 @@ function tryParseTable(
   while (i < lines.length) {
     const line = lines[i]!;
     if (line.trim() === '' || !line.includes('|')) break;
-    // 遇到新的块级标记就停（表格不会跨标题/围栏/列表）
-    if (/^(#{1,6}\s|>\s?|```)/.test(line.trim())) break;
+    if (/^(#{1,6}\s|>\s?|```|!\[)/.test(line.trim())) break;
     const cells = splitTableRow(line);
-    // 补齐/裁剪到表头列数，避免错位
     while (cells.length < header.length) cells.push('');
     rows.push(cells.slice(0, header.length));
     i++;
@@ -284,23 +371,35 @@ function parseMarkdownBlocks(rawText: string): BlockItem[] {
       continue;
     }
 
-    // 3. 表格：必须在段落之前判断，否则紧贴段落的表会被吞成纯文本
+    // 3. 表格
     const table = tryParseTable(lines, i);
     if (table) {
       flushAll();
       blocks.push(table.block);
-      i = table.next - 1; // for 循环还会 i++
+      i = table.next - 1;
       continue;
     }
 
-    // 4. 分割线: --- 或 ***
+    // 4. 单行图片: ![alt](url)
+    const imgMatch = /^!\[([^\]]*)\]\(([^)]+)\)\s*$/.exec(line.trim());
+    if (imgMatch && imgMatch[2]) {
+      flushAll();
+      blocks.push({
+        type: 'image',
+        alt: imgMatch[1] ?? '',
+        url: imgMatch[2].trim(),
+      });
+      continue;
+    }
+
+    // 5. 分割线: --- 或 *** 或 ___
     if (/^(\*\*\*|---|___)\s*$/.test(line.trim())) {
       flushAll();
       blocks.push({ type: 'hr' });
       continue;
     }
 
-    // 4. 标题: #, ##, ###
+    // 6. 标题: #, ##, ###
     const h1Match = /^#\s+(.+)$/.exec(line);
     if (h1Match) {
       flushAll();
@@ -320,7 +419,7 @@ function parseMarkdownBlocks(rawText: string): BlockItem[] {
       continue;
     }
 
-    // 5. 引用块: > text
+    // 7. 引用块: > text
     const quoteMatch = /^>\s?(.*)$/.exec(line);
     if (quoteMatch) {
       flushParagraph();
@@ -332,7 +431,7 @@ function parseMarkdownBlocks(rawText: string): BlockItem[] {
       flushQuote();
     }
 
-    // 6. 无序列表: - item 或 * item
+    // 8. 无序列表: - item 或 * item
     const ulMatch = /^[-*+]\s+(.+)$/.exec(line);
     if (ulMatch) {
       flushParagraph();
@@ -344,7 +443,7 @@ function parseMarkdownBlocks(rawText: string): BlockItem[] {
       flushUl();
     }
 
-    // 7. 有序列表: 1. item
+    // 9. 有序列表: 1. item
     const olMatch = /^\d+\.\s+(.+)$/.exec(line);
     if (olMatch) {
       flushParagraph();
@@ -356,7 +455,7 @@ function parseMarkdownBlocks(rawText: string): BlockItem[] {
       flushOl();
     }
 
-    // 8. 普通段落
+    // 10. 普通段落
     currentParagraph.push(line);
   }
 
@@ -374,17 +473,52 @@ function parseMarkdownBlocks(rawText: string): BlockItem[] {
 }
 
 /* ------------------------------------------------------------------ *
- * 代码块组件（支持水平滚动与复制）
+ * 代码块组件（支持水平滚动与一键复制反馈）
  * ------------------------------------------------------------------ */
 
 function CodeBlockView({ lang, code }: { lang: string; code: string }): React.ReactElement {
+  const [copied, setCopied] = React.useState(false);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCopy = React.useCallback(async () => {
+    const ok = await copyToClipboard(code);
+    if (ok) {
+      setCopied(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        setCopied(false);
+      }, 1800);
+    }
+  }, [code]);
+
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const displayLang = lang ? lang.toUpperCase() : 'TEXT';
+
   return (
     <View style={styles.codeBlockWrap}>
-      {lang ? (
-        <View style={styles.codeBlockHeader}>
-          <Text style={styles.codeBlockLang}>{lang.toUpperCase()}</Text>
-        </View>
-      ) : null}
+      <View style={styles.codeBlockHeader}>
+        <Text style={styles.codeBlockLang}>{displayLang}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="复制代码"
+          onPress={handleCopy}
+          hitSlop={6}
+          style={({ pressed }) => [
+            styles.codeCopyBtn,
+            copied && styles.codeCopyBtnCopied,
+            pressed && styles.codeCopyBtnPressed,
+          ]}
+        >
+          <Text style={[styles.codeCopyText, copied && styles.codeCopyTextCopied]}>
+            {copied ? '✓ 已复制' : '❐ 复制'}
+          </Text>
+        </Pressable>
+      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -397,14 +531,47 @@ function CodeBlockView({ lang, code }: { lang: string; code: string }): React.Re
 }
 
 /* ------------------------------------------------------------------ *
+ * 图片视图
+ * ------------------------------------------------------------------ */
+
+function ImageView({ alt, url }: { alt: string; url: string }): React.ReactElement {
+  const [hasError, setHasError] = React.useState(false);
+
+  return (
+    <View style={styles.imageCard}>
+      {hasError ? (
+        <View style={styles.imageFallback}>
+          <Text style={styles.imageFallbackIcon}>🖼</Text>
+          <Text style={styles.imageFallbackText}>{alt || '无法载入图片'}</Text>
+          <Text style={styles.imageFallbackSub} numberOfLines={1}>
+            {url}
+          </Text>
+        </View>
+      ) : (
+        <Pressable onPress={() => handleOpenUrl(url)}>
+          <Image
+            source={{ uri: url }}
+            style={styles.image}
+            resizeMode="contain"
+            onError={() => setHasError(true)}
+          />
+        </Pressable>
+      )}
+      {alt ? (
+        <View style={styles.imageCaptionWrap}>
+          <Text style={styles.imageCaption} numberOfLines={2}>
+            {alt}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * 表格
  * ------------------------------------------------------------------ */
 
-/**
- * GFM 表格。
- * 列少时按等分宽度撑满；列多（>=4）时改成横向滚动、每列给最小宽度，
- * 否则手机上会被压成一列两个字。
- */
 function TableView({
   header,
   align,
@@ -415,25 +582,44 @@ function TableView({
   rows: string[][];
 }): React.ReactElement {
   const wide = header.length >= 4;
-  const cellStyle = (col: number): object => ({
-    textAlign: align[col] ?? 'left',
-    ...(wide ? { minWidth: 96 } : {}),
-  });
+  const cellAlign = (col: number): TextStyleAlign => {
+    return align[col] ?? 'left';
+  };
 
   const body = (
     <View style={[styles.tableWrap, wide ? styles.tableWrapWide : null]}>
       <View style={[styles.tableRow, styles.tableHeaderRow]}>
         {header.map((cell, col) => (
-          <View key={col} style={[styles.tableCell, col === 0 ? styles.tableCellFirst : null, wide ? null : { flex: 1 }]}>
-            <InlineText text={cell} baseStyle={[styles.tableHeaderText, cellStyle(col)]} />
+          <View
+            key={col}
+            style={[
+              styles.tableCell,
+              col === 0 ? styles.tableCellFirst : null,
+              wide ? styles.tableCellWide : { flex: 1 },
+            ]}
+          >
+            <InlineText
+              text={cell}
+              baseStyle={{ ...styles.tableHeaderText, textAlign: cellAlign(col) }}
+            />
           </View>
         ))}
       </View>
       {rows.map((row, r) => (
         <View key={r} style={[styles.tableRow, r % 2 === 1 ? styles.tableRowStripe : null]}>
           {row.map((cell, col) => (
-            <View key={col} style={[styles.tableCell, col === 0 ? styles.tableCellFirst : null, wide ? null : { flex: 1 }]}>
-              <InlineText text={cell} baseStyle={[styles.tableCellText, cellStyle(col)]} />
+            <View
+              key={col}
+              style={[
+                styles.tableCell,
+                col === 0 ? styles.tableCellFirst : null,
+                wide ? styles.tableCellWide : { flex: 1 },
+              ]}
+            >
+              <InlineText
+                text={cell}
+                baseStyle={{ ...styles.tableCellText, textAlign: cellAlign(col) }}
+              />
             </View>
           ))}
         </View>
@@ -448,16 +634,41 @@ function TableView({
     </ScrollView>
   );
 }
+
+type TextStyleAlign = 'left' | 'center' | 'right' | 'justify' | 'auto';
+
 /* ------------------------------------------------------------------ *
  * 主导出组件
  * ------------------------------------------------------------------ */
 
-export function MarkdownView({ text, style }: { text: string; style?: object }): React.ReactElement {
+export interface MarkdownViewProps {
+  text: string;
+  style?: StyleProp<ViewStyle>;
+  /** 是否处于流式生成中，为 true 时末尾显示脉冲光标 */
+  streaming?: boolean;
+  /** 兼容 isStreaming 属性 */
+  isStreaming?: boolean;
+}
+
+export function MarkdownView({
+  text,
+  style,
+  streaming,
+  isStreaming,
+}: MarkdownViewProps): React.ReactElement {
+  const activeStreaming = Boolean(streaming || isStreaming);
   const blocks = React.useMemo(() => parseMarkdownBlocks(text), [text]);
+
+  const lastBlockIndex = blocks.length - 1;
+  const lastBlock = blocks[lastBlockIndex];
+  const lastBlockIsParagraph = lastBlock && lastBlock.type === 'p';
 
   return (
     <View style={[styles.root, style]}>
       {blocks.map((block, i) => {
+        const isLast = i === lastBlockIndex;
+        const showCursorInParagraph = isLast && activeStreaming && block.type === 'p';
+
         switch (block.type) {
           case 'h1':
             return (
@@ -479,6 +690,8 @@ export function MarkdownView({ text, style }: { text: string; style?: object }):
             );
           case 'codeblock':
             return <CodeBlockView key={i} lang={block.lang} code={block.code} />;
+          case 'image':
+            return <ImageView key={i} alt={block.alt} url={block.url} />;
           case 'table':
             return <TableView key={i} header={block.header} align={block.align} rows={block.rows} />;
           case 'quote':
@@ -493,7 +706,7 @@ export function MarkdownView({ text, style }: { text: string; style?: object }):
                 {block.items.map((item, idx) => (
                   <View key={idx} style={styles.listItem}>
                     <Text style={styles.bullet}>•</Text>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.listContent}>
                       <InlineText text={item} baseStyle={styles.paragraph} />
                     </View>
                   </View>
@@ -506,7 +719,7 @@ export function MarkdownView({ text, style }: { text: string; style?: object }):
                 {block.items.map((item, idx) => (
                   <View key={idx} style={styles.listItem}>
                     <Text style={styles.orderNumber}>{idx + 1}.</Text>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.listContent}>
                       <InlineText text={item} baseStyle={styles.paragraph} />
                     </View>
                   </View>
@@ -519,17 +732,28 @@ export function MarkdownView({ text, style }: { text: string; style?: object }):
           default:
             return (
               <View key={i} style={styles.pWrap}>
-                <InlineText text={block.text} baseStyle={styles.paragraph} />
+                <InlineText
+                  text={block.text}
+                  baseStyle={styles.paragraph}
+                  trailingCursor={showCursorInParagraph}
+                />
               </View>
             );
         }
       })}
+
+      {/* 当最后一块不是普通段落（例如代码块/表格结尾），但依然在流式时，显示独立光标行 */}
+      {activeStreaming && !lastBlockIsParagraph ? (
+        <View style={styles.trailingCursorWrap}>
+          <StreamingCursor />
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { gap: 8 },
+  root: { gap: space.sm },
   bold: { fontWeight: '700', color: colors.text },
   italic: { fontStyle: 'italic', color: colors.text },
   strike: { textDecorationLine: 'line-through', color: colors.textFaint },
@@ -539,11 +763,20 @@ const styles = StyleSheet.create({
     color: '#8BA4F9',
     backgroundColor: 'rgba(108, 138, 240, 0.12)',
     borderRadius: 4,
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
   },
   link: {
     color: colors.blue,
     textDecorationLine: 'underline',
+  },
+  cursorText: {
+    fontFamily: font.mono,
+    color: colors.blue,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  trailingCursorWrap: {
+    paddingVertical: 2,
   },
   h1Wrap: { marginTop: 6, marginBottom: 2 },
   h1Text: { fontSize: 20, fontWeight: '700', color: colors.text, lineHeight: 28 },
@@ -560,7 +793,10 @@ const styles = StyleSheet.create({
   quoteWrap: {
     borderLeftWidth: 3,
     borderLeftColor: colors.blue,
-    paddingLeft: 10,
+    backgroundColor: colors.glass,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     marginVertical: 4,
   },
   quoteText: {
@@ -571,15 +807,17 @@ const styles = StyleSheet.create({
   },
   listWrap: { marginVertical: 2, gap: 4 },
   listItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  listContent: { flex: 1 },
   bullet: { color: colors.blue, fontSize: 16, lineHeight: 24 },
-  orderNumber: { color: colors.textFaint, fontSize: 13, lineHeight: 24, minWidth: 16 },
+  orderNumber: { color: colors.textFaint, fontSize: 13, lineHeight: 24, minWidth: 18 },
   hr: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.borderStrong,
     marginVertical: 6,
   },
+  /* 代码块 */
   codeBlockWrap: {
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: '#0F1117',
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
@@ -588,23 +826,96 @@ const styles = StyleSheet.create({
   },
   codeBlockHeader: {
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
   codeBlockLang: {
     fontFamily: font.mono,
-    fontSize: 10.5,
+    fontSize: 11,
     color: colors.textFaint,
     fontWeight: '600',
+    letterSpacing: 0.5,
   },
-  codeScroll: { padding: 10 },
+  codeCopyBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  codeCopyBtnCopied: {
+    backgroundColor: colors.okSoft,
+  },
+  codeCopyBtnPressed: {
+    opacity: 0.7,
+  },
+  codeCopyText: {
+    fontFamily: font.mono,
+    fontSize: 11,
+    color: colors.textDim,
+  },
+  codeCopyTextCopied: {
+    color: colors.ok,
+    fontWeight: '600',
+  },
+  codeScroll: { padding: 12 },
   codeBlockText: {
     fontFamily: font.mono,
     fontSize: 12.5,
-    lineHeight: 18,
+    lineHeight: 19,
     color: '#D8DEE9',
+  },
+  /* 图片 */
+  imageCard: {
+    marginVertical: 6,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    overflow: 'hidden',
+  },
+  image: {
+    width: '100%',
+    height: 220,
+    backgroundColor: 'transparent',
+  },
+  imageFallback: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+  },
+  imageFallbackIcon: {
+    fontSize: 28,
+    marginBottom: 6,
+    opacity: 0.6,
+  },
+  imageFallbackText: {
+    fontSize: 13,
+    color: colors.textDim,
+    fontWeight: '500',
+  },
+  imageFallbackSub: {
+    fontSize: 11,
+    color: colors.textFaint,
+    marginTop: 2,
+    fontFamily: font.mono,
+  },
+  imageCaptionWrap: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  imageCaption: {
+    fontSize: 12,
+    color: colors.textDim,
+    fontStyle: 'italic',
   },
   /* 表格 */
   tableWrap: {
@@ -612,6 +923,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
     borderRadius: radius.sm,
     overflow: 'hidden',
+    marginVertical: 4,
   },
   tableWrapWide: { borderRadius: radius.sm },
   tableRow: {
@@ -619,15 +931,23 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  tableHeaderRow: { backgroundColor: colors.glassStrong, borderTopWidth: 0 },
-  tableRowStripe: { backgroundColor: colors.glass },
+  tableHeaderRow: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderTopWidth: 0,
+  },
+  tableRowStripe: {
+    backgroundColor: colors.glass,
+  },
   tableCell: {
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderLeftColor: colors.border,
   },
+  tableCellWide: {
+    minWidth: 100,
+  },
   tableCellFirst: { borderLeftWidth: 0 },
   tableHeaderText: { color: colors.text, fontSize: 13, fontWeight: '600', lineHeight: 19 },
-  tableCellText: { color: colors.textDim, fontSize: 13, lineHeight: 19 },});
-
+  tableCellText: { color: colors.textDim, fontSize: 13, lineHeight: 19 },
+});
