@@ -144,7 +144,7 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
   });
 
   return (
-    <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} pointerEvents="auto">
+    <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
       <View style={styles.topSpacer} />
 
       {/* 居中品牌标识 */}

@@ -166,12 +166,16 @@ export function SessionDrawer({
   };
 
   return (
-    <View style={styles.overlay} pointerEvents="box-none">
-      <Animated.View style={[styles.backdrop, { opacity: anim }]}>
+    <View style={styles.overlay}>
+      <Animated.View
+        renderToHardwareTextureAndroid
+        style={[styles.backdrop, { opacity: anim }]}
+      >
         <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="关闭会话抽屉" />
       </Animated.View>
 
       <Animated.View
+        renderToHardwareTextureAndroid
         style={[
           styles.panel,
           {
@@ -268,7 +272,15 @@ export function SessionDrawer({
 }
 
 const styles = StyleSheet.create({
-  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-start' },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-start',
+    pointerEvents: 'box-none',
+  },
   backdrop: {
     position: 'absolute',
     top: 0,
@@ -283,7 +295,7 @@ const styles = StyleSheet.create({
     backgroundColor: semantic.sidebar,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: colors.border,
-    paddingTop: topInset + 8,
+    paddingTop: topInset + 12,
   },
   panelHeader: {
     flexDirection: 'row',
@@ -387,7 +399,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     backgroundColor: semantic.sidebar,
