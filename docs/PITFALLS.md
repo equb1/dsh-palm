@@ -228,6 +228,13 @@
 - 处理：用 `localabstract:chrome_devtools_remote` + `Runtime.evaluate` 点击。
 - 验证：页面状态变化。
 
+### E8. 重装 debug APK 报签名不一致
+
+- 现象：`adb install -r app-debug.apk` 报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`。
+- 原因：手机上的包是另一台机器/另一个 debug keystore 签的，本地 `app/android/app/debug.keystore` 指纹对不上。
+- 处理：不要卸载重装（会丢登录和会话）；用 Metro 热载验证：`adb reverse tcp:8081 tcp:8081` + `npx expo start --port 8081`，再重启 App 从 8081 拉 bundle。
+- 验证：`adb logcat -s ReactNativeJNI` 不再报 `Failed to connect to localhost:8081`，改动在真机生效。
+
 ## F. 轻引擎 / Office
 
 ### F1. Hermes 缺 Buffer/crypto/fetch/WebAssembly
