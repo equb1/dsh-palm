@@ -1,9 +1,10 @@
 import React from 'react';
-import { BackHandler, Linking, Platform, StatusBar, StyleSheet, View } from 'react-native';
+import { AppState, BackHandler, Linking, Platform, StatusBar, StyleSheet, View } from 'react-native';
 
 import { ChatScreen } from './src/ui/ChatScreen';
 import { ConnectScreen } from './src/ui/ConnectScreen';
 import { HomeScreen } from './src/ui/HomeScreen';
+import { LaunchOverlay } from './src/ui/LaunchOverlay';
 import { SettingsScreen } from './src/ui/SettingsScreen';
 import { store, useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
@@ -12,7 +13,7 @@ import { hostAvailable } from './src/lib/host';
 export default function App(): React.ReactElement {
   const state = useStore();
 
-  // 本机宿主：App 一起来就把引擎/桥拉起来（已经跑着的话服务会忽略重复启动）
+  // 本机宿主：App 一起来就把本地缓存恢复 + 引擎/桥拉起来（已经跑着的话服务会忽略重复启动）
   const autoStartHost = React.useRef(false);
   React.useEffect(() => {
     if (!hostAvailable || autoStartHost.current) return;
@@ -20,9 +21,9 @@ export default function App(): React.ReactElement {
     void store.startLocalHost().catch(() => undefined);
   }, []);
 
-  // 引擎/桥就绪后自动连一次（配对码从桥日志里读），连上了就不用再轮询
+  // 引擎/桥就绪后自动连一次，连上了就停止高频轮询
   React.useEffect(() => {
-    if (!hostAvailable || state.caps) return;
+    if (!hostAvailable || state.conn === 'connected') return;
     const tick = (): void => {
       void store
         .refreshHost()
@@ -30,16 +31,28 @@ export default function App(): React.ReactElement {
         .catch(() => undefined);
     };
     tick();
-    // 首装解压/冷启动只有十几秒，这段时间拉密一点才看得到进度
-    const timer = setInterval(tick, 800);
+    const timer = setInterval(tick, 400);
     return () => clearInterval(timer);
-  }, [state.caps]);
-
+  }, [state.conn]);
 
   // dshpalm://pair?url=ws://192.168.1.7:8788/ws&code=246810 —— 扫码/外部唤起走这里
-  // 冷启动读一次系统分享的内容（文字进输入框，图片先进 pending）
+  // 冷启动及每次回到前台时：读系统分享内容 & 检查通知点击跳转
   React.useEffect(() => {
     void store.consumeInitialShare();
+    void store.checkNotificationNavigation();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void store.consumeInitialShare();
+        void store.checkNotificationNavigation();
+        if (hostAvailable && store.getSnapshot().conn !== 'connected') {
+          void store
+            .refreshHost()
+            .then(() => store.maybeAutoConnect())
+            .catch(() => undefined);
+        }
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   React.useEffect(() => {
@@ -67,24 +80,28 @@ export default function App(): React.ReactElement {
         store.closeSettings();
         return true;
       }
-      // 2. 如果在会话详情页，返回会话列表（首页）
+      // 2. 如果打开了连接面板，关闭连接面板返回首页
+      if (state.connectModalOpen) {
+        store.closeConnectModal();
+        return true;
+      }
+      // 3. 如果在会话详情页，返回会话列表（首页）
       if (state.detail) {
         store.closeSession();
         return true;
       }
-      // 3. 在首页时，交由系统默认退出 App
+      // 4. 在首页时，交由系统默认退出 App
       return false;
     };
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [state.view, state.detail]);
+  }, [state.view, state.connectModalOpen, state.detail]);
 
-  // 设置页优先：没连上也要能进去（本机引擎不需要连接）
   const screen =
     state.view === 'settings' ? (
       <SettingsScreen />
-    ) : !state.caps ? (
+    ) : state.connectModalOpen || (!hostAvailable && !state.caps) ? (
       <ConnectScreen />
     ) : state.detail ? (
       <ChatScreen session={state.detail} />
@@ -97,7 +114,10 @@ export default function App(): React.ReactElement {
     return (
       <View style={styles.webOuter}>
         <StatusBar barStyle="light-content" />
-        <View style={styles.webFrame}>{screen}</View>
+        <View style={styles.webFrame}>
+          {screen}
+          {hostAvailable ? <LaunchOverlay state={state} /> : null}
+        </View>
       </View>
     );
   }
@@ -106,6 +126,7 @@ export default function App(): React.ReactElement {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
       {screen}
+      {hostAvailable ? <LaunchOverlay state={state} /> : null}
     </View>
   );
 }

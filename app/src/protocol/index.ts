@@ -310,6 +310,7 @@ export interface EventPayloads {
     reason: 'done' | 'stopped' | 'error';
     usage?: { inputTokens?: number; outputTokens?: number };
     error?: string;
+    preview?: string;
   };
   'approval.requested': { approval: Approval };
   'approval.resolved': { approvalId: string; decision: ApprovalDecision; by: string };
@@ -345,7 +346,7 @@ export interface RequestParams {
   'sessions.get': { sessionId: string };
   'sessions.create': { presetId: string; workspaceId?: string; title?: string };
   'sessions.send': { sessionId: string; text: string; attachments?: string[] };
-  'sessions.steer': { sessionId: string; text: string };
+  'sessions.steer': { sessionId: string; text: string; attachments?: string[] };
   'sessions.stop': { sessionId: string };
   'sessions.setPreset': { sessionId: string; presetId: string };
   /** 列出宿主机上可用的模型 */

@@ -386,6 +386,7 @@ object RuntimeInstaller {
         prootPrefix(context) +
             " /opt/node/bin/node --require /opt/dsh/patch/fs-link-fallback.cjs" +
             " /opt/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js web" +
+            " --patch /opt/dsh/patch/phone.yml" +
             " --host 127.0.0.1 --port 8787 --no-open"
 
     /** 桥（同一个 node 跑单文件桥） */
@@ -449,6 +450,7 @@ object RuntimeInstaller {
     fun ensurePatch(context: Context, log: (String) -> Unit = {}): Boolean {
         val rootfs = paths(context).rootfs
         val ok = writeAssetPatch(context, rootfs, "patch/fs-link-fallback.cjs", "opt/dsh/patch/fs-link-fallback.cjs", log)
+        val profile = writeAssetPatch(context, rootfs, "patch/phone.yml", "opt/dsh/patch/phone.yml", log)
         // 桥也走 APK 补丁：改完脚本重打 APK 就行，不必再重打 150MB 的 payload
         val bridge = writeAssetPatch(
             context,
@@ -457,7 +459,7 @@ object RuntimeInstaller {
             "opt/dsh/bridge/dsh-palm-bridge.cjs",
             log,
         )
-        return ok && bridge
+        return ok && profile && bridge
     }
 
     /** 把 assets 里的补丁同步进 rootfs；内容一样就跳过，脚本类顺手补 +x */

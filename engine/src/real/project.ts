@@ -78,8 +78,13 @@ function contentToBlocks(content: unknown): Block[] {
     } else if (b?.type === 'reasoning' && b.text) {
       out.push({ kind: 'thinking', id: `r${i}`, text: b.text });
     } else if (b?.type === 'image') {
-      // 真事件里的图片是内联数据，我们暂时没有稳定的引用方式，先占位
-      out.push({ kind: 'text', id: `i${i}`, text: '[图片]' });
+      const att = (b as { attachment?: { name?: string } }).attachment;
+      const label = att?.name ? `[图片: ${att.name}]` : '[图片]';
+      out.push({ kind: 'text', id: `i${i}`, text: label });
+    } else if (b?.type === 'file') {
+      const att = (b as { attachment?: { name?: string } }).attachment;
+      const label = att?.name ? `[附件: ${att.name}]` : '[附件]';
+      out.push({ kind: 'text', id: `f${i}`, text: label });
     }
     // tool-call 块跳过：工具卡片统一由 tool/call 事件生成，避免重复
   }
@@ -215,12 +220,25 @@ export function projectRecords(records: RealRecord[]): Projection {
       }
 
       case 'turn/end': {
+        const reason = (d.reason ?? {}) as Record<string, unknown>;
+        const kind = str(reason.kind);
+        // 真引擎的取值：completed | stop | aborted（用户中断）| stopped | error
+        const status: Turn['status'] =
+          kind === 'completed' || kind === 'stop'
+            ? 'done'
+            : kind === 'stopped' || kind === 'aborted'
+              ? 'stopped'
+              : 'error';
+        const failure = (reason.failure ?? {}) as Record<string, unknown>;
+        const errMsg = str(reason.message) || str(failure.message);
+        if ((!current || current.role !== 'assistant') && status === 'error') {
+          current = newTurn('assistant', time);
+        }
         if (current && current.role === 'assistant') {
-          const reason = (d.reason ?? {}) as Record<string, unknown>;
-          const kind = str(reason.kind);
-          // 真引擎的取值：completed | aborted（用户中断，带嵌套 reason.kind = 'user'）| stopped
-          current.status =
-            kind === 'completed' ? 'done' : kind === 'stopped' || kind === 'aborted' ? 'stopped' : 'error';
+          current.status = status;
+          if (status === 'error' && errMsg && current.blocks.length === 0) {
+            current.blocks.push({ kind: 'text', id: `err-${turns.length}`, text: `错误：${errMsg}` });
+          }
           current.meta = { steps: current.blocks.length };
         }
         current = null;
