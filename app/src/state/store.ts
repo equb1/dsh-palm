@@ -1358,7 +1358,13 @@ export class Store {
         const turn = detail.turns.find((t) => t.id === data.turnId);
         if (!turn) return;
         const i = turn.blocks.findIndex((b) => b.id === (data.block as Block).id);
-        if (i >= 0) turn.blocks[i] = data.block as Block;
+        if (i >= 0) {
+          const incoming = data.block as Block;
+          turn.blocks[i] =
+            incoming.kind === 'text' || incoming.kind === 'thinking'
+              ? { ...incoming, done: true }
+              : incoming;
+        }
         this.patch({});
         return;
       }

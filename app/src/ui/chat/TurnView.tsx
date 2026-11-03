@@ -249,7 +249,13 @@ function AssistantTurn({
           ))
         : turn.blocks.filter(visible).map((b, i) => (
             <React.Fragment key={`${b.id}-${i}`}>
-              {renderBlock(b, approvals, onToggleThinking, true)}
+              {renderBlock(
+                b,
+                approvals,
+                onToggleThinking,
+                turn.status === 'streaming' &&
+                  !(b.kind === 'thinking' || b.kind === 'text' ? b.done : false)
+              )}
             </React.Fragment>
           ))}
 

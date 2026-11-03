@@ -1,7 +1,7 @@
 import React from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import type { SessionDetail } from '../protocol';
+import type { Block, SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
 import { IconButton, Pill } from './parts';
 import { Composer } from './Composer';
@@ -15,6 +15,49 @@ import { colors, space, topInset } from './theme';
  * 会话页
  * ------------------------------------------------------------------ */
 
+function blockKey(b: Block): string {
+  if (b.kind === 'text' || b.kind === 'thinking') return `${b.kind}:${b.text.trim()}`;
+  if (b.kind === 'tool') return `tool:${b.name}:${b.summary}`;
+  if (b.kind === 'approval') return `ap:${b.approvalId}`;
+  return b.id;
+}
+
+function dedupeBlocks(blocks: Block[]): Block[] {
+  const out: Block[] = [];
+  for (const b of blocks) {
+    if (b.kind === 'thinking' && !b.text.trim()) continue;
+    if (out.some((x) => blockKey(x) === blockKey(b))) continue;
+    out.push(b);
+  }
+  return out;
+}
+
+function cleanTurns(turns: Turn[]): Turn[] {
+  const out: Turn[] = [];
+  for (const turn of turns) {
+    const blocks = dedupeBlocks(turn.blocks);
+    const last = out[out.length - 1];
+    const sameRun =
+      last?.role === 'assistant' &&
+      turn.role === 'assistant' &&
+      (last.id === turn.id ||
+        Boolean(last.runId && turn.runId && last.runId === turn.runId) ||
+        (last.status === 'streaming' && turn.status === 'streaming') ||
+        last.blocks.some((a) => blocks.some((b) => blockKey(a) === blockKey(b))));
+    if (sameRun) {
+      const merged = dedupeBlocks([...last!.blocks, ...blocks]);
+      out[out.length - 1] = {
+        ...last!,
+        blocks: merged,
+        status: last!.status === 'streaming' || turn.status === 'streaming' ? 'streaming' : turn.status,
+      };
+    } else {
+      out.push({ ...turn, blocks });
+    }
+  }
+  return out;
+}
+
 export function ChatScreen({ session }: { session: SessionDetail }): React.ReactElement {
   const state = useStore();
   const [draft, setDraft] = React.useState('');
@@ -24,10 +67,11 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const userInteracting = React.useRef(false);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
-  // 最后一个助手回合没有 host duration 时，用 updatedAt-createdAt 兜底个大概
+  // 宿主偶发把同一轮拆成多份/重复 block，渲染前先合并，避免界面出现两份思考
+  const turns = React.useMemo(() => cleanTurns(session.turns), [session.turns, state.version]);
   let lastAssistantIndex = -1;
-  for (let i = session.turns.length - 1; i >= 0; i--) {
-    if (session.turns[i]?.role === 'assistant') {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i]?.role === 'assistant') {
       lastAssistantIndex = i;
       break;
     }
@@ -133,13 +177,13 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           keyboardDismissMode="on-drag"
         >
           <View style={styles.scroll}>
-            {session.turns.length === 0 ? (
+            {turns.length === 0 ? (
               <View style={styles.emptyChat}>
                 <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
                 <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
               </View>
             ) : (
-              session.turns.map((t, index) => (
+              turns.map((t, index) => (
                 <TurnView
                   key={t.id}
                   turn={t}

@@ -110,8 +110,8 @@ export interface SessionSummary {
 export type ToolState = 'running' | 'done' | 'error';
 
 export type Block =
-  | { kind: 'text'; id: string; text: string }
-  | { kind: 'thinking'; id: string; text: string }
+  | { kind: 'text'; id: string; text: string; done?: boolean }
+  | { kind: 'thinking'; id: string; text: string; done?: boolean }
   | {
       kind: 'tool';
       id: string;
