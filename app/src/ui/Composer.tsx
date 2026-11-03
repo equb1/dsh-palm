@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { AttachmentKind } from '../lib/pickImage';
 import type { PermissionOption, Preset } from '../protocol';
@@ -27,17 +27,17 @@ const ATTACH_TYPES: Array<{ kind: AttachmentKind; label: string }> = [
   { kind: 'audio', label: '音频' },
 ];
 
-const PERMISSION_SHORT: Record<string, string> = {
-  'read-only': '只读',
-  'workspace-write': '可写',
-  'danger-full-access': '完全',
-  auto: '自动',
-  custom: '自定义',
+const PERMISSION_META: Record<string, { label: string; glyph: string; desc: string }> = {
+  'read-only': { label: '仅可查看', glyph: '◎', desc: '只能看，不能改' },
+  'workspace-write': { label: '工作区内修改', glyph: '✎', desc: '只改当前工作区' },
+  'danger-full-access': { label: '完全权限', glyph: '⚠', desc: '任意读写，不再弹审批' },
+  auto: { label: '自动', glyph: '↻', desc: '由宿主决定' },
+  custom: { label: '自定义', glyph: '⚙', desc: '自定义策略' },
 };
 
-function permissionShort(option?: PermissionOption): string {
-  if (!option) return '权限';
-  return PERMISSION_SHORT[option.value] ?? option.name;
+function permissionMeta(option?: PermissionOption): { label: string; glyph: string; desc: string } {
+  if (!option) return { label: '权限', glyph: '◎', desc: '' };
+  return PERMISSION_META[option.value] ?? { label: option.name, glyph: '◎', desc: '' };
 }
 
 /**
@@ -91,9 +91,10 @@ export function Composer({
   const showStop = running && !hasText && !hasAttachments && canStop;
   const canSend = (hasText || hasAttachments) && !anyUploading && (!running || canSteer);
   const [contentHeight, setContentHeight] = React.useState(40);
-  const [attachSheetOpen, setAttachSheetOpen] = React.useState(false);
+  const [plusOpen, setPlusOpen] = React.useState(false);
   const [presetMenuOpen, setPresetMenuOpen] = React.useState(false);
   const [permissionMenuOpen, setPermissionMenuOpen] = React.useState(false);
+  const [pendingPermission, setPendingPermission] = React.useState<string | null>(null);
 
   const activePreset = presets.find((p) => p.id === activePresetId) ?? presets[0];
   const activePermissionOption =
@@ -108,8 +109,17 @@ export function Composer({
     (permissions.length > 0 && Boolean(onPickPermission)) || (showPresets && presets.length > 0);
 
   const handlePlus = () => {
-    if (onPickAttachment) setAttachSheetOpen(true);
+    if (onPickAttachment) setPlusOpen((v) => !v);
     else if (onAttach) onAttach();
+  };
+
+  const choosePermission = (value: string): void => {
+    setPermissionMenuOpen(false);
+    if (value === 'danger-full-access' && activePermission !== value) {
+      setPendingPermission(value);
+      return;
+    }
+    onPickPermission?.(value);
   };
 
   return (
@@ -140,6 +150,28 @@ export function Composer({
         </View>
       ) : null}
 
+      {plusOpen && onPickAttachment ? (
+        <View style={styles.plusPanel}>
+          {ATTACH_TYPES.map((item) => (
+            <Pressable
+              key={item.kind}
+              accessibilityRole="button"
+              accessibilityLabel={'添加' + item.label}
+              onPress={() => {
+                setPlusOpen(false);
+                onPickAttachment(item.kind);
+              }}
+              style={({ pressed }) => [styles.plusItem, pressed && { opacity: 0.7 }]}
+            >
+              <View style={styles.plusIcon}>
+                <Text style={styles.plusIconText}>{KIND_BADGE[item.kind]}</Text>
+              </View>
+              <Text style={styles.plusLabel}>{item.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
       {showBar ? (
         <ScrollView
           horizontal
@@ -154,7 +186,7 @@ export function Composer({
               onPress={() => setPermissionMenuOpen(true)}
               style={({ pressed }) => [styles.barPill, pressed && { opacity: 0.7 }]}
             >
-              <Text style={styles.barPillText}>{permissionShort(activePermissionOption)}</Text>
+              <Text style={styles.barPillText}>{permissionMeta(activePermissionOption).label}</Text>
               <Text style={styles.barChevron}>▾</Text>
             </Pressable>
           ) : null}
@@ -219,13 +251,6 @@ export function Composer({
       </View>
 
       <PickerSheet
-        visible={attachSheetOpen}
-        title="添加附件"
-        options={ATTACH_TYPES.map((t) => ({ id: t.kind, label: t.label, glyph: KIND_BADGE[t.kind] }))}
-        onSelect={(id) => onPickAttachment?.(id as AttachmentKind)}
-        onClose={() => setAttachSheetOpen(false)}
-      />
-      <PickerSheet
         visible={presetMenuOpen}
         title="选择锦囊"
         options={presets.map((p) => ({ id: p.id, label: p.name, glyph: p.glyph }))}
@@ -236,11 +261,51 @@ export function Composer({
       <PickerSheet
         visible={permissionMenuOpen}
         title="工作权限"
-        options={permissions.map((p) => ({ id: p.value, label: p.name }))}
+        options={permissions.map((p) => ({
+          id: p.value,
+          label: permissionMeta(p).label,
+          glyph: permissionMeta(p).glyph,
+        }))}
         activeId={activePermission}
-        onSelect={(value) => onPickPermission?.(value)}
+        onSelect={choosePermission}
         onClose={() => setPermissionMenuOpen(false)}
       />
+
+      <Modal
+        visible={pendingPermission !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingPermission(null)}
+      >
+        <View style={styles.riskBackdrop}>
+          <View style={styles.riskCard}>
+            <Text style={styles.riskTitle}>完全权限</Text>
+            <Text style={styles.riskText}>
+              开启后 Agent 可以读写设备上的任意文件、执行命令，并且不再逐次弹审批。只在你信任当前任务时使用。
+            </Text>
+            <View style={styles.riskActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPendingPermission(null)}
+                style={styles.riskCancel}
+              >
+                <Text style={styles.riskCancelText}>取消</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  const value = pendingPermission;
+                  setPendingPermission(null);
+                  if (value) onPickPermission?.(value);
+                }}
+                style={styles.riskConfirm}
+              >
+                <Text style={styles.riskConfirmText}>我了解风险，继续</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -253,6 +318,31 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tray: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  plusPanel: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 10,
+    backgroundColor: colors.bg,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    shadowColor: '#0F1115',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  plusItem: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 6, borderRadius: radius.sm },
+  plusIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.glassStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plusIconText: { color: colors.blue, fontSize: 13, fontWeight: '700' },
+  plusLabel: { color: colors.text, fontSize: 12 },
   attachChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -294,9 +384,14 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: colors.glass,
     borderRadius: radius.panel,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.12)',
     padding: 8,
+    shadowColor: '#0F1115',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   key: {
     width: 40,
@@ -346,4 +441,33 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     includeFontPadding: false,
   },
+  riskBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15,17,21,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  riskCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: colors.bg,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    padding: 20,
+    gap: 12,
+  },
+  riskTitle: { color: colors.text, fontSize: 16, lineHeight: 24, fontWeight: '600' },
+  riskText: { color: colors.textDim, fontSize: 13, lineHeight: 20 },
+  riskActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
+  riskCancel: { paddingHorizontal: 12, paddingVertical: 10 },
+  riskCancelText: { color: colors.textDim, fontSize: 13 },
+  riskConfirm: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    backgroundColor: colors.dangerSoft,
+  },
+  riskConfirmText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
 });
