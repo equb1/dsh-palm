@@ -1,0 +1,148 @@
+# 锦囊 · AI 维护清单
+
+> 状态：2026-11-03。**本文件是任务状态、规则和命令的唯一来源**。
+> 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)。
+> **每次做完任务，必须回来勾选/更新这里**；不要另开任务文档。
+
+## 1. 当前基线
+
+- 真机：华为 PLR110 / Android 16 / arm64；无线 adb。
+- 本机宿主：proot + Node + dsh + 单文件桥；首装解压 15–25s；桥/引擎看门狗可用。
+- 轻引擎：会话/流式/审批/提问/10 个工具/docx+xlsx/生图；真机全链路通过。
+- 账号：官方 OAuth 真机可用；提供商目录（43）+ 自定义渠道可用。
+- 已完成的重活：工作区/设备密钥/`.dsh` 外置；通知、冷启动分享、`dshpalm://` 深链；
+  会话改名/置顶/归档；日志导出；错误人话化；图片压缩；桥走 APK 补丁。
+- 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建。
+- 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
+
+## 2. 任务清单
+
+> 规则：P0 未完成前不铺新功能；一项任务一个分支；完成后勾选并写验证方式。
+
+### P0 · 当前优先
+
+- [ ] **1.1 Office 三件套（proot + Python）**
+  - [ ] proot 里装 `python3` + `python-docx` + `openpyxl` + `python-pptx`
+  - [ ] 跑通 docx / xlsx / pptx 的创建、读取、编辑
+  - [ ] 决定打包方式（进 payload / 首次下载）并记录体积
+  - 验收：三格式各一份创建+读回+编辑；真机耗时与体积有记录
+
+- [ ] **1.2 EngineManager + 轻引擎默认**
+  - [ ] 状态机：`light` 默认、`proot` 触发式
+  - [ ] `warmLocalHost()`：只 `startHost()` 不 `connect`
+  - [ ] 顶栏「轻/完整」角标 + 空闲时手动切换
+  - [ ] 预热档位（触发式默认 / 智能预热可选 / 常备高级）
+  - [ ] idle 10min 回收、`onTrimMemory` 优先停 proot
+  - 验收：冷启动到可输入 <1s；proot 不自动连接；切换有进度；失败回退不丢回合
+
+- [ ] **1.3 附件收件管线（原生）**
+  - [ ] 分享/相册/文件选择器 → `workspace/uploads/<hash>-<name>`
+  - [ ] 生成路径引用（不走 base64），两种引擎都能读
+  - [ ] 附件 chip 标注「轻/完整」
+  - [ ] PDF/未支持格式只保存 + 提示
+  - [ ] 大文件只走路径
+  - 验收：分享图片/文档进 `uploads/`；不出现 base64 大包
+
+- [ ] **1.4 预路由 + 能力门 + Handoff v1**
+  - [ ] 发送前按 R2/R3 预路由（代码/后台/转格式 → proot）
+  - [ ] 轻引擎工具执行前检查能力 → `capability_missing`（无副作用）
+  - [ ] Handoff：摘要 + 最近 8 轮 + 工具结果 + 文件引用 + 待执行步骤
+  - [ ] 一条逻辑会话（`ConversationLink`）；只重发未执行步骤；失败回退
+  - 验收：手动/能力门切换都能续跑；重复副作用 0；用户看不到两个会话
+
+- [ ] **1.5 M1 收尾剩余**
+  - [ ] 真生图渠道（`b64_json`/`url` 两种返回）
+  - [ ] 真模型 ttft + 断网/401/429 异常路径
+  - [ ] 中文/空格/`#`/`%` 文件名边界
+  - [ ] 生成文件面板（打开/分享）
+
+### M2 · 进行中
+
+- [ ] **2.1 WebView 与 RN 会话态联动**（token 暴露、双向跳转、生命周期）
+- [ ] **2.2 会话迁移完整版**（事件回放/结构化交接；P0 的 1.4 只做 v1）
+- [ ] **2.3 插件徽章**（矩阵已有，App 入口 + 搜索 + 判定理由）
+- [ ] **2.4 轻引擎附件引用**（图片视觉/路径消费；与 1.3 原生收件不重复）
+- [ ] **2.5 轻引擎多提供商**（`providers.list/save/discover` + ProvidersCard）
+
+### M3 · 未开始
+
+- [ ] **3.1 官方 OAuth 真机验证**（loopback + 拒绝授权）
+- [ ] **3.2 LAN 直连**（mDNS、E2E WS、索引同步、离线状态机）
+- [ ] **3.3 系统入口**（小组件、悬浮球、QS、通知直达、后台分享）
+
+### M4 · 远期
+
+- [ ] relay / WebRTC DataChannel
+- [ ] iOS 遥控器 + Share Extension / Live Activity
+- [ ] L1 插件自动转译（`phone-bundle`）
+
+## 3. 工程债
+
+- [ ] **E1** JS bundle 4.2MB，Metro 不拆包 → 按需资源包
+- [ ] **E2** 一会话一 run，无队列 → 并发上限 + 排队
+- [ ] **E3** 宿主缺会话删除/正文搜索 → 等上游或自建索引
+- [ ] **E4** 沙箱只有 JS 层路径约束 → 文档别承诺安全边界
+- [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
+- [ ] **E6** 文档过时 → 每次改动同步四篇文档
+- [ ] **E7** 无性能基准 → `scripts/bench-light.ts` 取 P50/P90
+
+## 4. 待决事项
+
+| 项 | 选项 | 建议 |
+|---|---|---|
+| Python 打包 | 进 payload（离线可靠，+50–60MB）/ 首次下载 | spike 后定 |
+| ASR/OCR 时机 | ASR 先进 P1 / OCR 后置 | 先 ASR，音频路由才闭环 |
+| iOS 范围（D2） | 只遥控器 / 也要轻引擎 | 先遥控器 |
+| 插件市场（D3） | 只启用/配置 / 下载执行 | 前者（2.5.2） |
+| 多端同步（D4） | 索引+引用 / 也同步正文 | 仅索引+引用 |
+| PDF（C14） | 继续暂缓 / 重启 | 继续暂缓 |
+
+## 5. 分支、提交与验证规则
+
+- 从最新 `develop` 切；一个方面的任务一个分支：
+  `feat/office-python`、`feat/engine-manager`、`feat/attachment-intake`、
+  `feat/capability-handoff`、`feat/webview-link`、`chore/...`、`docs/...`。
+- **禁止** `git merge --ff-only` 后删分支、禁止直推 `develop`；
+  推分支 → 在 cnb 建 MR → 合并 → 删分支。MR 不可用时保留分支，不直推。
+- 提交信息：`<type>(<scope>): 一句话`，正文写「做了什么 / 为什么 / 怎么验」。
+- 合并前必须：`npm --prefix app run typecheck` + `npm run verify` 全绿。
+- 不把不相关改动塞进一个分支；发现别的坑另开分支。
+
+> 历史例外：`128f3f8` 曾 ff 直推 develop（违规），已在 docs 中记录；不要重复。
+
+## 6. 运行与验证命令
+
+```bash
+# 依赖（统一 npm，不要混 pnpm）
+npm install
+npm --prefix app install
+
+# 验证（数量以输出为准）
+npm --prefix app run typecheck
+npm run verify
+
+# 桥（改 engine/src/real 后必须）
+node scripts/build-bridge.mjs
+
+# Android
+cd app/android && sh gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+# 真机自检 / 真模型
+node --import tsx scripts/device-m1-check.ts <apk>
+node --import tsx scripts/device-real-check.ts <apk>
+node --import tsx scripts/mock-model-server.ts 8799
+MOCK_PLAN=docs node --import tsx scripts/mock-model-server.ts 8799
+```
+
+日志：`adb shell run-as cool.cnb.dshpalm tail -f files/logs/engine.log`；
+JS：`adb logcat -s ReactNativeJS`；端口：桥 8788 / dsh 8787。
+
+## 7. 文档维护规则
+
+1. **四篇分工**：REQUIREMENTS（要什么）/ TECHNICAL（怎么做）/ PITFALLS（踩过什么）/ AI-TASKS（做什么）。
+2. 任务状态**只改本文件**；TECHNICAL 只写机制，不列任务；REQUIREMENTS 不写实现细节。
+3. 新坑 → 追加 PITFALLS，格式「现象 → 原因 → 处理 → 验证」。
+4. 决定 → REQUIREMENTS §12 或本文件 §4；定了就删“待决”。
+5. **不要写死测试条数**，统一写“以 `npm run verify` 输出为准”。
+6. 旧文档只进 `docs/archive/`，不再引用；新文档互相链接只用四篇之间的相对路径。
