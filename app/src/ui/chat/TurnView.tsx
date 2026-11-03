@@ -125,7 +125,7 @@ function renderBlock(
     case 'tool':
       return <ToolRow key={block.id} block={block} />;
     case 'text':
-      return <MarkdownView key={block.id} text={block.text} />;
+      return <MarkdownView key={block.id} text={block.text} streaming={live} />;
     case 'approval': {
       const approval = approvals[block.approvalId];
       return approval ? <ApprovalCard key={block.id} approval={approval} /> : null;
@@ -254,7 +254,7 @@ function AssistantTurn({
                 b,
                 approvals,
                 onToggleThinking,
-                turn.status === 'streaming' && i === visibleBlocks.length - 1 && b.kind === 'thinking'
+                turn.status === 'streaming' && i === visibleBlocks.length - 1
               )}
             </React.Fragment>
           ))}

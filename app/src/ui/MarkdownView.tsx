@@ -245,6 +245,23 @@ function InlineText({
  * 块级解析（流式容错）
  * ------------------------------------------------------------------ */
 
+/** 把已稳定的 Markdown 前缀和正在增长的尾部切开：只重新解析尾部 */
+function splitStableMarkdown(text: string): { stable: string; tail: string } {
+  const lines = text.split('\n');
+  let fence = false;
+  let cut = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!.trim();
+    if (line.startsWith('```')) fence = !fence;
+    else if (!fence && line === '') cut = i;
+  }
+  if (cut < 0) return { stable: '', tail: text };
+  return {
+    stable: lines.slice(0, cut).join('\n'),
+    tail: lines.slice(cut + 1).join('\n'),
+  };
+}
+
 type BlockItem =
   | { type: 'h1' | 'h2' | 'h3'; text: string }
   | { type: 'codeblock'; lang: string; code: string }
@@ -682,7 +699,16 @@ export function MarkdownView({
   isStreaming,
 }: MarkdownViewProps): React.ReactElement {
   const activeStreaming = Boolean(streaming || isStreaming);
-  const blocks = React.useMemo(() => parseMarkdownBlocks(text), [text]);
+  const { stable, tail } = splitStableMarkdown(text);
+  const stableBlocks = React.useMemo(
+    () => (stable ? parseMarkdownBlocks(stable) : []),
+    [stable]
+  );
+  const tailBlocks = React.useMemo(() => (tail ? parseMarkdownBlocks(tail) : []), [tail]);
+  const blocks = React.useMemo(
+    () => [...stableBlocks, ...tailBlocks],
+    [stableBlocks, tailBlocks]
+  );
 
   const lastBlockIndex = blocks.length - 1;
   const lastBlock = blocks[lastBlockIndex];
