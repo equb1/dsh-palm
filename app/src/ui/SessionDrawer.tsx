@@ -5,6 +5,7 @@ import type { SessionSummary } from '../protocol';
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
 import { EmptyState } from './components';
+import { loadAccountPhone } from '../lib/accountPhone';
 import { colors, motion, radius, semantic, space, topInset } from './theme';
 
 const PANEL_WIDTH = 302;
@@ -66,8 +67,12 @@ export function SessionDrawer({
 }): React.ReactElement | null {
   const state = useStore();
   const account = state.account;
+  const [localPhone, setLocalPhone] = React.useState('');
   const phone =
-    account?.user?.maskedPhone ?? account?.user?.phone ?? account?.user?.phoneNumber;
+    account?.user?.maskedPhone ??
+    account?.user?.phone ??
+    account?.user?.phoneNumber ??
+    localPhone;
   const accountLabel = phone
     ? account?.user?.maskedPhone
       ? phone
@@ -91,6 +96,11 @@ export function SessionDrawer({
       if (finished && !visible) setMounted(false);
     });
   }, [visible, anim]);
+
+  React.useEffect(() => {
+    if (!visible) return;
+    void loadAccountPhone().then(setLocalPhone);
+  }, [visible]);
 
   if (!mounted) return null;
 

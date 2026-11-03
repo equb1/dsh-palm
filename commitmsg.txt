@@ -1,0 +1,7 @@
+feat(ui): 账号手机号支持本地回退并脱敏显示
+
+- 宿主 account.state 当前只有 status/attempt/links，没有 user/phone。
+- 设置 → DeepSeek 账号新增“手机号（仅本机显示）”，存 SecureStore。
+- 抽屉优先用宿主 user.maskedPhone/phone，没有则用本地号码，统一脱敏成 159****5670。
+- 真实宿主 account.state 已透传 user/profile/top-level 的 phone 字段。
+- 验证：app typecheck + npm run verify（83 tests）。

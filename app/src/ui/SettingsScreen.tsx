@@ -16,6 +16,7 @@ import { ProvidersCard } from './ProvidersCard';
 import { JustBashProbe } from './JustBashProbe';
 import { LightEngineScreen } from './LightEngineScreen';
 import { WebSurface } from './WebSurface';
+import { loadAccountPhone, saveAccountPhone } from '../lib/accountPhone';
 
 const REF = 'DEEPSEEK_API_KEY';
 
@@ -68,6 +69,11 @@ export function SettingsScreen(): React.ReactElement {
   const [lab, setLab] = React.useState<'none' | 'web' | 'bash' | 'light'>('none');
   const [webUrl, setWebUrl] = React.useState<string | null>(null);
   const [labNote, setLabNote] = React.useState<string | null>(null);
+  const [phone, setPhone] = React.useState('');
+  const [phoneSaved, setPhoneSaved] = React.useState(false);
+  React.useEffect(() => {
+    void loadAccountPhone().then(setPhone);
+  }, []);
   const status = state.credentials[REF];
   const configured = status?.configured === true;
   const preset = state.caps?.presets.find((p) => p.id === state.draftPresetId) ?? state.caps?.presets[0];
@@ -175,6 +181,32 @@ export function SettingsScreen(): React.ReactElement {
             </View>
             <Text style={styles.hint}>
               推荐：用账号登录，和 dsh 官方一致，不用申请 Key。授权在系统浏览器里完成，令牌留在宿主上，App 不保存。
+            </Text>
+
+            <Text style={styles.label}>手机号（仅本机显示）</Text>
+            <View style={styles.phoneRow}>
+              <TextInput
+                style={styles.phoneInput}
+                value={phone}
+                onChangeText={(v) => {
+                  setPhone(v);
+                  setPhoneSaved(false);
+                }}
+                placeholder="15912345670"
+                placeholderTextColor={colors.textFaint}
+                keyboardType="phone-pad"
+                accessibilityLabel="账号手机号"
+              />
+              <Btn
+                label={phoneSaved ? '已保存' : '保存'}
+                kind="ghost"
+                onPress={() => {
+                  void saveAccountPhone(phone).then(() => setPhoneSaved(true));
+                }}
+              />
+            </View>
+            <Text style={styles.hint}>
+              宿主没返回手机号时，用这里填的号码做脱敏显示（159****5670）；只存在本机，不上传。
             </Text>
 
             {accountNote ? <Text style={styles.hint}>{accountNote}</Text> : null}
@@ -545,6 +577,19 @@ const styles = StyleSheet.create({
   cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
   status: { color: colors.textFaint, fontSize: 11 },
   hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
+  label: { color: colors.text, fontSize: 12, fontWeight: '500', marginTop: 2 },
+  phoneRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  phoneInput: {
+    flex: 1,
+    backgroundColor: colors.glassStrong,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: colors.text,
+    fontSize: 13,
+  },
   input: {
     backgroundColor: colors.glassStrong,
     borderRadius: radius.md,
