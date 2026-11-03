@@ -178,7 +178,11 @@ export function TurnView({
     .join('\n');
   return (
     <View style={styles.assistant}>
-      {turn.blocks.map((b) => renderBlock(b, approvals, onToggleThinking, turn.status === 'streaming'))}
+      {turn.blocks.map((b, i) => (
+        <React.Fragment key={`${b.id}-${i}`}>
+          {renderBlock(b, approvals, onToggleThinking, turn.status === 'streaming')}
+        </React.Fragment>
+      ))}
       {turn.status === 'done' || turn.status === 'stopped' ? (
         <AssistantActions text={answerText} />
       ) : null}
@@ -217,19 +221,21 @@ const styles = StyleSheet.create({
   chevron: { color: colors.textFaint, fontSize: 11 },
 
   thinkingOpenBox: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    padding: 10,
-    gap: 8,
+    gap: 6,
+    paddingVertical: 2,
   },
   thinkingOpenHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
   },
-  thinkingScroll: { maxHeight: 360 },
+  thinkingScroll: {
+    maxHeight: 260,
+    marginLeft: 18,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.border,
+  },
   thinkingBody: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
   thinkingMore: { color: colors.textFaint, fontSize: 11, lineHeight: 16, paddingTop: 6 },
 });
