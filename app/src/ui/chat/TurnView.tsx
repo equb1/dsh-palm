@@ -6,8 +6,17 @@ import { MarkdownView } from '../MarkdownView';
 import { colors, font, radius } from '../theme';
 import { ApprovalCard } from './ApprovalCard';
 
-function ThinkingRow({ text, onToggle }: { text: string; onToggle?: () => void }): React.ReactElement {
+function ThinkingRow({
+  text,
+  onToggle,
+  live,
+}: {
+  text: string;
+  onToggle?: () => void;
+  live?: boolean;
+}): React.ReactElement {
   const [userOpen, setUserOpen] = React.useState<boolean | null>(null);
+  const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
   const open = userOpen ?? false;
   const tail = text.slice(-120).replace(/\s+/g, ' ').trim();
   // 长任务（20+ 分钟）的思考可能有几十万字，整段 Markdown 渲染会把 JS 线程卡死；
@@ -52,8 +61,17 @@ function ThinkingRow({ text, onToggle }: { text: string; onToggle?: () => void }
         <View style={{ flex: 1 }} />
         <Text style={styles.chevron}>▴</Text>
       </View>
-      <ScrollView style={styles.thinkingScroll} nestedScrollEnabled>
-        <MarkdownView text={shown} />
+      <ScrollView
+        ref={scrollRef}
+        style={styles.thinkingScroll}
+        nestedScrollEnabled
+        onContentSizeChange={() => {
+          if (live) scrollRef.current?.scrollToEnd({ animated: false });
+        }}
+      >
+        <Text style={styles.thinkingBody} selectable>
+          {shown}
+        </Text>
         {truncated ? (
           <Text style={styles.thinkingMore}>思考太长，这里只显示最后 {MAX_OPEN} 字。</Text>
         ) : null}
@@ -82,11 +100,14 @@ function ToolRow({ block }: { block: Extract<Block, { kind: 'tool' }> }): React.
 function renderBlock(
   block: Block,
   approvals: Record<string, Approval>,
-  onToggleThinking?: () => void
+  onToggleThinking?: () => void,
+  live?: boolean
 ): React.ReactElement | null {
   switch (block.kind) {
     case 'thinking':
-      return <ThinkingRow key={block.id} text={block.text} onToggle={onToggleThinking} />;
+      return (
+        <ThinkingRow key={block.id} text={block.text} onToggle={onToggleThinking} live={live} />
+      );
     case 'tool':
       return <ToolRow key={block.id} block={block} />;
     case 'text':
@@ -157,7 +178,7 @@ export function TurnView({
     .join('\n');
   return (
     <View style={styles.assistant}>
-      {turn.blocks.map((b) => renderBlock(b, approvals, onToggleThinking))}
+      {turn.blocks.map((b) => renderBlock(b, approvals, onToggleThinking, turn.status === 'streaming'))}
       {turn.status === 'done' || turn.status === 'stopped' ? (
         <AssistantActions text={answerText} />
       ) : null}
@@ -209,5 +230,6 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   thinkingScroll: { maxHeight: 360 },
+  thinkingBody: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
   thinkingMore: { color: colors.textFaint, fontSize: 11, lineHeight: 16, paddingTop: 6 },
 });

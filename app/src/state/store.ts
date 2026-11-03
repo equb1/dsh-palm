@@ -170,6 +170,10 @@ const DEFAULT_URL = hostAvailable ? 'ws://127.0.0.1:8788/ws' : 'ws://192.168.1.3
 type Listener = () => void;
 
 export class Store {
+  /** 流式增量先攒 50ms 再合并，避免每个 token 复制整棵字符串树 */
+  private pendingDelta = new Map<string, string>();
+  private deltaTimer: ReturnType<typeof setTimeout> | null = null;
+
   private state: AppState = {
     version: 0,
     conn: 'idle',
@@ -233,6 +237,39 @@ export class Store {
   private patch(next: Partial<AppState>): void {
     this.state = { ...this.state, ...next, version: this.state.version + 1 };
     for (const fn of this.listeners) fn();
+  }
+
+  private scheduleDeltaFlush(): void {
+    if (this.deltaTimer) return;
+    this.deltaTimer = setTimeout(() => {
+      this.deltaTimer = null;
+      this.flushDeltas();
+    }, 50);
+  }
+
+  /** 把攒下的流式增量一次性拼进 block；thinking 只留最后 24000 字，防止无限增长 */
+  private flushDeltas(): void {
+    if (this.pendingDelta.size === 0) return;
+    const detail = this.state.detail;
+    if (!detail) {
+      this.pendingDelta.clear();
+      return;
+    }
+    for (const [blockId, delta] of this.pendingDelta) {
+      for (const turn of detail.turns) {
+        const block = turn.blocks.find((b) => b.id === blockId) as
+          | Extract<Block, { kind: 'text' | 'thinking' }>
+          | undefined;
+        if (!block) continue;
+        block.text += delta;
+        if (block.kind === 'thinking' && block.text.length > 24000) {
+          block.text = '…' + block.text.slice(-24000);
+        }
+        break;
+      }
+    }
+    this.pendingDelta.clear();
+    this.patch({});
   }
 
   private fail(err: unknown): void {
@@ -1164,9 +1201,17 @@ export class Store {
           | Extract<Block, { kind: 'text' | 'thinking' }>
           | undefined;
         if (!block) return;
-        if (data.op === 'replace') block.text = data.text;
-        else block.text += data.text;
-        this.patch({});
+        if (data.op === 'replace') {
+          block.text = data.text;
+          this.pendingDelta.delete(data.blockId);
+          this.patch({});
+          return;
+        }
+        this.pendingDelta.set(
+          data.blockId,
+          (this.pendingDelta.get(data.blockId) ?? '') + data.text
+        );
+        this.scheduleDeltaFlush();
         return;
       }
 
@@ -1256,6 +1301,7 @@ export class Store {
       }
 
       case 'run.finished': {
+        this.flushDeltas();
         const d = this.state.detail;
         this.notifyRunFinished(data as { sessionId: string; reason: string });
         const runId = (data as { runId?: string }).runId;

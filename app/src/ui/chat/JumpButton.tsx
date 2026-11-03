@@ -3,39 +3,34 @@ import { Animated, Easing, Pressable, StyleSheet, Text } from 'react-native';
 
 import { colors } from '../theme';
 
-/** 回到底部：生成中边框做呼吸/跑马灯，结束后静态 */
+/** 回到底部：生成中圆环做呼吸描边，结束后静态 */
 export function JumpButton({ running, onPress }: { running: boolean; onPress: () => void }): React.ReactElement {
-  const pulse = React.useRef(new Animated.Value(0)).current;
+  const pulse = React.useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
     if (!running) {
-      pulse.setValue(0);
+      pulse.setValue(1);
       return;
     }
     const anim = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
-          toValue: 1,
-          duration: 1100,
+          toValue: 0.25,
+          duration: 900,
           easing: Easing.inOut(Easing.quad),
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
         Animated.timing(pulse, {
-          toValue: 0,
-          duration: 1100,
+          toValue: 1,
+          duration: 900,
           easing: Easing.inOut(Easing.quad),
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
       ])
     );
     anim.start();
     return () => anim.stop();
   }, [running, pulse]);
-
-  const borderColor = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [colors.borderStrong, colors.blue],
-  });
 
   return (
     <Pressable
@@ -44,7 +39,7 @@ export function JumpButton({ running, onPress }: { running: boolean; onPress: ()
       onPress={onPress}
       style={styles.wrap}
     >
-      <Animated.View style={[styles.ring, { borderColor }]} />
+      <Animated.View style={[styles.ring, { opacity: pulse }]} />
       <Text style={styles.arrow}>↓</Text>
     </Pressable>
   );
@@ -67,6 +62,7 @@ const styles = StyleSheet.create({
     bottom: -3,
     borderRadius: 21,
     borderWidth: 2,
+    borderColor: colors.blue,
   },
   arrow: { color: colors.textDim, fontSize: 16, lineHeight: 18 },
 });
