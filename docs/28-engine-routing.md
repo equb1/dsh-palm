@@ -22,7 +22,7 @@
 | F9 | proot 冷启动 13.7s；node 239MB + 桥 80MB ≈ 320MB；App 自身约 320MB | 真机实测 |
 | F10 | 轻引擎目标 <300ms 就绪、冷启动到可输入 <1s P90 | 23 |
 | F11 | 轻引擎 10 个工具；读上限 10MB；软链 EPERM；chmod 只内存；附件上传 unsupported | 26、代码 |
-| F12 | 测试基线 80 条 | `npm run verify` |
+| F12 | 测试基线：`npm run verify` 全绿 | 数量以命令输出为准 |
 | F13 | `dsh-skill-office` 已在 rootfs；但无 Python、无 linux-arm64 LibreOfficeKit | 真机 rootfs |
 | F14 | 三件套（docx/xlsx/pptx 创建/读取/编辑）可用 Python 补齐，约 50–60MB | 本机验证 |
 | F15 | render / recalculate / PDF 导出 / 旧 `.doc/.ppt` 需要真 LibreOffice（约 400–600MB） | 17、23 |
@@ -72,7 +72,7 @@
 | 命中 | 引擎 |
 |---|---|
 | 跑代码/脚本、python/node/npm/git/ffmpeg、编译、测试、装依赖 | proot |
-| 转 PDF、渲染、旧 `.doc/.ppt` | proot（若装 LibreOffice）否则电脑端 |
+| 转 PDF、渲染、旧 `.doc/.ppt` | **默认不做**（C8）；需要时走电脑端或 proot 可选装 LibreOffice |
 | 要后台/锁屏继续跑 | proot（轻引擎后台会被冻结） |
 | 其余 / 不确定 | 轻引擎，失败再走 R4 |
 
@@ -98,7 +98,17 @@
 
 ### R7 附件路由
 
-**统一收件管线**：系统分享/相册 → 原生复制到 `<filesDir>/workspace/uploads/<hash>-<name>` → 生成路径引用（不走 base64）→ 按类型路由。
+**统一收件管线**：系统分享/相册/文件选择器 → 原生复制到 `<filesDir>/workspace/uploads/<hash>-<name>` → 生成路径引用（不走 base64）。
+
+**判定顺序（固定，避免「图片走轻、混合走重」互相矛盾）**：
+
+1. **收件永远在原生侧**，先落 `uploads/`；
+2. **原生预处理优先**：图片先 OCR/视觉，音频先 ASR/转写；
+3. 预处理后，**按剩余操作**决定引擎：
+   - 只是描述/摘要/读写 → **light**；
+   - 需要真二进制、编辑现有 Office、pptx、视频/压缩包、>10MB → **proot**；
+4. **混合附件**：先做原生预处理；只要**任一文件**在预处理后仍需 proot，就在 **proot 汇合**，
+   OCR/ASR 的文本结果与文件路径一并带入；全部文件都只需轻处理时才用 light。
 
 | 附件类型 | 首选 | 备选 / 说明 |
 |---|---|---|
@@ -110,7 +120,7 @@
 | 压缩包 | proot（unzip） | light 只有 gzip stub |
 | 代码 / 文本 | 读改写 light；跑/构建 proot | 文件共用 |
 | >10MB | proot 或分块 | light 单次读上限 |
-| 混合附件 | proot | 全轻时用 light |
+| 混合附件 | 先原生预处理，有一个需 proot 就在 proot 汇合 | 全轻才用 light |
 | **PDF / 未支持格式** | **原样存到 `uploads/` + 提示「暂不支持解析」** | 不建解析链路，不承诺效果 |
 
 > 2026-11-03 决策：**PDF 附件先不做**（C13）。PDF 生成也一并延期（C14）。
@@ -192,38 +202,15 @@ Handoff {
 - **一条逻辑会话**：`ConversationLink` 映射两个 sessionId，原会话只读保留；
 - 失败回退：proot 起不来/交接失败 → 留在 light，不把这一轮标失败。
 
-## 5. 后续任务
+## 5. 执行顺序（任务定义见 27）
 
-### P0 · 本轮（约 1 周）
+本文只排顺序；**任务内容、验收、估时统一在 [27-remaining-work.md](27-remaining-work.md)**，避免两处各写一套。
 
-| # | 任务 | 产出 | 估时 |
-|---|---|---|---|
-| 1 | Python 三件套 spike | proot 里跑通 docx/xlsx/pptx 创建+读取+编辑；量体积/耗时 | 0.5–1d |
-| 2 | Python 打包 | 进 payload 或首次下载（spike 后定） | 0.5–1d |
-| 3 | EngineManager + warmLocalHost | light 默认、proot 后台预热/按需、状态订阅 | 1d |
-| 4 | 预路由 R2/R3 + 引擎角标 | 发送前判定/提示/手动切换 | 1–2d |
-| 5 | 附件收件管线 | 原生 → `uploads/` → 路径引用；chip 标注引擎；PDF 保存+提示 | 1–2d |
-| 6 | Handoff v1 + 一条逻辑会话 | 边界切换、摘要+8 轮、失败回退 | 2d |
-
-### P1 · 路由完善 + M1 收尾（1–2 周）
-
-| # | 任务 |
-|---|---|
-| 7 | 能力路由（`capability_missing`）+ 自动升级询问 |
-| 8 | 会话列表合并 + badge；配置共享 |
-| 9 | Office：docx/xlsx 编辑 + pptx → proot；接 `dsh-skill-office` |
-| 10 | 真生图渠道 + 真模型 ttft/异常路径 |
-| 11 | 中文/空格/特殊字符文件名边界 |
-| 12 | 生成文件面板（打开/分享） |
-| 13 | 原生 ASR（音频路由闭环）；OCR 可后置 |
-
-### P2 · M2（3–4 周）
-
-WebView 与 RN 会话态联动；proot 按需 + 完整迁移；插件徽章；轻引擎附件上传；轻引擎多提供商。
-
-### P3 · M3/M4
-
-官方 OAuth 真机验证、LAN 直连、小组件/悬浮球/通知直达/后台分享；relay/WebRTC、iOS 遥控器、L1 自动转译。
+1. **27 §1.1 Office 三件套** 与 **27 §1.2 EngineManager** 并行（互不冲突）；
+2. **27 §1.3 附件收件** + **27 §1.4 预路由/能力门/Handoff v1**；
+3. **27 §1.5 M1 收尾剩余**（生图 / ttft / 文件名 / 文件面板）；
+4. **27 §2.x M2**：WebView、迁移完整版、插件徽章、轻引擎附件/多提供商；
+5. **27 §3.x M3**、**27 §4 M4**。
 
 ### 验收指标
 

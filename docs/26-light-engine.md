@@ -4,7 +4,7 @@
 > docx/xlsx/生图）。**
 > 对应 [23-requirements.md](23-requirements.md) §2/§4 与 §8 的 M1 前半，接续
 > [25-m1-spike-results.md](25-m1-spike-results.md) 里"剩下的集成工作"第 1 条。
-> 验证：`npm run verify`（typecheck + 78 条测试）+ 真机全链路（见 §6）。
+> 验证：`npm run verify`（typecheck + 全部测试，数量以命令输出为准）+ 真机全链路（见 §6）。
 
 ## 0. 一句话
 
@@ -243,7 +243,7 @@ dshpalm://light?base=https%3A%2F%2Fapi.deepseek.com%2Fv1&model=deepseek-chat&key
 ### 6.1 Node 侧（不需要手机）
 
 ```bash
-npm run verify        # typecheck + 78 条测试
+npm run verify        # typecheck + 全部测试（数量以输出为准）
 ```
 
 ### 6.2 打包侧（不需要手机，验证 Metro 解析与 `.native.ts` 分叉）

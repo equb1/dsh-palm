@@ -16,6 +16,8 @@ main                发布分支：只接受从 develop 合入的发版（tag �
 - **基线永远是 `develop`**：开分支前先 `git fetch origin && git checkout develop && git pull`，再从最新 `develop` 切。
 - **一个分支只做一件事**：一次功能、一轮修复、一篇文档。不要把不相关的改动塞进同一个分支。
 - **不直接提交 `develop` / `main`**：本地可以改，但落库必须走分支 + PR。
+- **禁止用 `git merge --ff-only <分支> && git push` 后再删分支**：远端只会看到一条直提，
+  没有分支、没有 PR、没有 review 记录。合并必须由 PR/MR 完成（在 cnb 上点合并）。
 - 分支合入后删除；`main` 只在发版时从 `develop` 合并并打 tag。
 
 ## 按任务分支（2026-11-03 起）
@@ -40,7 +42,9 @@ main                发布分支：只接受从 develop 合入的发版（tag �
 2. 一个分支只做一个方面的任务；大任务可以拆子分支，但合并顺序要写清楚；
 3. 每个分支必须能编译、`npm run verify` 绿；
 4. 推到 `origin` → PR 到 `develop` → squash 合并 → 删分支；
-5. 不要在一个分支里顺手改别的方面；发现了就另开分支。
+5. 不要在一个分支里顺手改别的方面；发现了就另开分支；
+6. **MR 没合并前不要删分支、不要把分支本地合进 develop 再推送**；如果 MR 工具不可用，
+   就保留分支并请有权限的人合并，**不要直推 develop**。
 
 ## 命名
 
@@ -73,7 +77,8 @@ main                发布分支：只接受从 develop 合入的发版（tag �
 1. 分支推到 `origin`，开 PR 到 `develop`；
 2. PR 描述里贴：改了什么、怎么验的、有什么已知限制；
 3. CI 必须绿：cnb.cool 用 `.cnb.yml`（develop 的 PR/push、main 的 push），
-   GitHub 镜像用 `.github/workflows/ci.yml`，两边跑同一套（app typecheck + 22 条测试）；
+   GitHub 镜像用 `.github/workflows/ci.yml`，两边跑同一套（app typecheck + `npm run verify`，
+   测试数量以命令输出为准）；
 4. 合并方式用 **squash**，标题沿用提交标题；
 5. 合并后删分支。
 
@@ -83,5 +88,7 @@ main                发布分支：只接受从 develop 合入的发版（tag �
 多个文件被三轮同时改过（`store.ts`、`protocol/index.ts`、`SettingsScreen.tsx` 等），
 **无法无损拆成三个独立分支**，所以合并成了一个 `feat/providers-and-stability`。这是唯一一次例外。
 
-**从 2026-11-03 起严格执行「一个方面的任务一个分支」**；本文档本身走的是
-`docs/engine-routing` 分支。
+**2026-11-03 的违规记录**：`docs/engine-routing`（commit `128f3f8`）是在本地提交后用
+`git merge --ff-only` 合进 `develop` 并删除分支的，远端只留下一条直提，**没有 MR**；
+这违反了本节规则。从 `docs/consistency-fix` 起按正确流程执行：推分支 → 在 cnb 建 MR →
+合并 → 删分支。
