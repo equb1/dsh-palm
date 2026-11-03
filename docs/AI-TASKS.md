@@ -99,7 +99,7 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 | [x] A4 | `ui/engine-badge` | `EngineBadge` 组件，先不接线 | 新文件 `ui/EngineBadge.tsx` | props 类型完整；未接线不影响现有 UI | 已完成 |
 | [x] A5 | `ui/attachment-chips` | `AttachmentChips` 组件，先不接线 | 新文件 `ui/AttachmentChips.tsx` | props 类型完整；未接线 | 已完成 |
 | [x] A6 | `ui/model-sheet` | ModelSheet 视觉：分组、默认标记、搜索、禁用态 | `ui/ModelSheet.tsx` | 现有选择行为不变；截图 | 已完成 |
-| A7 | `ui/skeletons` | 聊天/首页/抽屉的 Skeleton 与 EmptyState | 新文件 `ui/Skeletons.tsx` | 未接线；typecheck | 0.5d |
+| [x] A7 | `ui/skeletons` | 聊天/首页/抽屉的 Skeleton 与 EmptyState | 新文件 `ui/Skeletons.tsx` | 未接线；typecheck | 已完成 |
 
 > A1 备注：代码块轻量语法高亮（`ui/syntax.ts` + `test/syntax.test.ts`）随 A1 一并落地，未单列任务；
 > 流式光标已在 `MarkdownView` 提供 `streaming` / `isStreaming` 属性，但 `ChatScreen` 属禁区未接线，界面暂不显示；按约定等 1.2–1.4 合入后再做（见 C 表）。
