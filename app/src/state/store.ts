@@ -196,7 +196,11 @@ function mergeTurn(prev: Turn, next: Turn): Turn {
   };
 }
 
-/** 只合并同一个 run 的快照/实时回合；跨 run 的连续 assistant 绝不合并 */
+function sharesBlock(a: Turn, b: Turn): boolean {
+  return a.blocks.some((x) => b.blocks.some((y) => sameBlock(x, y)));
+}
+
+/** 只合并同一个 run 的快照/实时回合；跨 run 的 assistant 绝不合并 */
 function mergeNearbyTurns(turns: Turn[], incoming: Turn): Turn[] {
   if (incoming.role === 'user') {
     if (turns.some((t) => t.id === incoming.id)) return turns;
@@ -205,7 +209,11 @@ function mergeNearbyTurns(turns: Turn[], incoming: Turn): Turn[] {
   const last = turns[turns.length - 1];
   const sameRun =
     last?.role === 'assistant' &&
-    ((last.runId && incoming.runId && last.runId === incoming.runId) || last.id === incoming.id);
+    ((last.runId && incoming.runId && last.runId === incoming.runId) ||
+      last.id === incoming.id ||
+      // 宿主快照没有 runId 时，用“双方都在 streaming”或相同 block 认同一轮
+      (last.status === 'streaming' && incoming.status === 'streaming') ||
+      sharesBlock(last, incoming));
   if (sameRun) {
     const next = turns.slice();
     next[next.length - 1] = mergeTurn(last!, incoming);
@@ -575,9 +583,20 @@ export class Store {
         : undefined;
       if (live) {
         // 宿主快照里可能只有落盘的部分回合；同一 id 用缓存里的 live 回合，别画两份
-        const same = turns.findIndex(
-          (t) => t.id === live.id || Boolean(live.runId && t.runId === live.runId)
-        );
+        let same = -1;
+        for (let i = turns.length - 1; i >= 0; i--) {
+          const t = turns[i]!;
+          if (t.role !== 'assistant') continue;
+          if (
+            t.id === live.id ||
+            (live.runId && t.runId === live.runId) ||
+            t.status === 'streaming' ||
+            sharesBlock(t, live)
+          ) {
+            same = i;
+            break;
+          }
+        }
         if (same >= 0) {
           turns = turns.slice();
           turns[same] = mergeTurn(turns[same]!, live);
