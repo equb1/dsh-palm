@@ -58,7 +58,8 @@
 
 ### UI 工作流（与 P0 并行）
 
-> UI 第 1 批不依赖引擎任务，可独立开分支；每个 U 一个分支（`ui/...`）。
+> U1/U3/U4/U5/U6/U7（全量）/U8 依赖或强冲突于 P0 的 1.2–1.4，**先不要动**；
+> 先做下面「可并行 UI 项」。U2 可先做组件抽取（B3）。
 
 - [ ] **U1 聊天页重排**：浮动顶栏、Composer 28 圆角/40 键、错误横幅、回到底部键
 - [ ] **U2 消息层**：思考 3 行实时窗、工具行合并、整轮折叠、ChatCard 统一
@@ -68,6 +69,99 @@
 - [ ] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
 - [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
+
+#### 可并行 UI 项（2026-11-03，给 agent）
+
+**背景**：1.2/1.3/1.4 会改 `App.tsx`、`store.ts`、`SettingsScreen.tsx`、
+`ConnectScreen.tsx`、`Composer.tsx`、`ChatScreen.tsx` 的逻辑。
+以下任务不碰这些文件（或只留槽），可与 P0 并行。
+
+**禁区（本轮不要改这些文件）**：
+
+```
+app/App.tsx
+app/src/state/store.ts
+app/src/ui/SettingsScreen.tsx
+app/src/ui/ConnectScreen.tsx
+app/src/ui/Composer.tsx
+app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
+```
+
+如果任务必须改到禁区文件，**停止并拆分支/后置**，不要硬改。
+
+**A. 完全独立（推荐先做）**
+
+| ID | 分支 | 任务 | 只改 | 验收 | 估时 |
+|---|---|---|---|---|---|
+| A1 | `ui/markdown-polish` | Markdown 增强：代码块复制、表格样式、链接打开、图片、流式光标 | `ui/MarkdownView.tsx` | 代码/表格/链接正常；typecheck | 0.5–1d |
+| A2 | `ui/design-tokens` | 字号层级、动效时长/曲线、语义色；**只增不改** | `ui/theme.ts` | 现有导出不变；typecheck | 0.5d |
+| A3 | `ui/components-kit` | `Card`/`Chip`/`IconButton`/`Skeleton`/`EmptyState`/`SectionHeader` | `ui/parts.tsx` + 新文件 `ui/components/*` | 新组件有 props 类型；旧组件不变 | 1d |
+| A4 | `ui/engine-badge` | `EngineBadge` 组件，先不接线 | 新文件 `ui/EngineBadge.tsx` | props 类型完整；未接线不影响现有 UI | 0.5d |
+| A5 | `ui/attachment-chips` | `AttachmentChips` 组件，先不接线 | 新文件 `ui/AttachmentChips.tsx` | props 类型完整；未接线 | 0.5d |
+| A6 | `ui/model-sheet` | ModelSheet 视觉：分组、默认标记、搜索、禁用态 | `ui/ModelSheet.tsx` | 现有选择行为不变；截图 | 0.5d |
+| A7 | `ui/skeletons` | 聊天/首页/抽屉的 Skeleton 与 EmptyState | 新文件 `ui/Skeletons.tsx` | 未接线；typecheck | 0.5d |
+
+**B. 低风险（可做，但留槽位）**
+
+| ID | 分支 | 任务 | 文件 | 留槽要求 |
+|---|---|---|---|---|
+| B1 | `ui/session-drawer-polish` | 行高/搜索聚焦/空状态/主机条吸底 | `ui/SessionDrawer.tsx` | 主机条右侧留空槽，不写死内容；不读新 store 字段 |
+| B2 | `ui/home-polish` | 问候、最近卡片、预设胶囊、空状态 | `ui/HomeScreen.tsx` | 顶栏右侧留槽位；不改连接/引擎逻辑 |
+| B3 | `ui/chat-components` | 把回合/思考/工具渲染拆到 `ui/chat/*`，ChatScreen 只组装 | 新文件 + `ChatScreen.tsx` **只改 import** | 不改 store/protocol；1.4 之后再加新 block 类型 |
+
+**C. 现在不要做**
+
+| 任务 | 原因 |
+|---|---|
+| U1 聊天页重排 | 改 ChatScreen + Composer，和 1.2/1.3/1.4 都撞 |
+| U3 流式 32ms 合并 | 改 `store.ts`，与 1.2/1.4 冲突最大 |
+| U4 设置 IA | 改 SettingsScreen，1.2 引擎卡/账号/提供商都在里面 |
+| U5 引擎页 | 需要 EngineManager 的状态字段 |
+| U6 全部功能页 | 要动 App/Settings 导航；等 1.2 入口定型 |
+| U7 浅色主题全量 | 只做 A2 的 token；全量换肤等 UI 批次 |
+| U8 文件/终端/工作区 | 依赖后端接口 |
+
+**D. 顺序**
+
+1. A1 → A2 → A3（基础三件套）；
+2. A4 / A5（给 1.2/1.3 预留组件）；
+3. A6 / A7；
+4. B1 / B2 / B3（留槽，允许和引擎任务并行）；
+5. 等 1.2/1.3/1.4 合入后，再做 U1/U3/U4/U5/U6/U7/U8。
+
+每个分支都从最新 `develop` 切，一个分支一个任务，走 MR；不要直推 `develop`。
+
+**E. 组件契约（引擎任务只传数据，UI 不改）**
+
+```ts
+// ui/EngineBadge.tsx
+type EngineBadgeProps = {
+  kind: 'light' | 'remote' | null;
+  label?: string;
+  onPress?: () => void;
+};
+
+// ui/AttachmentChips.tsx
+type AttachmentChip = {
+  id: string;
+  name: string;
+  kind: 'image' | 'file';
+  engine?: 'light' | 'full';
+};
+type AttachmentChipsProps = {
+  items: AttachmentChip[];
+  onRemove?: (id: string) => void;
+  onPress?: (id: string) => void;
+};
+```
+
+**F. Definition of Done**
+
+- `npm --prefix app run typecheck` 与 `npm run verify` 全绿；
+- `git diff --name-only` 不包含禁区文件（B3 只允许 ChatScreen import 行）；
+- 真机或网页截图附在 PR（至少改动的屏）；
+- 勾选本文件对应项；新踩的坑追加到 `PITFALLS.md`；
+- 一个分支一个任务，MR 合入后删分支。
 
 ### M2 · 进行中
 
