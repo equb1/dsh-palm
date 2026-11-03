@@ -94,7 +94,7 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 | ID | 分支 | 任务 | 只改 | 验收 | 估时 |
 |---|---|---|---|---|---|
 | A1 | `ui/markdown-polish` | Markdown 增强：代码块复制、表格样式、链接打开、图片、流式光标 | `ui/MarkdownView.tsx` | 代码/表格/链接正常；typecheck | 0.5–1d |
-| A2 | `ui/design-tokens` | 字号层级、动效时长/曲线、语义色；**只增不改** | `ui/theme.ts` | 现有导出不变；typecheck | 0.5d |
+| [x] A2 | `ui/design-tokens` | 字号层级、动效时长/曲线、语义色；**只增不改** | `ui/theme.ts` | 现有导出不变；typecheck | 已完成 |
 | A3 | `ui/components-kit` | `Card`/`Chip`/`IconButton`/`Skeleton`/`EmptyState`/`SectionHeader` | `ui/parts.tsx` + 新文件 `ui/components/*` | 新组件有 props 类型；旧组件不变 | 1d |
 | A4 | `ui/engine-badge` | `EngineBadge` 组件，先不接线 | 新文件 `ui/EngineBadge.tsx` | props 类型完整；未接线不影响现有 UI | 0.5d |
 | A5 | `ui/attachment-chips` | `AttachmentChips` 组件，先不接线 | 新文件 `ui/AttachmentChips.tsx` | props 类型完整；未接线 | 0.5d |
