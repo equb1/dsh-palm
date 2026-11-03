@@ -45,10 +45,9 @@ const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: semantic.card,
   },
   accent: { backgroundColor: semantic.accentSoft },
-  pressed: { backgroundColor: semantic.cardPressed },
+  pressed: { backgroundColor: 'rgba(255,255,255,0.08)' },
   disabled: { opacity: 0.4 },
   glyph: { color: semantic.textSecondary, fontSize: 16 },
   glyphAccent: { color: semantic.accent },

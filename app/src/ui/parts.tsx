@@ -57,8 +57,8 @@ export function Btn({
   style?: ViewStyle;
 }): React.ReactElement {
   const bg =
-    kind === 'primary' ? colors.blue : kind === 'danger' ? colors.dangerSoft : 'rgba(255,255,255,0.04)';
-  const fg = kind === 'primary' ? '#FFFFFF' : kind === 'danger' ? colors.danger : colors.text;
+    kind === 'primary' ? colors.blue : kind === 'danger' ? colors.dangerSoft : 'transparent';
+  const fg = kind === 'primary' ? colors.bg : kind === 'danger' ? colors.danger : colors.text;
   return (
     <Pressable
       accessibilityRole="button"
@@ -68,7 +68,7 @@ export function Btn({
       style={({ pressed }) => [
         styles.btn,
         { backgroundColor: bg, opacity: disabled ? 0.4 : pressed ? 0.8 : 1 },
-        kind === 'ghost' && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+        kind === 'ghost' && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
         style,
       ]}
     >
@@ -94,12 +94,12 @@ const styles = StyleSheet.create({
   },
   pillGlass: { backgroundColor: colors.glass },
   btn: {
-    height: 42,
+    height: 40,
     paddingHorizontal: space.lg,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnLabel: { fontSize: 15, fontWeight: '600' },
-  mono: { fontFamily: font.mono, fontSize: 12, color: colors.textDim },
+  btnLabel: { fontSize: 14, lineHeight: 22, fontWeight: '500' },
+  mono: { fontFamily: font.mono, fontSize: 11, lineHeight: 16, color: colors.textDim },
 });

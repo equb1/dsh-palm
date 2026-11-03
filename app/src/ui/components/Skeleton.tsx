@@ -1,7 +1,7 @@
 import React from 'react';
 import { Animated, StyleSheet, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
 
-import { motion, radius as radiusToken, semantic } from '../theme';
+import { motion, radius as radiusToken } from '../theme';
 
 export interface SkeletonProps {
   width?: DimensionValue;
@@ -48,5 +48,5 @@ export function Skeleton({
 }
 
 const styles = StyleSheet.create({
-  base: { backgroundColor: semantic.cardStrong },
+  base: { backgroundColor: 'rgba(255,255,255,0.08)' },
 });

@@ -36,7 +36,7 @@ export function Card({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: semantic.card,
+    backgroundColor: semantic.surfaceRaised,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: semantic.border,

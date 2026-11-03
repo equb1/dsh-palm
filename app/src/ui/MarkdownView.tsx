@@ -14,7 +14,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { colors, font, radius, space } from './theme';
+import { colors, font, radius, semantic, space } from './theme';
 import { highlight, type SyntaxKind } from './syntax';
 
 const SYNTAX_STYLES: Record<SyntaxKind, { color?: string; fontStyle?: 'italic' }> = {
@@ -785,13 +785,13 @@ const styles = StyleSheet.create({
   inlineCode: {
     fontFamily: font.mono,
     fontSize: 13,
-    color: '#8BA4F9',
-    backgroundColor: 'rgba(108, 138, 240, 0.12)',
+    color: colors.text,
+    backgroundColor: semantic.codeInline,
     borderRadius: 4,
     paddingHorizontal: 5,
   },
   link: {
-    color: colors.blue,
+    color: semantic.link,
     textDecorationLine: 'underline',
   },
   cursorText: {
@@ -804,21 +804,21 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   h1Wrap: { marginTop: 6, marginBottom: 2 },
-  h1Text: { fontSize: 20, fontWeight: '700', color: colors.text, lineHeight: 28 },
+  h1Text: { fontSize: 21, lineHeight: 30, fontWeight: '700', color: colors.text },
   h2Wrap: { marginTop: 5, marginBottom: 2 },
-  h2Text: { fontSize: 17, fontWeight: '700', color: colors.text, lineHeight: 24 },
+  h2Text: { fontSize: 19, lineHeight: 28, fontWeight: '700', color: colors.text },
   h3Wrap: { marginTop: 4, marginBottom: 1 },
-  h3Text: { fontSize: 15, fontWeight: '600', color: colors.text, lineHeight: 22 },
+  h3Text: { fontSize: 17, lineHeight: 24, fontWeight: '600', color: colors.text },
   pWrap: { marginVertical: 1 },
   paragraph: {
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: 14,
+    lineHeight: 22,
     color: colors.text,
   },
   quoteWrap: {
     borderLeftWidth: 3,
-    borderLeftColor: colors.blue,
-    backgroundColor: colors.glass,
+    borderLeftColor: colors.borderStrong,
+    backgroundColor: colors.bgElevated,
     borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -842,7 +842,7 @@ const styles = StyleSheet.create({
   },
   /* 代码块 */
   codeBlockWrap: {
-    backgroundColor: '#0F1117',
+    backgroundColor: semantic.codeBlock,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
@@ -850,7 +850,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   codeBlockHeader: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: colors.glass,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -890,8 +890,8 @@ const styles = StyleSheet.create({
   codeScroll: { padding: 12 },
   codeBlockText: {
     fontFamily: font.mono,
-    fontSize: 12.5,
-    lineHeight: 19,
+    fontSize: 11.5,
+    lineHeight: 17,
     color: '#D8DEE9',
   },
   /* 图片 */
@@ -957,11 +957,11 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   tableHeaderRow: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.glassStrong,
     borderTopWidth: 0,
   },
   tableRowStripe: {
-    backgroundColor: colors.glass,
+    backgroundColor: colors.bgElevated,
   },
   tableCell: {
     paddingHorizontal: 10,
@@ -973,6 +973,6 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   tableCellFirst: { borderLeftWidth: 0 },
-  tableHeaderText: { color: colors.text, fontSize: 13, fontWeight: '600', lineHeight: 19 },
-  tableCellText: { color: colors.textDim, fontSize: 13, lineHeight: 19 },
+  tableHeaderText: { color: colors.text, fontSize: 12, fontWeight: '500', lineHeight: 18 },
+  tableCellText: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
 });

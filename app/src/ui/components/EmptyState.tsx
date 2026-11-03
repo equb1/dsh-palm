@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
     gap: space.xs,
   },
   glyph: { fontSize: 28, color: semantic.textTertiary, marginBottom: space.xs },
-  title: { ...typography.subheading, color: semantic.textPrimary, textAlign: 'center' },
+  title: { ...typography.heading, color: semantic.textPrimary, textAlign: 'center' },
   description: {
     ...typography.bodySmall,
     color: semantic.textSecondary,
