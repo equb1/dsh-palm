@@ -297,6 +297,7 @@ C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期�
 （`Card` / `Chip` / `IconButton` / `Skeleton` / `EmptyState` / `SectionHeader`）与 `SmoothKeyboardAvoid.tsx`；
 Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向滚动）、表格、链接（http/https/mailto/dshpalm）、图片、流式光标（`streaming` 属性，待接线）。
 代码高亮在 `syntax.ts`（js/ts、py、sh、json、html；未知语言回退纯文本）。
+聊天渲染在 `app/src/ui/chat/*`（`TurnView` / `ApprovalCard`），`ChatScreen.tsx` 只负责顶栏、滚动和 Composer 组装。
 
 ### 8.3 聊天页：现状与目标
 

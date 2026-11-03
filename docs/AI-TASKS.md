@@ -114,7 +114,7 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 |---|---|---|---|---|
 | [x] B1 | `ui/session-drawer-polish` | 行高/搜索聚焦/空状态/主机条吸底 | `ui/SessionDrawer.tsx` | 主机条右侧留空槽，不写死内容；不读新 store 字段 |
 | [x] B2 | `ui/home-polish` | 问候、最近卡片、预设胶囊、空状态 | `ui/HomeScreen.tsx` | 顶栏右侧留槽位；不改连接/引擎逻辑 |
-| B3 | `ui/chat-components` | 把回合/思考/工具渲染拆到 `ui/chat/*`，ChatScreen 只组装 | 新文件 + `ChatScreen.tsx` **只改 import** | 不改 store/protocol；1.4 之后再加新 block 类型 |
+| [x] B3 | `ui/chat-components` | 把回合/思考/工具渲染拆到 `ui/chat/*`，ChatScreen 只组装 | 新文件 + `ChatScreen.tsx` **只改 import** | 不改 store/protocol；1.4 之后再加新 block 类型 |
 
 **C. 现在不要做**
 

@@ -1,0 +1,203 @@
+import React from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import type { Approval } from '../../protocol';
+import { store } from '../useStore';
+import { Btn } from '../parts';
+import { colors, font, radius, riskTone, space } from '../theme';
+
+/**
+ * 提问卡片：官方卡片的样子——推荐选项竖排（带说明）、可以自己输入、也可以跳过。
+ * dsh 的答案 schema 本来就有 custom 字段，之前只用了 selected。
+ */
+function QuestionActions({ approval }: { approval: Approval }): React.ReactElement {
+  const [draft, setDraft] = React.useState('');
+  const options = approval.options ?? [];
+  const questionId = approval.questionId ?? '';
+  // 只有"确认型"提问才有推荐项：引擎用 intent.approve 指明了哪个选项是批准。
+  // 普通提问不标推荐——引擎不排优先级，标了就是编的。
+  const recommended = approval.intent?.approve ?? null;
+
+  return (
+    <View style={styles.qWrap}>
+      {options.map((opt) => (
+        <Pressable
+          key={opt.label}
+          accessibilityRole="button"
+          onPress={() => void store.answerQuestion(approval.id, questionId, [opt.label])}
+          style={({ pressed }) => [styles.qOption, pressed && styles.qOptionPressed]}
+        >
+          <View style={styles.qOptionHead}>
+            <Text style={styles.qOptionLabel}>{opt.label}</Text>
+            {recommended !== null && opt.label === recommended ? (
+              <Text style={styles.qRecommend}>推荐</Text>
+            ) : null}
+          </View>
+          {opt.description ? <Text style={styles.qOptionDesc}>{opt.description}</Text> : null}
+        </Pressable>
+      ))}
+
+      <View style={styles.qInputRow}>
+        <TextInput
+          style={styles.qInput}
+          value={draft}
+          onChangeText={setDraft}
+          placeholder="或者直接说你的需求…"
+          placeholderTextColor={colors.textFaint}
+          multiline
+          numberOfLines={2}
+        />
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            const text = draft.trim();
+            if (!text) return;
+            setDraft('');
+            void store.answerQuestion(approval.id, questionId, [], text);
+          }}
+          style={({ pressed }) => [styles.qSend, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={styles.qSendText}>发送</Text>
+        </Pressable>
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => void store.answerQuestion(approval.id, questionId, [])}
+        style={styles.qSkip}
+      >
+        <Text style={styles.qSkipText}>跳过这个问题</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+export function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement {
+  const tone = riskTone(approval.risk);
+  const isQuestion = approval.kind === 'question';
+  return (
+    <View style={styles.approval}>
+      <View style={styles.approvalHead}>
+        <Text style={styles.approvalTitle}>{approval.title}</Text>
+        <View style={[styles.chip, { backgroundColor: tone.bg }]}>
+          <Text style={[styles.chipText, { color: tone.color }]}>{isQuestion ? '等你选' : tone.label}</Text>
+        </View>
+      </View>
+
+      {approval.command ? (
+        <View style={styles.codeBox}>
+          <Text style={styles.codeText}>{approval.command}</Text>
+        </View>
+      ) : null}
+
+      <Text style={styles.approvalSummary}>{approval.summary}</Text>
+
+      {approval.diff ? (
+        <View style={styles.codeBox}>
+          {approval.diff.split('\n').map((line, i) => (
+            <Text
+              key={i}
+              style={[
+                styles.codeText,
+                line.startsWith('+') && { color: colors.ok },
+                line.startsWith('-') && { color: colors.danger },
+              ]}
+            >
+              {line}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
+      {isQuestion ? (
+        <QuestionActions approval={approval} />
+      ) : (
+        <View style={styles.approvalActions}>
+          <Btn
+            label="拒绝"
+            kind="ghost"
+            onPress={() => void store.resolveApproval(approval.id, 'reject')}
+            style={{ flex: 1 }}
+          />
+          <Btn
+            label="批准"
+            onPress={() => void store.resolveApproval(approval.id, 'approve')}
+            style={{ flex: 1.2 }}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  approval: {
+    backgroundColor: colors.glass,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    padding: 14,
+    gap: 10,
+  },
+  approvalHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  approvalTitle: { color: colors.text, fontSize: 14.5, fontWeight: '600', flex: 1 },
+  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
+  chipText: { fontSize: 10.5, fontWeight: '600' },
+  approvalSummary: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
+  codeBox: {
+    backgroundColor: colors.bgElevated,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    padding: 9,
+    gap: 1,
+  },
+  codeText: { fontFamily: font.mono, fontSize: 11.5, color: colors.textDim, lineHeight: 17 },
+  approvalActions: { flexDirection: 'row', gap: space.sm, marginTop: 2 },
+
+  qWrap: { gap: 8, marginTop: 4 },
+  qOption: {
+    backgroundColor: colors.glass,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 3,
+  },
+  qOptionPressed: { backgroundColor: colors.glassStrong },
+  qOptionHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  qOptionLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  qRecommend: {
+    color: colors.blue,
+    fontSize: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.blue,
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  qOptionDesc: { color: colors.textFaint, fontSize: 12, lineHeight: 17 },
+  qInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 2 },
+  qInput: {
+    flex: 1,
+    backgroundColor: colors.glass,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    color: colors.text,
+    fontSize: 13.5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    maxHeight: 96,
+  },
+  qSend: {
+    backgroundColor: colors.blue,
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  qSendText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  qSkip: { alignSelf: 'flex-start', paddingVertical: 4 },
+  qSkipText: { color: colors.textFaint, fontSize: 12.5 },
+});
