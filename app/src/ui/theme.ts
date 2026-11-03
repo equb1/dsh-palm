@@ -87,6 +87,8 @@ export const semantic = {
   surface: colors.bg,
   /** 官方侧栏 --dsw-specific-sidebar-fill */
   sidebar: '#1B1B1C',
+  sidebarHover: '#2C2C2E',
+  sidebarActive: '#43454A',
   surfaceRaised: colors.bgElevated,
   card: colors.glass,
   cardStrong: colors.glassStrong,

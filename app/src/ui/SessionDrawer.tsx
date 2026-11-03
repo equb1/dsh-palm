@@ -4,7 +4,8 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 import type { SessionSummary } from '../protocol';
 import { store, useStore } from './useStore';
 import { Dot, IconButton } from './parts';
-import { colors, radius, space, topInset } from './theme';
+import { EmptyState } from './components';
+import { colors, motion, radius, semantic, space, topInset } from './theme';
 
 const PANEL_WIDTH = 302;
 
@@ -62,12 +63,13 @@ export function SessionDrawer({
   const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
+  const [searchFocused, setSearchFocused] = React.useState(false);
 
   React.useEffect(() => {
     if (visible) setMounted(true);
     Animated.timing(anim, {
       toValue: visible ? 1 : 0,
-      duration: 200,
+      duration: motion.duration.base,
       useNativeDriver: false,
     }).start(({ finished }) => {
       if (finished && !visible) setMounted(false);
@@ -111,7 +113,7 @@ export function SessionDrawer({
           setMenuFor(menuFor === s.id ? null : s.id);
           setRenameText(s.title);
         }}
-        style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.glassPressed }]}
+        style={({ pressed }) => [styles.row, s.id === state.currentId && styles.rowActive, pressed && styles.rowPressed]}
       >
         <View style={styles.glyph}>
           <Text style={styles.glyphText}>{preset?.glyph ?? '·'}</Text>
@@ -184,7 +186,7 @@ export function SessionDrawer({
           <IconButton glyph="✕" label="关闭" onPress={onClose} size={32} />
         </View>
 
-        <View style={styles.searchWrap}>
+        <View style={[styles.searchWrap, searchFocused && styles.searchWrapFocused]}>
           <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
             style={styles.search}
@@ -193,12 +195,19 @@ export function SessionDrawer({
             placeholder="搜索会话"
             placeholderTextColor={colors.textFaint}
             accessibilityLabel="搜索会话"
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
           />
         </View>
 
-        <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
           {groups.length === 0 ? (
-            <Text style={styles.empty}>{keyword ? '没有匹配的会话' : '还没有会话'}</Text>
+            <EmptyState
+              glyph="🗂"
+              title={keyword ? '没有匹配的会话' : '还没有会话'}
+              description={keyword ? '换个关键词试试。' : '发第一条消息，或从锦囊里选一个开始。'}
+              style={styles.emptyState}
+            />
           ) : (
             groups.map((g) => (
               <View key={g.title} style={{ gap: 6 }}>
@@ -210,7 +219,7 @@ export function SessionDrawer({
         </ScrollView>
 
         <View style={styles.footer}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.hostInfo}>
             <View style={styles.connRow}>
               <Dot color={state.conn === 'connected' ? colors.ok : colors.danger} size={5} />
               <Text style={styles.connText} numberOfLines={1}>
@@ -219,6 +228,8 @@ export function SessionDrawer({
             </View>
             <Text style={styles.connSub}>{state.caps?.host.engineVersion ?? ''}</Text>
           </View>
+          {/* 引擎角标槽：1.2 接 EngineBadge，现在不写死内容 */}
+          <View style={styles.footerSlot} />
           <Pressable
             onPress={() => {
               onClose();
@@ -252,9 +263,9 @@ const styles = StyleSheet.create({
   panel: {
     width: PANEL_WIDTH,
     height: '100%',
-    backgroundColor: '#12151A',
+    backgroundColor: semantic.sidebar,
     borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: colors.borderStrong,
+    borderRightColor: colors.border,
     paddingTop: topInset,
   },
   panelHeader: {
@@ -265,34 +276,49 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
     paddingBottom: space.sm,
   },
-  panelTitle: { color: colors.text, fontSize: 17, fontWeight: '700', letterSpacing: 0.5 },
+  panelTitle: { color: colors.text, fontSize: 16, lineHeight: 28, fontWeight: '500', letterSpacing: 0.2 },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginHorizontal: space.md,
-    paddingHorizontal: 10,
-    height: 34,
-    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgElevated,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  searchWrapFocused: {
+    borderColor: colors.blue,
     backgroundColor: colors.glass,
   },
   searchIcon: { color: colors.textFaint, fontSize: 13 },
-  search: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 0 },
-  list: { padding: space.md, gap: 14, paddingBottom: space.xl },
-  groupTitle: { color: colors.textFaint, fontSize: 10.5, letterSpacing: 0.5, marginLeft: 2 },
-  empty: { color: colors.textFaint, fontSize: 12.5, textAlign: 'center', marginTop: space.xl },
+  search: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 20, paddingVertical: 0 },
+  listScroll: { flex: 1 },
+  list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
+  groupTitle: {
+    color: semantic.textCaption,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    marginLeft: 8,
+    marginBottom: 4,
+  },
+  emptyState: { paddingTop: space.md },
   menu: {
     marginLeft: 46,
     marginBottom: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: colors.glass,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgElevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     gap: 4,
   },
-  menuItem: { color: colors.blue, fontSize: 12.5, paddingVertical: 5 },
+  menuItem: { color: colors.blue, fontSize: 13, lineHeight: 20, paddingVertical: 5 },
   renameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   renameInput: {
     flex: 1,
@@ -303,23 +329,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, paddingHorizontal: 6, borderRadius: radius.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 8, borderRadius: radius.sm },
+  rowActive: { backgroundColor: semantic.sidebarActive },
+  rowPressed: { backgroundColor: semantic.sidebarHover },
   glyph: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.glassStrong,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  glyphText: { color: colors.textDim, fontSize: 13, fontWeight: '600' },
+  glyphText: { color: colors.textDim, fontSize: 14, fontWeight: '500' },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rowTitle: { color: colors.text, fontSize: 13.5, fontWeight: '500', flex: 1 },
-  rowTime: { color: colors.textFaint, fontSize: 10 },
+  rowTitle: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500', flex: 1 },
+  rowTime: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
   rowBottom: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rowPreview: { color: colors.textFaint, fontSize: 11.5, flex: 1 },
-  tag: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill },
-  tagText: { fontSize: 9.5, fontWeight: '600' },
+  rowPreview: { color: colors.textFaint, fontSize: 12, lineHeight: 18, flex: 1 },
+  tag: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.xs },
+  tagText: { fontSize: 10, fontWeight: '500' },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -328,11 +355,14 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+    backgroundColor: semantic.sidebar,
   },
+  hostInfo: { flex: 1 },
+  footerSlot: { flexDirection: 'row', alignItems: 'center' },
   connRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  connText: { color: colors.textDim, fontSize: 11.5 },
-  connSub: { color: colors.textFaint, fontSize: 10, marginTop: 2 },
+  connText: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
+  connSub: { color: colors.textFaint, fontSize: 11, lineHeight: 16, marginTop: 1 },
   settingsBtn: { paddingHorizontal: 8, paddingVertical: 4 },
-  settingsText: { color: colors.textDim, fontSize: 12.5 },
-  disconnect: { color: colors.danger, fontSize: 12.5 },
+  settingsText: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
+  disconnect: { color: colors.danger, fontSize: 12, lineHeight: 18 },
 });
