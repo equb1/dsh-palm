@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clipboard, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Clipboard, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import type { Approval, Block, Turn } from '../../protocol';
 import { MarkdownView } from '../MarkdownView';
@@ -15,68 +15,77 @@ function ThinkingRow({
   onToggle?: () => void;
   live?: boolean;
 }): React.ReactElement {
-  const [userOpen, setUserOpen] = React.useState<boolean | null>(null);
-  const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
-  const open = userOpen ?? false;
-  const tail = text.slice(-120).replace(/\s+/g, ' ').trim();
+  const [open, setOpen] = React.useState(false);
   // 长任务（20+ 分钟）的思考可能有几十万字，整段 Markdown 渲染会把 JS 线程卡死；
   // 展开时只渲染最后一段，够看思路，又不会 OOM。
   const MAX_OPEN = 12000;
   const shown = text.length > MAX_OPEN ? text.slice(-MAX_OPEN) : text;
   const truncated = text.length > MAX_OPEN;
+  const preview = text.trim().split('\n')[0]?.replace(/\*\*/g, '').slice(0, 120) ?? '';
+  const ticker = text.slice(-800);
+
+  // dsh-go 的做法：一轮结束就把展开的全文收回去，过程收进一行摘要。
+  React.useEffect(() => {
+    if (!live) setOpen(false);
+  }, [live]);
 
   const handleToggle = (): void => {
     onToggle?.();
-    setUserOpen(!open);
+    setOpen((v) => !v);
   };
+
+  const header = (
+    <Pressable
+      onPress={handleToggle}
+      accessibilityRole="button"
+      accessibilityLabel={open ? '收起思考' : '展开思考'}
+      style={styles.row}
+    >
+      <Text style={styles.rowGlyph}>✳</Text>
+      <Text style={[styles.thinkingLabel, live && styles.thinkingActive]}>
+        {live ? '思考中' : '思考'}
+      </Text>
+      {!live && !open ? (
+        <Text style={styles.rowText} numberOfLines={1}>
+          {preview}
+        </Text>
+      ) : (
+        <View style={{ flex: 1 }} />
+      )}
+      {live && !open ? <Text style={styles.liveDot}>●</Text> : null}
+      <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+    </Pressable>
+  );
 
   if (!open) {
     return (
-      <Pressable
-        onPress={handleToggle}
-        accessibilityRole="button"
-        accessibilityLabel="展开思考"
-        style={styles.row}
-      >
-        <Text style={styles.rowGlyph}>✳</Text>
-        <Text style={styles.thinkingLabel}>思考</Text>
-        <Text style={styles.rowText} numberOfLines={1}>
-          {tail}
-        </Text>
-        <Text style={styles.chevron}>▾</Text>
-      </Pressable>
+      <View>
+        {header}
+        {/* 流式中固定三行实时窗：不滚、不撑高列表，只跟最新写出来的字 */}
+        {live ? (
+          <View style={styles.tickerWrap}>
+            <Text style={styles.tickerText} numberOfLines={3} ellipsizeMode="head">
+              {ticker}
+            </Text>
+          </View>
+        ) : null}
+      </View>
     );
   }
 
   return (
-    <Pressable
-      onPress={handleToggle}
-      accessibilityRole="button"
-      accessibilityLabel="收起思考"
-      style={styles.thinkingOpenBox}
-    >
-      <View style={styles.thinkingOpenHeader}>
-        <Text style={styles.rowGlyph}>✳</Text>
-        <Text style={styles.thinkingLabel}>思考过程</Text>
-        <View style={{ flex: 1 }} />
-        <Text style={styles.chevron}>▴</Text>
-      </View>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.thinkingScroll}
-        nestedScrollEnabled
-        onContentSizeChange={() => {
-          if (live) scrollRef.current?.scrollToEnd({ animated: false });
-        }}
-      >
+    <View style={styles.thinkingOpenBox}>
+      {header}
+      {/* 展开态直接进页面滚动，不做嵌套 ScrollView，避免手势被外层吃掉 */}
+      <View style={styles.thinkingBodyWrap}>
         <Text style={styles.thinkingBody} selectable>
           {shown}
         </Text>
         {truncated ? (
           <Text style={styles.thinkingMore}>思考太长，这里只显示最后 {MAX_OPEN} 字。</Text>
         ) : null}
-      </ScrollView>
-    </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -224,15 +233,22 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 2,
   },
-  thinkingOpenHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  thinkingScroll: {
-    maxHeight: 260,
+  thinkingActive: { color: colors.blue },
+  liveDot: { color: colors.blue, fontSize: 8, paddingHorizontal: 2 },
+  tickerWrap: {
+    height: 57,
+    overflow: 'hidden',
     marginLeft: 18,
     paddingLeft: 12,
+    paddingTop: 2,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.border,
+  },
+  tickerText: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
+  thinkingBodyWrap: {
+    marginLeft: 18,
+    paddingLeft: 12,
+    paddingBottom: 6,
     borderLeftWidth: 2,
     borderLeftColor: colors.border,
   },
