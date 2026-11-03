@@ -15,6 +15,20 @@ import {
 } from 'react-native';
 
 import { colors, font, radius, space } from './theme';
+import { highlight, type SyntaxKind } from './syntax';
+
+const SYNTAX_STYLES: Record<SyntaxKind, { color?: string; fontStyle?: 'italic' }> = {
+  plain: {},
+  comment: { color: '#6B7385', fontStyle: 'italic' },
+  string: { color: '#A5D6A7' },
+  keyword: { color: '#C792EA' },
+  literal: { color: '#FFCB6B' },
+  number: { color: '#F2C97D' },
+  function: { color: '#82AAFF' },
+  operator: { color: '#89DDFF' },
+  property: { color: '#FFCB6B' },
+  tag: { color: '#F07178' },
+};
 
 /* ------------------------------------------------------------------ *
  * 剪贴板复制工具
@@ -498,6 +512,7 @@ function CodeBlockView({ lang, code }: { lang: string; code: string }): React.Re
   }, []);
 
   const displayLang = lang ? lang.toUpperCase() : 'TEXT';
+  const tokens = React.useMemo(() => highlight(code, lang), [code, lang]);
 
   return (
     <View style={styles.codeBlockWrap}>
@@ -524,7 +539,17 @@ function CodeBlockView({ lang, code }: { lang: string; code: string }): React.Re
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.codeScroll}
       >
-        <Text style={styles.codeBlockText}>{code}</Text>
+        <Text style={styles.codeBlockText}>
+          {tokens.map((token, i) =>
+            token.kind === 'plain' ? (
+              token.text
+            ) : (
+              <Text key={i} style={SYNTAX_STYLES[token.kind]}>
+                {token.text}
+              </Text>
+            ),
+          )}
+        </Text>
       </ScrollView>
     </View>
   );
