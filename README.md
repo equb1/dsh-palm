@@ -22,6 +22,12 @@
 
 左：首页就一个输入框 · 中：会话都在抽屉里 · 右：审批卡只看一屏就能决定
 
+2026-11-02 M1 真机（PLR110 / Android 16）：轻引擎不装 proot 也能跑——
+工作区自检 7 条命令 **41–47ms**，走完「提问 → 审批 bash → 流式回答」；
+换成 **DeepSeek 真模型**也跑通了同一条链路；**docx / xlsx / 生图**在 Hermes
+上生成 + 读回都正常（Excel 15.8KB、Word 9.6KB、图 1×1）。截图和数字见
+[docs/26](docs/26-light-engine.md)。
+
 ## 它不是什么
 
 | 不是 | 为什么 |
@@ -57,6 +63,10 @@
 | [docs/21-git-workflow.md](docs/21-git-workflow.md) | 分支/提交规范：从 develop 开，一次一个分支 | 每次动代码前 |
 | [docs/22-cross-platform-ts-engine.md](docs/22-cross-platform-ts-engine.md) | **双端纯 TS 统一引擎与官方账号全互联规范**：<50ms秒开、iOS对等独立宿主、Cordis热插拔、跨网互联 | 规划下一代引擎与双端互通时 |
 | [docs/23-requirements.md](docs/23-requirements.md) | **v1 需求冻结 + 运行时分工 + 插件兼容体系** | 动手前必读 |
+| [docs/24-plugin-compat-matrix.md](docs/24-plugin-compat-matrix.md) | dsh 305 个包的手机兼容矩阵（L0–L4） | 判断插件能不能跑 |
+| [docs/25-m1-spike-results.md](docs/25-m1-spike-results.md) | **M1 spike 实测**：just-bash 在 Hermes、WebView 官方前端 | 接轻引擎前 |
+| [docs/26-light-engine.md](docs/26-light-engine.md) | **轻引擎 MVP + IFileSystem 适配**：真实工作区、shell、文档、生图 | 动轻引擎 / 工作区适配时 |
+| [docs/27-remaining-work.md](docs/27-remaining-work.md) | **剩余工作清单**：M1 收尾 → M2/M3/M4、决策与工程债 | 排下一轮时 |
 
 ## 跑起来
 
@@ -116,11 +126,17 @@ App 里把引擎地址填成 `ws://<电脑IP>:8788/ws`，**再填桥打印的六
 | Mock 引擎 | `engine/` | 能力协商、流式块、工具调用、审批、预设切换 |
 | 真引擎桥 | `engine/src/real/` + `dist/dsh-palm-bridge.cjs` | 连真 dsh：会话 / 模型 / 审批 / 提问 / 流式 / 配对鉴权 |
 | 端到端测试 | `test/e2e.test.ts` | 11/11 通过 |
+| 轻引擎 | `app/src/engine/light/` | 进程内 agent loop：会话 / 流式 / 审批 / 提问 / 工具，走同一份协议；真机全链路已验证 |
+| 文档与表格 | `app/src/engine/docs/` | docx（docx 9.x）、xlsx（SheetJS）生成 + 读回，Hermes 真机验证 |
+| 生图 | `app/src/engine/light/image.ts` | 可选 `images/generations` 渠道，落盘 + 读 PNG 尺寸 |
+| 文件系统适配 | `app/src/engine/fs/` | `IFileSystem` → Node / expo-file-system，真实工作区 `/workspace` |
+| Shell | `app/src/engine/shell/` | just-bash + 手机限额（30s / 24k 输出 / 循环与遍历上限） |
 | App 界面 | `app/src/ui/` | 连接页、会话列表、聊天流式、审批卡、提问卡、会话内换预设 |
 | Android 宿主 | `app/android/` | 前台服务 + proot + 自带 rootfs/node/dsh，真机跑通 |
 
 ## 现在还没有的
 
+- PDF 生成（pdf-lib 标准字体不含中文，要先定子集字体方案）
 - iOS 本机引擎（物理上不可能，没有 fork/exec）和 iOS 遥控器（阶段 2）
 - 拍照 / OCR
 - 远程推送（跑完/待审批的**本地通知**已接，真机验过）

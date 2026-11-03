@@ -9,6 +9,7 @@ import { SettingsScreen } from './src/ui/SettingsScreen';
 import { store, useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
+import { parseDeepLink } from './src/lib/lightLink';
 
 export default function App(): React.ReactElement {
   const state = useStore();
@@ -57,14 +58,20 @@ export default function App(): React.ReactElement {
 
   React.useEffect(() => {
     const handle = (url: string | null): void => {
-      if (!url || !url.startsWith('dshpalm://')) return;
-      const query = url.split('?')[1] ?? '';
-      const params = new URLSearchParams(query);
-      const target = params.get('url');
-      const code = params.get('code');
-      if (target) store.setUrl(target);
-      if (code) store.setPairCode(code);
-      if (target) void store.connect(target);
+      const link = parseDeepLink(url);
+      if (!link) return;
+      if (link.kind === 'pair') {
+        // dshpalm://pair?url=ws://192.168.1.7:8788/ws&code=246810
+        if (link.url) store.setUrl(link.url);
+        if (link.code) store.setPairCode(link.code);
+        if (link.url) void store.connect(link.url);
+        return;
+      }
+      // dshpalm://light?base=…&model=…&key=… —— 扫码/粘贴切换本机模型渠道
+      void store.connectLight(link.setup).then(() => {
+        store.closeSession();
+        store.closeSettings();
+      });
     };
     void Linking.getInitialURL()
       .then((url) => handle(url ?? null))

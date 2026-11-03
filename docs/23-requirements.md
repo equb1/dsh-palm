@@ -157,7 +157,7 @@ relay 只见密文；文件永不离家。
 | 阶段 | 内容 | 产出 |
 |---|---|---|
 | **M0（2 周）** | 四个 spike + 兼容分析器（✅ 2026-11-02 完成静态部分） | 结论见第 9 节 + [24-plugin-compat-matrix](24-plugin-compat-matrix.md) |
-| **M1（4 周）** | LightEngine MVP：会话/流式/审批/提问 + 文档 JS 库 + 生图 | Android 可用的轻引擎 |
+| **M1（4 周）** | LightEngine MVP：会话/流式/审批/提问 + 文档 JS 库 + 生图 | Android 可用的轻引擎（会话/文档/表格/生图已完成，见 [26-light-engine.md](26-light-engine.md)；PDF 待中文字体方案） |
 | **M2（4 周）** | WebSurface（WebView 官方前端）+ 完整引擎按需 + 插件徽章 | L0/L3 可用 |
 | **M3（4 周）** | 官方登录 + LAN 互联 + Android 小组件/悬浮球 | v1 内测 |
 | **M4** | relay/WebRTC + iOS + L1 自动转译 | 公测 |
@@ -176,10 +176,11 @@ relay 只见密文；文件永不离家。
 - 原生依赖 koffi / node-pty / sharp / sherpa / require-builtin 都没有 Android prebuild；nodejs-mobile 也没有 fork/exec，PTY 与 subprocess 直接废。
 - 结论：L2 不设独立运行时，按 L3 或重写处理。
 
-**R2 · just-bash —— 条件可行（静态结论，待真机性能验证）。**
+**R2 · just-bash —— 已在真机验证（功能 + 性能基线）。**
 - 实测 RN 0.88.1 的 Hermes：`TextEncoder` / `TextDecoder` / `atob` / `btoa` / `Intl` **有**；`Buffer` / `crypto` / `fetch` / `AbortController` / `performance` / `WebAssembly` **没有**（其中 fetch、AbortController 由 RN 运行时提供）。
-- just-bash 浏览器包（1.2MB）用到：`Buffer` 18 处、`TextEncoder/Decoder`（原生已有）、`crypto.getRandomValues/subtle`（需 polyfill）、`WebAssembly` 仅特性探测（浏览器构建本就不含 sqlite/js-exec）、`fetch`（RN 有）。
-- 结论：**需要 2–3 个小 shim（buffer / crypto.getRandomValues / performance）**，没有硬性平台阻塞；真正的未知是 Hermes 上 1.2MB bundle 的执行性能，以及 VFS 要自实现 `IFileSystem` 才能落到真实目录。
+- 真机（PLR110）跑通：补 `Buffer` / `crypto.getRandomValues` / `performance` 三个 shim、Metro 给 `node:zlib` 一个 stub 即可；
+  日常命令（echo / grep / for / 重定向 / ls）**1–2ms**，`seq 5万 | sed` 273ms，`seq 10万 | awk` 4.6s。
+- 结论：**可行**。剩余是集成工作：`IFileSystem` 适配真实目录、命令覆盖、执行限额。详见 [25-m1-spike-results.md](25-m1-spike-results.md)。
 
 **R3 · OAuth —— 可行，但要移植（源码结论，待真机登录验证）。**
 - 官方包不自己起 server：它向 Host 的 `webServer` 注册固定路由 `/oauth/callback`（源码 `ctx.get("webServer")`，缺失直接报 protocol）。
@@ -192,10 +193,9 @@ relay 只见密文；文件永不离家。
 
 | 编号 | 要验证什么 | 验证方式 | 不过则 |
 |---|---|---|---|
-| R2' | just-bash 在 Hermes 上的真实性能与 VFS 桥接 | RN 里加载 1.2MB bundle + 3 个 shim，跑 `ls/grep/sed/awk` 与大文件 | 自研精简 shell 或只做工具级 VFS |
 | R3' | Platform 服务端是否接受手机 loopback 回调 | App 内起 loopback server 走一次真实授权 | 电脑代授权，或等上游支持 custom scheme |
 
-（R1、R4 已闭环：都不可行，方案已按结论调整。）
+（R1、R4 已闭环：都不可行，方案已按结论调整。R2 已真机验证，见 [25-m1-spike-results.md](25-m1-spike-results.md)。）
 
 ## 10. v1 验收标准
 

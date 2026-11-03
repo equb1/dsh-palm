@@ -46,6 +46,23 @@ export interface ClientOptions {
 
 type Listener<K extends EventName> = (data: EventPayloads[K], event: EngineEvent<K>) => void;
 
+/**
+ * EngineClient 与轻引擎的 LocalEngineClient 共用的接口。
+ *
+ * store 只依赖这个：连远程宿主走 WebSocket，连本机轻引擎走进程内调用，
+ * 界面（和 store）完全不需要知道区别。
+ */
+export interface EngineTransport {
+  readonly connectionState: ConnectionState;
+  readonly caps: Capabilities | null;
+  connect(): Promise<Capabilities>;
+  request<M extends Method>(method: M, params: RequestParams[M]): Promise<RequestResults[M]>;
+  on<K extends EventName>(event: K, listener: Listener<K>): () => void;
+  onAny(listener: (event: EngineEvent) => void): () => void;
+  onStateChange(listener: (state: ConnectionState, detail?: string) => void): () => void;
+  close(): void;
+}
+
 interface Pending {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
@@ -64,7 +81,7 @@ export class EngineProtocolError extends Error {
   }
 }
 
-export class EngineClient {
+export class EngineClient implements EngineTransport {
   private readonly opts: Required<Omit<ClientOptions, 'webSocketImpl' | 'now'>> & {
     webSocketImpl?: WebSocketCtor;
     now: () => number;
