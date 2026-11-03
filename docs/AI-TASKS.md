@@ -93,13 +93,16 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 
 | ID | 分支 | 任务 | 只改 | 验收 | 估时 |
 |---|---|---|---|---|---|
-| A1 | `ui/markdown-polish` | Markdown 增强：代码块复制、表格样式、链接打开、图片、流式光标 | `ui/MarkdownView.tsx` | 代码/表格/链接正常；typecheck | 0.5–1d |
+| [x] A1 | `ui/markdown-polish` | Markdown 增强：代码块复制、表格样式、链接打开、图片、流式光标 | `ui/MarkdownView.tsx`（+ 新增 `ui/syntax.ts`、`test/syntax.test.ts`） | 代码/表格/链接正常；typecheck + verify 通过 | 已完成 |
 | A2 | `ui/design-tokens` | 字号层级、动效时长/曲线、语义色；**只增不改** | `ui/theme.ts` | 现有导出不变；typecheck | 0.5d |
 | A3 | `ui/components-kit` | `Card`/`Chip`/`IconButton`/`Skeleton`/`EmptyState`/`SectionHeader` | `ui/parts.tsx` + 新文件 `ui/components/*` | 新组件有 props 类型；旧组件不变 | 1d |
 | A4 | `ui/engine-badge` | `EngineBadge` 组件，先不接线 | 新文件 `ui/EngineBadge.tsx` | props 类型完整；未接线不影响现有 UI | 0.5d |
 | A5 | `ui/attachment-chips` | `AttachmentChips` 组件，先不接线 | 新文件 `ui/AttachmentChips.tsx` | props 类型完整；未接线 | 0.5d |
 | A6 | `ui/model-sheet` | ModelSheet 视觉：分组、默认标记、搜索、禁用态 | `ui/ModelSheet.tsx` | 现有选择行为不变；截图 | 0.5d |
 | A7 | `ui/skeletons` | 聊天/首页/抽屉的 Skeleton 与 EmptyState | 新文件 `ui/Skeletons.tsx` | 未接线；typecheck | 0.5d |
+
+> A1 备注：代码块轻量语法高亮（`ui/syntax.ts` + `test/syntax.test.ts`）随 A1 一并落地，未单列任务；
+> 流式光标已在 `MarkdownView` 提供 `streaming` / `isStreaming` 属性，但 `ChatScreen` 属禁区未接线，界面暂不显示；按约定等 1.2–1.4 合入后再做（见 C 表）。
 
 **B. 低风险（可做，但留槽位）**
 
@@ -120,6 +123,7 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 | U6 全部功能页 | 要动 App/Settings 导航；等 1.2 入口定型 |
 | U7 浅色主题全量 | 只做 A2 的 token；全量换肤等 UI 批次 |
 | U8 文件/终端/工作区 | 依赖后端接口 |
+| 流式光标接线（A1 遗留） | 要改 `ChatScreen`（禁区），等 1.2–1.4 合入后再做 |
 
 **D. 顺序**
 
