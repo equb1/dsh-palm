@@ -465,8 +465,6 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           permissions={state.permissions}
           activePermission={session.permission ?? state.defaultPermission}
           onPickPermission={(value) => void store.setPermission(value)}
-          modelLabel={shortModelName ?? '模型'}
-          onOpenModel={() => store.openModelSheet()}
           attachments={state.pendingAttachments}
           onRemoveAttachment={(id) => store.removeAttachment(id)}
           onPickAttachment={(kind) => {

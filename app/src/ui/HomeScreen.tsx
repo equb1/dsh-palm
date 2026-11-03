@@ -15,6 +15,7 @@ import { store, useStore } from './useStore';
 import { Dot, IconButton } from './parts';
 import { EmptyState } from './components';
 import { SessionDrawer } from './SessionDrawer';
+import { ModelSheet } from './ModelSheet';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { colors, radius, space, topInset } from './theme';
@@ -138,8 +139,18 @@ export function HomeScreen(): React.ReactElement {
             <Text style={styles.connText}>{connLabel}</Text>
           </Pressable>
         </View>
-        {/* 顶栏右侧留槽：1.2 接 EngineBadge/状态，不写死内容 */}
-        <View style={styles.headerSlot} />
+        {/* 模型胶囊在顶栏，和 dsh-go/聊天页一致 */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`模型：${modelLabel}`}
+          onPress={() => store.openModelSheet()}
+          style={({ pressed }) => [styles.headerModel, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={styles.headerModelText} numberOfLines={1}>
+            {modelLabel}
+          </Text>
+          <Text style={styles.headerModelChevron}>▾</Text>
+        </Pressable>
       </View>
 
       {state.pendingShare?.imagePath ? (
@@ -229,8 +240,6 @@ export function HomeScreen(): React.ReactElement {
           permissions={state.permissions}
           activePermission={state.defaultPermission}
           onPickPermission={(value) => void store.setPermission(value)}
-          modelLabel={modelLabel}
-          onOpenModel={() => store.openModelSheet()}
           attachments={state.pendingAttachments}
           onPickAttachment={handlePickAttachment}
           onRemoveAttachment={(id) => store.removeAttachment(id)}
@@ -238,6 +247,7 @@ export function HomeScreen(): React.ReactElement {
       </SmoothKeyboardAvoid>
 
       <SessionDrawer visible={drawer} onClose={() => setDrawer(false)} />
+      <ModelSheet />
     </View>
   );
 }
@@ -253,7 +263,18 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     paddingBottom: space.sm,
   },
-  headerSlot: { width: 36, height: 36 },
+  headerModel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 32,
+    maxWidth: 132,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glassStrong,
+  },
+  headerModelText: { color: colors.text, fontSize: 12, flexShrink: 1 },
+  headerModelChevron: { color: colors.textFaint, fontSize: 9 },
   brandMark: {
     width: 40,
     height: 40,
