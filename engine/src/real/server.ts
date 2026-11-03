@@ -496,6 +496,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   let followSessionId: string | null = null;
   let liveTurn: Turn | null = null;
   let liveRunId = '';
+  /** 正在流式的回合按会话存一份，sessions.get 时补进快照，避免重进会话看到两份 */
+  const liveTurns = new Map<string, Turn>();
   const blockIdByIndex = new Map<number, string>();
   /** 还没回答的 ask_user_question，按工具调用 id 存 */
   const pendingQuestions = new Map<string, Approval>();
@@ -638,6 +640,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
           ...(errMsg ? { error: errMsg } : {}),
           ...(preview ? { preview } : {}),
         });
+        liveTurns.delete(sessionId);
         liveTurn = null;
       }
 
@@ -658,6 +661,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         status: 'streaming',
       };
       blockIdByIndex.clear();
+      liveTurns.set(sessionId, liveTurn);
       broadcast('run.started', { sessionId, runId: liveRunId, turnId: liveTurn.id });
       broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
       return;
@@ -765,7 +769,12 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
       const detail: SessionDetail = {
         ...toSummary(item),
-        turns: proj.turns,
+        turns: (() => {
+          const live = liveTurns.get(sessionId);
+          return live && !proj.turns.some((t) => t.id === live.id)
+            ? [...proj.turns, live]
+            : proj.turns;
+        })(),
         contract: { tools: [], net: 'allow' },
       };
       if (snap?.header?.agentPreset) detail.presetId = snap.header.agentPreset;

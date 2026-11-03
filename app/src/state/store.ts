@@ -169,12 +169,56 @@ const DEFAULT_URL = hostAvailable ? 'ws://127.0.0.1:8788/ws' : 'ws://192.168.1.3
 
 type Listener = () => void;
 
+function sameBlock(a: Block, b: Block): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'text' && b.kind === 'text') return a.id === b.id || a.text === b.text;
+  if (a.kind === 'thinking' && b.kind === 'thinking') return a.id === b.id || a.text === b.text;
+  if (a.kind === 'tool' && b.kind === 'tool') {
+    return a.id === b.id || (a.name === b.name && a.summary === b.summary);
+  }
+  if (a.kind === 'approval' && b.kind === 'approval') return a.approvalId === b.approvalId;
+  return a.id === b.id;
+}
+
+function mergeTurn(prev: Turn, next: Turn): Turn {
+  const blocks = prev.blocks.slice();
+  for (const block of next.blocks) {
+    if (!blocks.some((b) => sameBlock(b, block))) blocks.push(block);
+  }
+  return {
+    ...prev,
+    blocks,
+    status: prev.status === 'streaming' || next.status === 'streaming' ? 'streaming' : next.status,
+    meta: prev.meta ?? next.meta,
+    usage: prev.usage ?? next.usage,
+    createdAt: Math.min(prev.createdAt, next.createdAt),
+  };
+}
+
+/** 宿主重放/重进会话时同一轮会出现两份 turn；连续的 assistant 合并成一份 */
+function mergeNearbyTurns(turns: Turn[], incoming: Turn): Turn[] {
+  if (incoming.role === 'user') {
+    if (turns.some((t) => t.id === incoming.id)) return turns;
+    return [...turns, incoming];
+  }
+  const last = turns[turns.length - 1];
+  // 一轮 run 只该有一个 assistant 回合；连续出现的 assistant 是快照+实时两份
+  if (last && last.role === 'assistant') {
+    const next = turns.slice();
+    next[next.length - 1] = mergeTurn(last, incoming);
+    return next;
+  }
+  return [...turns, incoming];
+}
+
 export class Store {
   /** 流式增量先攒 50ms 再合并，避免每个 token 复制整棵字符串树 */
   private pendingDelta = new Map<string, string>();
   private deltaTimer: ReturnType<typeof setTimeout> | null = null;
   /** 客户端兜底计时：宿主没带 durationMs 时，run.started 到 run.finished 的耗时 */
   private runStartedAt: number | null = null;
+  /** 退出会话时留住 detail，重进时把 live 回合并回去，避免 history + live 两份 */
+  private detailCache = new Map<string, SessionDetail>();
 
   private state: AppState = {
     version: 0,
@@ -478,8 +522,40 @@ export class Store {
     this.patch({ busy: true, error: null });
     try {
       const { session } = await this.client.request('sessions.get', { sessionId: id });
-      this.patch({ detail: session, currentId: id, busy: false });
-      // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
+      const cached = this.detailCache.get(id);
+      this.detailCache.delete(id);
+      let turns = session.turns;
+      const active = session.status === 'running' || session.status === 'waiting_approval';
+      const live = active
+        ? cached?.turns.find((t) => t.role === 'assistant' && t.status === 'streaming')
+        : undefined;
+      if (live) {
+        // 宿主快照里可能只有落盘的部分回合；同一 id 用缓存里的 live 回合，别画两份
+        const same = turns.findIndex((t) => t.id === live.id);
+        if (same >= 0) {
+          turns = turns.slice();
+          turns[same] = live;
+        } else {
+          let lastAssistant = -1;
+          for (let i = turns.length - 1; i >= 0; i--) {
+            if (turns[i]?.role === 'assistant') {
+              lastAssistant = i;
+              break;
+            }
+          }
+          const near =
+            lastAssistant >= 0 &&
+            Math.abs(turns[lastAssistant]!.createdAt - live.createdAt) < 120_000;
+          if (near) {
+            turns = turns.slice();
+            turns[lastAssistant] = live;
+          } else {
+            turns = [...turns, live];
+          }
+        }
+      }
+      turns = turns.reduce<Turn[]>((acc, t) => mergeNearbyTurns(acc, t), []);
+      this.patch({ detail: { ...session, turns }, currentId: id, busy: false });      // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
       const { approvals } = await this.client.request('approvals.list', { sessionId: id });
       const map: Record<string, Approval> = {};
       for (const a of approvals) {
@@ -492,6 +568,8 @@ export class Store {
   }
 
   closeSession(): void {
+    const { detail, currentId } = this.state;
+    if (detail && currentId) this.detailCache.set(currentId, detail);
     this.patch({ detail: null, currentId: null });
   }
 
@@ -1185,11 +1263,13 @@ export class Store {
 
       case 'block.appended': {
         if (!detail || data.sessionId !== currentId) return;
-        const turn = data.turn as Turn;
-        const turns = detail.turns.slice();
-        const i = turns.findIndex((t) => t.id === turn.id);
-        if (i >= 0) turns[i] = turn;
-        else turns.push(turn);
+        const raw = data.turn as Turn;
+        const blocks: Turn['blocks'] = [];
+        for (const b of raw.blocks) {
+          if (!blocks.some((x) => sameBlock(x, b))) blocks.push(b);
+        }
+        const turn: Turn = { ...raw, blocks };
+        const turns = mergeNearbyTurns(detail.turns, turn);
         this.patch({ detail: { ...detail, turns } });
         return;
       }
