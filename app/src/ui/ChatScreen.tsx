@@ -1,7 +1,17 @@
 import React from 'react';
-import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 
-import type { Block, SessionDetail, Turn } from '../protocol';
+import type { SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
 import { IconButton, Pill } from './parts';
 import { Composer } from './Composer';
@@ -15,74 +25,29 @@ import { colors, space, topInset } from './theme';
  * 会话页
  * ------------------------------------------------------------------ */
 
-function blockKey(b: Block): string {
-  if (b.kind === 'text' || b.kind === 'thinking') return `${b.kind}:${b.text.trim()}`;
-  if (b.kind === 'tool') return `tool:${b.name}:${b.summary}`;
-  if (b.kind === 'approval') return `ap:${b.approvalId}`;
-  return b.id;
-}
-
-function dedupeBlocks(blocks: Block[]): Block[] {
-  const out: Block[] = [];
-  for (const b of blocks) {
-    if (b.kind === 'thinking' && !b.text.trim()) continue;
-    const i = out.findIndex((x) => {
-      if (blockKey(x) === blockKey(b)) return true;
-      if (x.kind === 'thinking' && b.kind === 'thinking') {
-        const xt = x.text.trim();
-        const bt = b.text.trim();
-        return xt.length > 20 && bt.length > 20 && (xt.startsWith(bt) || bt.startsWith(xt));
-      }
-      return false;
-    });
-    if (i >= 0) {
-      if (b.kind === 'thinking' && out[i]!.kind === 'thinking' && b.text.length > out[i]!.text.length) {
-        out[i] = b;
-      }
-      continue;
-    }
-    out.push(b);
-  }
-  return out;
-}
-
-function cleanTurns(turns: Turn[]): Turn[] {
-  const out: Turn[] = [];
-  for (const turn of turns) {
-    const blocks = dedupeBlocks(turn.blocks);
-    const last = out[out.length - 1];
-    const sameRun =
-      last?.role === 'assistant' &&
-      turn.role === 'assistant' &&
-      (last.id === turn.id ||
-        Boolean(last.runId && turn.runId && last.runId === turn.runId) ||
-        (last.status === 'streaming' && turn.status === 'streaming') ||
-        last.blocks.some((a) => blocks.some((b) => blockKey(a) === blockKey(b))));
-    if (sameRun) {
-      const merged = dedupeBlocks([...last!.blocks, ...blocks]);
-      out[out.length - 1] = {
-        ...last!,
-        blocks: merged,
-        status: last!.status === 'streaming' || turn.status === 'streaming' ? 'streaming' : turn.status,
-      };
-    } else {
-      out.push({ ...turn, blocks });
-    }
-  }
-  return out;
+function TurnSeparator(): React.ReactElement {
+  return <View style={styles.turnSeparator} />;
 }
 
 export function ChatScreen({ session }: { session: SessionDetail }): React.ReactElement {
   const state = useStore();
   const [draft, setDraft] = React.useState('');
   const [showJump, setShowJump] = React.useState(false);
-  const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
-  const nearBottom = React.useRef(true);
-  const userInteracting = React.useRef(false);
+  const [footerHeight, setFooterHeight] = React.useState(0);
+  const listRef = React.useRef<FlatList<Turn>>(null);
+  const following = React.useRef(true);
+  const scrollScheduled = React.useRef(false);
+  const scrollFrame = React.useRef<number | null>(null);
+  const viewportHeight = React.useRef(0);
+  const contentHeight = React.useRef(0);
+  const footerHeightRef = React.useRef(0);
+  const distanceFromAnswers = React.useRef(0);
+  const touchActive = React.useRef(false);
+  const userDragging = React.useRef(false);
+  const programmaticUntil = React.useRef(0);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
-  // 宿主偶发把同一轮拆成多份/重复 block，渲染前先合并，避免界面出现两份思考
-  const turns = React.useMemo(() => cleanTurns(session.turns), [session.turns, state.version]);
+  const turns = session.turns;
   let lastAssistantIndex = -1;
   for (let i = turns.length - 1; i >= 0; i--) {
     if (turns[i]?.role === 'assistant') {
@@ -111,27 +76,105 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     return found?.efforts?.find((e) => e.id === id)?.name ?? null;
   }, [activeModel, state.models]);
 
+  const scrollToLatest = React.useCallback((animated = false, force = false): void => {
+    if (!force && !following.current) return;
+    if (scrollScheduled.current) return;
+    scrollScheduled.current = true;
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollScheduled.current = false;
+      scrollFrame.current = null;
+      if (!force && !following.current) return;
+      const offset = Math.max(
+        0,
+        contentHeight.current - viewportHeight.current - footerHeightRef.current,
+      );
+      programmaticUntil.current = Date.now() + (animated ? 700 : 150);
+      listRef.current?.scrollToOffset({ offset, animated });
+    });
+  }, []);
+
+  const updateFooterHeight = React.useCallback((height: number): void => {
+    const next = height > 0 ? Math.max(96, Math.round(height * 0.35)) : 0;
+    footerHeightRef.current = next;
+    setFooterHeight((current) => (current === next ? current : next));
+  }, []);
+
   React.useEffect(() => {
-    const onShow = (): void => {
-      if (nearBottom.current) {
-        // 零延迟瞬间对齐到底部，跟随外层平滑动画同步上推，绝不慢半拍
-        scrollRef.current?.scrollToEnd({ animated: false });
-      }
-    };
+    const onShow = (): void => scrollToLatest(false);
     const willShowSub = Keyboard.addListener('keyboardWillShow', onShow);
     const didShowSub = Keyboard.addListener('keyboardDidShow', onShow);
     return () => {
       willShowSub.remove();
       didShowSub.remove();
+      if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
     };
+  }, [scrollToLatest]);
+
+  const handleListLayout = React.useCallback(
+    (event: LayoutChangeEvent): void => {
+      viewportHeight.current = event.nativeEvent.layout.height;
+      updateFooterHeight(event.nativeEvent.layout.height);
+      scrollToLatest(false);
+    },
+    [scrollToLatest, updateFooterHeight],
+  );
+
+  const handleContentSizeChange = React.useCallback(
+    (_width: number, height: number): void => {
+      contentHeight.current = height;
+      scrollToLatest(false);
+    },
+    [scrollToLatest],
+  );
+
+  const handleScroll = React.useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const distance = Math.max(
+        0,
+        contentSize.height -
+          footerHeightRef.current -
+          contentOffset.y -
+          layoutMeasurement.height,
+      );
+      distanceFromAnswers.current = distance;
+      // 只有列表真实收到触摸后才认拖拽，避免测量修正/程序滚动误冻结追底。
+      if (userDragging.current && distance > 24) following.current = false;
+      const nextJump = distance > 220;
+      setShowJump((current) => (current === nextJump ? current : nextJump));
+    },
+    [],
+  );
+
+  const handleTouchStart = React.useCallback((): void => {
+    touchActive.current = true;
+    programmaticUntil.current = 0;
   }, []);
 
-  const handleToggleThinking = (): void => {
-    userInteracting.current = true;
-    setTimeout(() => {
-      userInteracting.current = false;
-    }, 400);
-  };
+  const handleTouchEnd = React.useCallback((): void => {
+    touchActive.current = false;
+  }, []);
+
+  const handleScrollBeginDrag = React.useCallback((): void => {
+    if (!touchActive.current) return;
+    userDragging.current = true;
+    if (distanceFromAnswers.current > 24) following.current = false;
+  }, []);
+
+  const handleMomentumBegin = React.useCallback((): void => {
+    if (Date.now() < programmaticUntil.current) return;
+    userDragging.current = true;
+  }, []);
+
+  const handleScrollSettled = React.useCallback((): void => {
+    userDragging.current = false;
+    if (distanceFromAnswers.current <= 24) {
+      following.current = true;
+      setShowJump(false);
+    }
+  }, []);
+
+  const handleToggleThinking = React.useCallback((): void => {}, []);
 
   const send = (): void => {
     const hasAttachments = state.pendingAttachments.length > 0;
@@ -144,6 +187,37 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     setDraft('');
     void store.send(text);
   };
+
+  const renderTurn = React.useCallback(
+    ({ item, index }: { item: Turn; index: number }): React.ReactElement => (
+      <TurnView
+        turn={item}
+        approvals={state.approvals}
+        onToggleThinking={handleToggleThinking}
+        fallbackDurationMs={
+          index === lastAssistantIndex && item.status !== 'streaming' && session.updatedAt > item.createdAt
+            ? session.updatedAt - item.createdAt
+            : undefined
+        }
+      />
+    ),
+    [handleToggleThinking, lastAssistantIndex, session.updatedAt, state.approvals],
+  );
+
+  const renderEmpty = React.useCallback(
+    (): React.ReactElement => (
+      <View style={styles.emptyChat}>
+        <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
+        <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
+      </View>
+    ),
+    [preset?.name, preset?.tagline],
+  );
+
+  const renderFooter = React.useCallback(
+    (): React.ReactElement => <View style={{ height: footerHeight }} />,
+    [footerHeight],
+  );
 
   return (
     <View style={styles.root}>
@@ -164,67 +238,52 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       </View>
 
       <SmoothKeyboardAvoid style={styles.bodyWrap}>
-        <ScrollView
-          ref={scrollRef}
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.scrollOuter}
-          onScroll={(e) => {
-            const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-            const distance = contentSize.height - contentOffset.y - layoutMeasurement.height;
-            nearBottom.current = distance < 140;
-            setShowJump(distance > 220);
-          }}
-          scrollEventThrottle={64}
-          onLayout={() => {
-            if (nearBottom.current && !userInteracting.current) {
-              // 伴随视口高度压缩实时定位，与输入框同帧贴合上移
-              scrollRef.current?.scrollToEnd({ animated: false });
-              setShowJump(false);
-            }
-          }}
-          onContentSizeChange={() => {
-            if (nearBottom.current && !userInteracting.current) {
-              scrollRef.current?.scrollToEnd({ animated: false });
-            }
-          }}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        >
-          <View style={styles.scroll}>
-            {turns.length === 0 ? (
-              <View style={styles.emptyChat}>
-                <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
-                <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
-              </View>
-            ) : (
-              turns.map((t, index) => (
-                <TurnView
-                  key={t.id}
-                  turn={t}
-                  approvals={state.approvals}
-                  onToggleThinking={handleToggleThinking}
-                  fallbackDurationMs={
-                    index === lastAssistantIndex && t.status !== 'streaming' && session.updatedAt > t.createdAt
-                      ? session.updatedAt - t.createdAt
-                      : undefined
-                  }
-                />
-              ))
-            )}
-          </View>
-        </ScrollView>
+        <View style={styles.listWrap}>
+          <FlatList
+            ref={listRef}
+            style={styles.list}
+            data={turns}
+            renderItem={renderTurn}
+            keyExtractor={(turn) => turn.runId ?? turn.id}
+            extraData={state.approvals}
+            ItemSeparatorComponent={TurnSeparator}
+            ListEmptyComponent={renderEmpty}
+            ListFooterComponent={renderFooter}
+            contentContainerStyle={styles.listContent}
+            onLayout={handleListLayout}
+            onContentSizeChange={handleContentSizeChange}
+            onScroll={handleScroll}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onScrollBeginDrag={handleScrollBeginDrag}
+            onMomentumScrollBegin={handleMomentumBegin}
+            onScrollEndDrag={handleScrollSettled}
+            onMomentumScrollEnd={handleScrollSettled}
+            scrollEventThrottle={16}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            initialNumToRender={12}
+            maxToRenderPerBatch={8}
+            windowSize={9}
+            updateCellsBatchingPeriod={32}
+            removeClippedSubviews={false}
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          />
 
-        {showJump ? (
-          <View style={styles.jumpWrap}>
-            <JumpButton
-              running={running}
-              onPress={() => {
-                scrollRef.current?.scrollToEnd({ animated: true });
-                setShowJump(false);
-              }}
-            />
-          </View>
-        ) : null}
+          {showJump ? (
+            <View style={styles.jumpWrap}>
+              <JumpButton
+                running={running}
+                onPress={() => {
+                  following.current = true;
+                  userDragging.current = false;
+                  setShowJump(false);
+                  scrollToLatest(true, true);
+                }}
+              />
+            </View>
+          ) : null}
+        </View>
 
         {Boolean(state.error) ? (
           <Pressable onPress={() => store.clearError()}>
@@ -293,9 +352,11 @@ const styles = StyleSheet.create({
   presetPill: { flexShrink: 1 },
   presetText: { color: colors.textDim, fontSize: 12 },
 
-  scrollOuter: { paddingBottom: space.lg },
-  scroll: { paddingHorizontal: space.lg, paddingTop: space.md, gap: 14 },
-  jumpWrap: { position: 'absolute', right: space.lg, bottom: 128 },
+  listWrap: { flex: 1 },
+  list: { flex: 1 },
+  listContent: { paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.lg },
+  turnSeparator: { height: 14 },
+  jumpWrap: { position: 'absolute', right: space.lg, bottom: space.lg },
 
   emptyChat: { paddingTop: 80, alignItems: 'center', gap: 6 },
   emptyChatTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },

@@ -28,6 +28,7 @@ import type {
 import { PROTOCOL_VERSION } from '../../../app/src/protocol';
 import { DshRealClient, type RealSessionListItem } from './dshClient';
 import { projectRecords, type RealRecord } from './project';
+import { canonicalRunId, canonicalTurnId, liveBlockId, mergeLiveTurn } from '../../../app/src/protocol/turns';
 import { DeviceStore } from './devices';
 
 export interface RealBridgeOptions {
@@ -496,6 +497,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   let followSessionId: string | null = null;
   let liveTurn: Turn | null = null;
   let liveRunId = '';
+  /** 每个 assistant-stream 步骤都从 block index 0 重新开始，id 必须带上步骤号才不撞车 */
+  let liveStep = 0;
   /** 正在流式的回合按会话存一份，sessions.get 时补进快照，避免重进会话看到两份 */
   const liveTurns = new Map<string, Turn>();
   const blockIdByIndex = new Map<number, string>();
@@ -547,6 +550,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     followDispose = null;
     followSessionId = sessionId;
     liveTurn = null;
+    liveStep = 0;
     blockIdByIndex.clear();
 
     followDispose = client.follow(sessionId, (value) => {
@@ -602,13 +606,15 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
               : '';
 
         if (!liveTurn && finalReason === 'error') {
-          liveRunId = crypto.randomUUID();
+          liveRunId = canonicalRunId(ev.data?.turn, crypto.randomUUID())!;
           liveTurn = {
-            id: 'turn-' + liveRunId,
+            id: canonicalTurnId(liveRunId),
             runId: liveRunId,
             role: 'assistant',
             createdAt: Date.now(),
-            blocks: errMsg ? [{ kind: 'text', id: liveRunId + '-err', text: `错误：${errMsg}` }] : [],
+            blocks: errMsg
+              ? [{ kind: 'text', id: `${liveRunId}:live:error`, text: `错误：${errMsg}` }]
+              : [],
             status: 'error',
           };
         }
@@ -617,7 +623,11 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         if (liveTurn) {
           liveTurn.status = finalReason;
           if (finalReason === 'error' && errMsg && liveTurn.blocks.length === 0) {
-            liveTurn.blocks.push({ kind: 'text', id: liveRunId + '-err', text: `错误：${errMsg}` });
+            liveTurn.blocks.push({
+              kind: 'text',
+              id: `${liveRunId}:live:error`,
+              text: `错误：${errMsg}`,
+            });
           }
           liveTurn.meta = {
             steps: liveTurn.blocks.length,
@@ -653,10 +663,11 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     if (!frame) return;
 
     if (frame.type === 'start') {
-      liveRunId = String(frame.attemptId ?? crypto.randomUUID());
+      liveRunId = canonicalRunId(frame.turn, String(frame.attemptId ?? crypto.randomUUID()))!;
+      liveStep += 1;
       liveTurn = {
-        id: 'turn-' + liveRunId,
-        runId: typeof frame.turn === 'number' ? `turn:${frame.turn}` : liveRunId,
+        id: canonicalTurnId(liveRunId),
+        runId: liveRunId,
         role: 'assistant',
         createdAt: Date.now(),
         blocks: [],
@@ -675,7 +686,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
     if (chunk.type === 'block-start') {
       const kind = chunk.blockType === 'reasoning' ? 'thinking' : 'text';
-      const id = liveRunId + '-b' + index;
+      const id = liveBlockId(liveRunId, liveStep, index);
       blockIdByIndex.set(index, id);
       liveTurn.blocks.push({ kind, id, text: '' } as Block);
       broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
@@ -767,16 +778,12 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
       const snap = await client.snapshot(sessionId);
       const records = (snap?.records ?? []) as RealRecord[];
-      const proj = projectRecords(records);
+      const proj = projectRecords(records, { finalizeUnfinished: !item.running });
+      const live = liveTurns.get(sessionId);
 
       const detail: SessionDetail = {
         ...toSummary(item),
-        turns: (() => {
-          const live = liveTurns.get(sessionId);
-          return live && !proj.turns.some((t) => t.id === live.id)
-            ? [...proj.turns, live]
-            : proj.turns;
-        })(),
+        turns: live ? mergeLiveTurn(proj.turns, live) : proj.turns,
         contract: { tools: [], net: 'allow' },
       };
       if (snap?.header?.agentPreset) detail.presetId = snap.header.agentPreset;
@@ -899,8 +906,17 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       const item = items.find((s) => s.sessionId === sessionId);
       if (!item) throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
       const snap = await client.snapshot(sessionId);
-      const proj = projectRecords((snap?.records ?? []) as RealRecord[]);
-      return { session: { ...toSummary(item), turns: proj.turns, contract: { tools: [], net: 'allow' } } };
+      const proj = projectRecords((snap?.records ?? []) as RealRecord[], {
+        finalizeUnfinished: !item.running,
+      });
+      const live = liveTurns.get(sessionId);
+      return {
+        session: {
+          ...toSummary(item),
+          turns: live ? mergeLiveTurn(proj.turns, live) : proj.turns,
+          contract: { tools: [], net: 'allow' },
+        },
+      };
     },
 
     'sessions.pin': async ({ sessionId, pinned }) => {
@@ -997,8 +1013,15 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       const item = items.find((s) => s.sessionId === sessionId);
       if (!item) throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
       const snap = await client.snapshot(sessionId);
-      const proj = projectRecords((snap?.records ?? []) as RealRecord[]);
-      const detail: SessionDetail = { ...toSummary(item), turns: proj.turns, contract: { tools: [], net: 'allow' } };
+      const proj = projectRecords((snap?.records ?? []) as RealRecord[], {
+        finalizeUnfinished: !item.running,
+      });
+      const live = liveTurns.get(sessionId);
+      const detail: SessionDetail = {
+        ...toSummary(item),
+        turns: live ? mergeLiveTurn(proj.turns, live) : proj.turns,
+        contract: { tools: [], net: 'allow' },
+      };
       detail.permission = preset;
       return { session: detail };
     },
@@ -1055,8 +1078,15 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       const item = items.find((s) => s.sessionId === sessionId);
       if (!item) throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
       const snap = await client.snapshot(sessionId);
-      const proj = projectRecords((snap?.records ?? []) as RealRecord[]);
-      const detail: SessionDetail = { ...toSummary(item), turns: proj.turns, contract: { tools: [], net: 'allow' } };
+      const proj = projectRecords((snap?.records ?? []) as RealRecord[], {
+        finalizeUnfinished: !item.running,
+      });
+      const live = liveTurns.get(sessionId);
+      const detail: SessionDetail = {
+        ...toSummary(item),
+        turns: live ? mergeLiveTurn(proj.turns, live) : proj.turns,
+        contract: { tools: [], net: 'allow' },
+      };
       detail.model = { provider, model, ...(reasoningEffort ? { reasoningEffort } : {}) };
       return { session: detail };
     },

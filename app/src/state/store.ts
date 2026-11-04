@@ -39,6 +39,13 @@ import type {
   Turn,
   Workspace,
 } from '../protocol';
+import {
+  findRunTurnIndex,
+  mergeLiveTurn,
+  mergeNearbyTurns,
+  normalizeTurns,
+  sameBlock,
+} from '../protocol/turns';
 
 export interface PendingAttachment {
   /** 已上传拿到的回执 id；列表页暂存阶段为 staged-* 临时 id */
@@ -169,73 +176,6 @@ const DEFAULT_URL = hostAvailable ? 'ws://127.0.0.1:8788/ws' : 'ws://192.168.1.3
 
 type Listener = () => void;
 
-function sameBlock(a: Block, b: Block): boolean {
-  if (a.kind !== b.kind) return false;
-  if (a.kind === 'text' && b.kind === 'text') return a.id === b.id || a.text === b.text;
-  if (a.kind === 'thinking' && b.kind === 'thinking') {
-    if (a.id === b.id || a.text === b.text) return true;
-    const at = a.text.trim();
-    const bt = b.text.trim();
-    // 快照里是前半段、实时里是完整段：前缀相同就认作同一段思考
-    return at.length > 20 && bt.length > 20 && (at.startsWith(bt) || bt.startsWith(at));
-  }
-  if (a.kind === 'tool' && b.kind === 'tool') {
-    return a.id === b.id || (a.name === b.name && a.summary === b.summary);
-  }
-  if (a.kind === 'approval' && b.kind === 'approval') return a.approvalId === b.approvalId;
-  return a.id === b.id;
-}
-
-function mergeTurn(prev: Turn, next: Turn): Turn {
-  const blocks = prev.blocks.slice();
-  for (const block of next.blocks) {
-    const i = blocks.findIndex((b) => sameBlock(b, block));
-    if (i >= 0) {
-      const old = blocks[i]!;
-      if (block.kind === 'thinking' && old.kind === 'thinking' && block.text.length > old.text.length) {
-        blocks[i] = block;
-      }
-      continue;
-    }
-    blocks.push(block);
-  }
-  return {
-    ...prev,
-    runId: prev.runId ?? next.runId,
-    blocks,
-    status: prev.status === 'streaming' || next.status === 'streaming' ? 'streaming' : next.status,
-    meta: prev.meta ?? next.meta,
-    usage: prev.usage ?? next.usage,
-    createdAt: Math.min(prev.createdAt, next.createdAt),
-  };
-}
-
-function sharesBlock(a: Turn, b: Turn): boolean {
-  return a.blocks.some((x) => b.blocks.some((y) => sameBlock(x, y)));
-}
-
-/** 只合并同一个 run 的快照/实时回合；跨 run 的 assistant 绝不合并 */
-function mergeNearbyTurns(turns: Turn[], incoming: Turn): Turn[] {
-  if (incoming.role === 'user') {
-    if (turns.some((t) => t.id === incoming.id)) return turns;
-    return [...turns, incoming];
-  }
-  const last = turns[turns.length - 1];
-  const sameRun =
-    last?.role === 'assistant' &&
-    ((last.runId && incoming.runId && last.runId === incoming.runId) ||
-      last.id === incoming.id ||
-      // 宿主快照没有 runId 时，用“双方都在 streaming”或相同 block 认同一轮
-      (last.status === 'streaming' && incoming.status === 'streaming') ||
-      sharesBlock(last, incoming));
-  if (sameRun) {
-    const next = turns.slice();
-    next[next.length - 1] = mergeTurn(last!, incoming);
-    return next;
-  }
-  return [...turns, incoming];
-}
-
 /** 列表/会话事件说这一轮已经结束，但 detail 里还挂着 streaming 时，把它收口 */
 function finalizeDetailTurn(detail: SessionDetail, at?: number): SessionDetail {
   let turns = detail.turns;
@@ -264,7 +204,7 @@ function finalizeDetailTurn(detail: SessionDetail, at?: number): SessionDetail {
 
 export class Store {
   /** 流式增量在当前 JS 事件栈结束后立即提交；同一 tick 内的多个 token 才合并 */
-  private pendingDelta = new Map<string, string>();
+  private pendingDelta = new Map<string, string[]>();
   private deltaScheduled = false;
   /** 客户端兜底计时：宿主没带 durationMs 时，run.started 到 run.finished 的耗时 */
   private runStartedAt: number | null = null;
@@ -347,34 +287,47 @@ export class Store {
     else Promise.resolve().then(run);
   }
 
-  /** 把攒下的流式增量一次性拼进 block；thinking 只留最后 24000 字，防止无限增长 */
+  /**
+   * 把攒下的流式增量一次性拼进 block。
+   * 只替换活跃 turn/block 的引用，历史块保持原引用供 React.memo 跳过。
+   */
   private flushDeltas(): void {
     if (this.pendingDelta.size === 0) return;
+    const pending = this.pendingDelta;
+    this.pendingDelta = new Map();
     const detail = this.state.detail;
-    if (!detail) {
-      this.pendingDelta.clear();
-      return;
-    }
-    for (const [blockId, delta] of this.pendingDelta) {
-      for (const turn of detail.turns) {
-        const block = turn.blocks.find((b) => b.id === blockId) as
-          | Extract<Block, { kind: 'text' | 'thinking' }>
-          | undefined;
-        if (!block) continue;
-        block.text += delta;
-        if (block.kind === 'thinking' && block.text.length > 24000) {
-          block.text = '…' + block.text.slice(-24000);
+    if (!detail) return;
+
+    let turns = detail.turns;
+    for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
+      const turn = turns[turnIndex]!;
+      let blocks = turn.blocks;
+      for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+        const block = blocks[blockIndex]!;
+        const chunks = pending.get(block.id);
+        if (!chunks || chunks.length === 0) continue;
+        if (block.kind !== 'text' && block.kind !== 'thinking') continue;
+        let text = block.text + chunks.join('');
+        if (block.kind === 'thinking' && text.length > 24000) {
+          text = '…' + text.slice(-24000);
         }
-        break;
+        if (blocks === turn.blocks) blocks = turn.blocks.slice();
+        blocks[blockIndex] = { ...block, text };
+      }
+      if (blocks !== turn.blocks) {
+        if (turns === detail.turns) turns = detail.turns.slice();
+        turns[turnIndex] = { ...turn, blocks };
       }
     }
-    this.pendingDelta.clear();
+    if (turns === detail.turns) return;
+
+    const nextDetail = { ...detail, turns };
     const currentId = this.state.currentId;
     let sessions = this.state.sessions;
     if (currentId) {
       let preview = '';
-      outer: for (let i = detail.turns.length - 1; i >= 0; i--) {
-        const blocks = detail.turns[i]!.blocks;
+      outer: for (let i = turns.length - 1; i >= 0; i--) {
+        const blocks = turns[i]!.blocks;
         for (let j = blocks.length - 1; j >= 0; j--) {
           const b = blocks[j]!;
           if (b.kind === 'text' && b.text.trim()) {
@@ -389,7 +342,7 @@ export class Store {
           : s
       );
     }
-    this.patch({ sessions });
+    this.patch({ detail: nextDetail, sessions });
   }
 
   private fail(err: unknown): void {
@@ -618,32 +571,10 @@ export class Store {
       const live = active
         ? cached?.turns.find((t) => t.role === 'assistant' && t.status === 'streaming')
         : undefined;
-      if (live) {
-        // 宿主快照里可能只有落盘的部分回合；同一 id 用缓存里的 live 回合，别画两份
-        let same = -1;
-        for (let i = turns.length - 1; i >= 0; i--) {
-          const t = turns[i]!;
-          if (t.role !== 'assistant') continue;
-          if (
-            t.id === live.id ||
-            (live.runId && t.runId === live.runId) ||
-            t.status === 'streaming' ||
-            sharesBlock(t, live)
-          ) {
-            same = i;
-            break;
-          }
-        }
-        if (same >= 0) {
-          turns = turns.slice();
-          turns[same] = mergeTurn(turns[same]!, live);
-        } else {
-          // 快照里如果只有一个不等 id 的部分回合，宁可多一条也不要跨 run 合并
-          turns = [...turns, live];
-        }
-      }
-      turns = turns.reduce<Turn[]>((acc, t) => mergeNearbyTurns(acc, t), []);
-      this.patch({ detail: { ...session, turns }, currentId: id, busy: false });      // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
+      if (live) turns = mergeLiveTurn(turns, live);
+      turns = normalizeTurns(turns);
+      this.patch({ detail: { ...session, turns }, currentId: id, busy: false });
+      // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
       const { approvals } = await this.client.request('approvals.list', { sessionId: id });
       const map: Record<string, Approval> = {};
       for (const a of approvals) {
@@ -1380,32 +1311,42 @@ export class Store {
           | undefined;
         if (!block) return;
         if (data.op === 'replace') {
-          block.text = data.text;
           this.pendingDelta.delete(data.blockId);
-          this.patch({});
+          const turnIndex = detail.turns.findIndex((t) => t.id === data.turnId);
+          const turn = detail.turns[turnIndex];
+          const blockIndex = turn?.blocks.findIndex((b) => b.id === data.blockId) ?? -1;
+          if (!turn || blockIndex < 0) return;
+          const blocks = turn.blocks.slice();
+          blocks[blockIndex] = { ...block, text: data.text };
+          const turns = detail.turns.slice();
+          turns[turnIndex] = { ...turn, blocks };
+          this.patch({ detail: { ...detail, turns } });
           return;
         }
-        this.pendingDelta.set(
-          data.blockId,
-          (this.pendingDelta.get(data.blockId) ?? '') + data.text
-        );
+        const chunks = this.pendingDelta.get(data.blockId);
+        if (chunks) chunks.push(data.text);
+        else this.pendingDelta.set(data.blockId, [data.text]);
         this.scheduleDeltaFlush();
         return;
       }
 
       case 'block.updated': {
         if (!detail || data.sessionId !== currentId) return;
-        const turn = detail.turns.find((t) => t.id === data.turnId);
+        const turnIndex = detail.turns.findIndex((t) => t.id === data.turnId);
+        const turn = detail.turns[turnIndex];
         if (!turn) return;
-        const i = turn.blocks.findIndex((b) => b.id === (data.block as Block).id);
-        if (i >= 0) {
-          const incoming = data.block as Block;
-          turn.blocks[i] =
-            incoming.kind === 'text' || incoming.kind === 'thinking'
-              ? { ...incoming, done: true }
-              : incoming;
-        }
-        this.patch({});
+        const incoming = data.block as Block;
+        const blockIndex = turn.blocks.findIndex((b) => b.id === incoming.id);
+        if (blockIndex < 0) return;
+        const nextBlock =
+          incoming.kind === 'text' || incoming.kind === 'thinking'
+            ? { ...incoming, done: true }
+            : incoming;
+        const blocks = turn.blocks.slice();
+        blocks[blockIndex] = nextBlock;
+        const turns = detail.turns.slice();
+        turns[turnIndex] = { ...turn, blocks };
+        this.patch({ detail: { ...detail, turns } });
         return;
       }
 
@@ -1505,25 +1446,24 @@ export class Store {
         let nextDetail = d;
         if (d && data.sessionId === currentId) {
           let turns = d.turns;
-          for (let i = turns.length - 1; i >= 0; i--) {
-            const t = turns[i]!;
-            if (t.role !== 'assistant') continue;
-            const needsStatus = t.status !== finalStatus;
-            const needsDuration = durationMs !== null && !t.meta?.durationMs;
+          const turnIndex = findRunTurnIndex(turns, runId);
+          const target = turnIndex >= 0 ? turns[turnIndex] : undefined;
+          if (target) {
+            const needsStatus = target.status !== finalStatus;
+            const needsDuration = durationMs !== null && !target.meta?.durationMs;
             if (needsStatus || needsDuration) {
               turns = turns.slice();
-              turns[i] = {
-                ...t,
+              turns[turnIndex] = {
+                ...target,
                 status: finalStatus,
                 meta: {
-                  ...t.meta,
+                  ...target.meta,
                   ...(needsDuration && durationMs !== null
-                    ? { durationMs, steps: t.meta?.steps ?? t.blocks.length }
+                    ? { durationMs, steps: target.meta?.steps ?? target.blocks.length }
                     : {}),
                 },
               };
             }
-            break;
           }
           nextDetail = { ...d, turns, status: 'idle' };
         }

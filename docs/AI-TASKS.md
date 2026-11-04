@@ -2,6 +2,7 @@
 
 > 状态：2026-11-03。**本文件是任务状态、规则和命令的唯一来源**。
 > 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)。
+> 长会话流式专项方案与验证记录见 [STREAMING-FIX](STREAMING-FIX.md)。
 > **每次做完任务，必须回来勾选/更新这里**；不要另开任务文档。
 
 ## 1. 当前基线
@@ -16,9 +17,10 @@
   deepseek 蓝 `#4176E6`、8/12/16/20/28 圆角；深色 alias 后续按系统开关接。
 - 输入区按 dsh-go 几何（2026-11-04）：单行 56 / 28 圆角、40 圆键；权限与锦囊在输入框上方，
   模型回顶栏，`+` 走附件面板；B3 前先把 Chat 的回合/思考/工具渲染拆到 `ui/chat/*`。
-- 流式仍未完全解决（2026-11-04）：逐 token + Markdown stable/tail 已做，长会话布局仍抖；
-  根因和剩余项见 `PITFALLS.md` H7。
-- 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建。
+- 流式主链路已修（2026-11-04）：canonical run/block id、chunk 缓冲、稳定块 memo、FlatList 和 follow
+  状态机已落地；真机工具密集长流、上滑冻结、回到底部、重进通过。20 分钟 soak 待补，见
+  `PITFALLS.md` H7 和 [STREAMING-FIX](STREAMING-FIX.md)。
+- 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
 
 ## 2. 任务清单
@@ -69,12 +71,14 @@
 
 - [ ] **U1 聊天页重排**：浮动顶栏、Composer 28 圆角/40 键、错误横幅、回到底部键
 - [ ] **U2 消息层**：思考 3 行实时窗、工具行合并、整轮折叠、ChatCard 统一
-- [ ] **U3 流式性能**：32ms 合并增量 + 行缓存（现在每个 delta 一次 patch）
+- [x] **U3 流式性能**：逐 token + 微任务 chunk 缓冲 + 局部不可变更新 + 稳定块 memo
 - [ ] **U4 设置 IA**：6 组、SettingsTile、右侧当前值、搜索
 - [ ] **U5 引擎页**：状态环、启动/停止/重启、失败卡（重试/安全模式/日志）
 - [ ] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
 - [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
+- [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
+  20 分钟 soak 仍待补（见 `PITFALLS.md` H7）
 
 #### 可并行 UI 项（2026-11-03，给 agent）
 
@@ -123,8 +127,7 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 | 任务 | 原因 |
 |---|---|
 | U1 聊天页重排 | 改 ChatScreen + Composer，和 1.2/1.3/1.4 都撞 |
-| U3 流式 32ms 合并 | 已改为逐 token + 微任务；剩余布局/稳定块 memo 见 `PITFALLS.md` H7 |
-| U9 长会话流式布局 | `ScrollView` 末行长高 + 键盘竞争；需 FlatList/KeyboardChatScrollView + blankSpace，优先于其它 U 项 |
+| U3 流式 32ms 合并 | 已改为逐 token + 微任务 chunk；旧方案不再适用 |
 | U4 设置 IA | 改 SettingsScreen，1.2 引擎卡/账号/提供商都在里面 |
 | U5 引擎页 | 需要 EngineManager 的状态字段 |
 | U6 全部功能页 | 要动 App/Settings 导航；等 1.2 入口定型 |
@@ -138,7 +141,7 @@ app/src/ui/ChatScreen.tsx   # 只有 B3 允许改 import 几行
 2. A4 / A5（给 1.2/1.3 预留组件）；
 3. A6 / A7；
 4. B1 / B2 / B3（留槽，允许和引擎任务并行）；
-5. 等 1.2/1.3/1.4 合入后，再做 U1/U3/U4/U5/U6/U7/U8；U9（长会话流式布局）优先于其它 U 项。
+5. 等 1.2/1.3/1.4 合入后，再做 U1/U4/U5/U6/U7/U8；U9 已完成主体，补 20 分钟 soak。
 
 每个分支都从最新 `develop` 切，一个分支一个任务，走 MR；不要直推 `develop`。
 

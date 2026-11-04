@@ -8,6 +8,7 @@
     "app": "npm --prefix app run start",
     "app:web": "npm --prefix app run web",
     "test": "node --import tsx --test test/*.test.ts",
+    "stream:replay": "node --import tsx scripts/stream-replay.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test",
     "plugin:check": "node --import tsx scripts/plugin-compat.ts"

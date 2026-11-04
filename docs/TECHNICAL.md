@@ -303,11 +303,24 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 
 **现状**：回合按 `role` 分气泡/全宽；思考与工具是行；审批/提问是卡片；
 输入区已按 dsh-go 几何：单行 56 / 28 圆角、左右 40 圆键，权限与锦囊在输入框上方，
-模型在顶栏；完成回合有复制/分享，回到底部键在生成中做脉冲描边；流式是**逐 token 微任务提交**，
-Markdown 只重解析 stable 前缀 + tail。长会话仍有布局抖动，根因/剩余项见 `PITFALLS.md` H7。
-**目标（未做）**：`ScrollView` 换 FlatList/KeyboardChatScrollView + 预留 blankSpace；
-稳定块 `React.memo`；文本 chunk 拼接；浮动玻璃顶栏、工具行连续合并、整轮折叠、ChatCard、朗读（需要原生 TTS）。
-完整调研见 [archive/19-ui-research.md](archive/19-ui-research.md)。
+模型在顶栏；完成回合有复制/分享，回到底部键在生成中做脉冲描边。
+
+流式链路：
+
+- 桥和客户端共用 `app/src/protocol/turns.ts` 的 canonical runId / blockId 与归一化规则；
+  同 run 的快照和实时数据合并，跨 run 即使都 streaming 也不合并。
+- 每个 assistant-stream 步骤的实时 block id 带 step（`<runId>:live:<step>:b<index>`），
+  避免多个步骤都从 index 0 开始导致 id 撞车。
+- store 用 chunk 数组接 `block.delta`，微任务 flush；只替换活跃 turn/block 引用，
+  历史 turn/block 保持引用供 memo 跳过。
+- Markdown 只重解析 stable 前缀 + tail；stable/tail 分组件渲染。
+- `TurnView`、`AssistantTurn`、`ThinkingRow`、`ToolRow`、`MarkdownView`、稳定块列表均为 memo 组件。
+- `ChatScreen` 使用 `FlatList` + 稳定 key + footer blankSpace；追底是显式 follow 状态机：
+  用户真实拖拽离底后冻结，回到底部/点击按钮才恢复。跳到底部按钮位于列表容器内，键盘弹出时不被盖住。
+
+**目标（未做）**：浮动玻璃顶栏、工具行连续合并、整轮折叠、ChatCard、朗读（需要原生 TTS）；
+20 分钟真机 soak 与 VirtualizedList 慢更新警告继续观察。
+完整调研见 [archive/19-ui-research.md](archive/19-ui-research.md)，本次修复记录见 [STREAMING-FIX](STREAMING-FIX.md)。
 
 ### 8.4 输入与键盘
 

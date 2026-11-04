@@ -692,7 +692,109 @@ export interface MarkdownViewProps {
   isStreaming?: boolean;
 }
 
-export function MarkdownView({
+const MarkdownBlock = React.memo(function MarkdownBlock({
+  block,
+  trailingCursor,
+}: {
+  block: BlockItem;
+  trailingCursor?: boolean;
+}): React.ReactElement {
+  switch (block.type) {
+    case 'h1':
+      return (
+        <View style={styles.h1Wrap}>
+          <InlineText text={block.text} baseStyle={styles.h1Text} />
+        </View>
+      );
+    case 'h2':
+      return (
+        <View style={styles.h2Wrap}>
+          <InlineText text={block.text} baseStyle={styles.h2Text} />
+        </View>
+      );
+    case 'h3':
+      return (
+        <View style={styles.h3Wrap}>
+          <InlineText text={block.text} baseStyle={styles.h3Text} />
+        </View>
+      );
+    case 'codeblock':
+      return <CodeBlockView lang={block.lang} code={block.code} />;
+    case 'image':
+      return <ImageView alt={block.alt} url={block.url} />;
+    case 'table':
+      return <TableView header={block.header} align={block.align} rows={block.rows} />;
+    case 'quote':
+      return (
+        <View style={styles.quoteWrap}>
+          <InlineText text={block.text} baseStyle={styles.quoteText} />
+        </View>
+      );
+    case 'ul':
+      return (
+        <View style={styles.listWrap}>
+          {block.items.map((item, idx) => (
+            <View key={idx} style={styles.listItem}>
+              <Text style={styles.bullet}>•</Text>
+              <View style={styles.listContent}>
+                <InlineText text={item} baseStyle={styles.paragraph} />
+              </View>
+            </View>
+          ))}
+        </View>
+      );
+    case 'ol':
+      return (
+        <View style={styles.listWrap}>
+          {block.items.map((item, idx) => (
+            <View key={idx} style={styles.listItem}>
+              <Text style={styles.orderNumber}>{idx + 1}.</Text>
+              <View style={styles.listContent}>
+                <InlineText text={item} baseStyle={styles.paragraph} />
+              </View>
+            </View>
+          ))}
+        </View>
+      );
+    case 'hr':
+      return <View style={styles.hr} />;
+    case 'p':
+    default:
+      return (
+        <View style={styles.pWrap}>
+          <InlineText
+            text={block.text}
+            baseStyle={styles.paragraph}
+            trailingCursor={trailingCursor}
+          />
+        </View>
+      );
+  }
+});
+
+const BlockList = React.memo(function BlockList({
+  blocks,
+  prefix,
+  streaming = false,
+}: {
+  blocks: BlockItem[];
+  prefix: string;
+  streaming?: boolean;
+}): React.ReactElement {
+  return (
+    <>
+      {blocks.map((block, index) => (
+        <MarkdownBlock
+          key={`${prefix}:${index}`}
+          block={block}
+          trailingCursor={streaming && index === blocks.length - 1 && block.type === 'p'}
+        />
+      ))}
+    </>
+  );
+});
+
+function MarkdownViewImpl({
   text,
   style,
   streaming,
@@ -705,96 +807,16 @@ export function MarkdownView({
     [stable]
   );
   const tailBlocks = React.useMemo(() => (tail ? parseMarkdownBlocks(tail) : []), [tail]);
-  const blocks = React.useMemo(
-    () => [...stableBlocks, ...tailBlocks],
-    [stableBlocks, tailBlocks]
-  );
-
-  const lastBlockIndex = blocks.length - 1;
-  const lastBlock = blocks[lastBlockIndex];
-  const lastBlockIsParagraph = lastBlock && lastBlock.type === 'p';
+  const tailEndsWithParagraph =
+    tailBlocks.length > 0 && tailBlocks[tailBlocks.length - 1]?.type === 'p';
+  const activeBlock = tailBlocks[tailBlocks.length - 1] ?? stableBlocks[stableBlocks.length - 1];
+  const lastIsParagraph = activeBlock?.type === 'p';
 
   return (
     <View style={[styles.root, style]}>
-      {blocks.map((block, i) => {
-        const isLast = i === lastBlockIndex;
-        const showCursorInParagraph = isLast && activeStreaming && block.type === 'p';
-
-        switch (block.type) {
-          case 'h1':
-            return (
-              <View key={i} style={styles.h1Wrap}>
-                <InlineText text={block.text} baseStyle={styles.h1Text} />
-              </View>
-            );
-          case 'h2':
-            return (
-              <View key={i} style={styles.h2Wrap}>
-                <InlineText text={block.text} baseStyle={styles.h2Text} />
-              </View>
-            );
-          case 'h3':
-            return (
-              <View key={i} style={styles.h3Wrap}>
-                <InlineText text={block.text} baseStyle={styles.h3Text} />
-              </View>
-            );
-          case 'codeblock':
-            return <CodeBlockView key={i} lang={block.lang} code={block.code} />;
-          case 'image':
-            return <ImageView key={i} alt={block.alt} url={block.url} />;
-          case 'table':
-            return <TableView key={i} header={block.header} align={block.align} rows={block.rows} />;
-          case 'quote':
-            return (
-              <View key={i} style={styles.quoteWrap}>
-                <InlineText text={block.text} baseStyle={styles.quoteText} />
-              </View>
-            );
-          case 'ul':
-            return (
-              <View key={i} style={styles.listWrap}>
-                {block.items.map((item, idx) => (
-                  <View key={idx} style={styles.listItem}>
-                    <Text style={styles.bullet}>•</Text>
-                    <View style={styles.listContent}>
-                      <InlineText text={item} baseStyle={styles.paragraph} />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            );
-          case 'ol':
-            return (
-              <View key={i} style={styles.listWrap}>
-                {block.items.map((item, idx) => (
-                  <View key={idx} style={styles.listItem}>
-                    <Text style={styles.orderNumber}>{idx + 1}.</Text>
-                    <View style={styles.listContent}>
-                      <InlineText text={item} baseStyle={styles.paragraph} />
-                    </View>
-                  </View>
-                ))}
-              </View>
-            );
-          case 'hr':
-            return <View key={i} style={styles.hr} />;
-          case 'p':
-          default:
-            return (
-              <View key={i} style={styles.pWrap}>
-                <InlineText
-                  text={block.text}
-                  baseStyle={styles.paragraph}
-                  trailingCursor={showCursorInParagraph}
-                />
-              </View>
-            );
-        }
-      })}
-
-      {/* 当最后一块不是普通段落（例如代码块/表格结尾），但依然在流式时，显示独立光标行 */}
-      {activeStreaming && !lastBlockIsParagraph ? (
+      <BlockList blocks={stableBlocks} prefix="stable" />
+      <BlockList blocks={tailBlocks} prefix="tail" streaming={activeStreaming} />
+      {activeStreaming && (!tailEndsWithParagraph || !lastIsParagraph) ? (
         <View style={styles.trailingCursorWrap}>
           <StreamingCursor />
         </View>
@@ -802,6 +824,8 @@ export function MarkdownView({
     </View>
   );
 }
+
+export const MarkdownView = React.memo(MarkdownViewImpl);
 
 const styles = StyleSheet.create({
   root: { gap: space.sm },

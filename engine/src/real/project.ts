@@ -5,6 +5,7 @@
  * 真引擎没有"消息列表"，只有事件；这里把事件折成界面能渲染的回合。
  */
 import type { Block, Turn } from '../../../app/src/protocol';
+import { canonicalRunId, canonicalTurnId } from '../../../app/src/protocol/turns';
 
 export interface RealEventData {
   turn?: number;
@@ -67,24 +68,25 @@ function summarizeArgs(raw: unknown): string {
   return '';
 }
 
-function contentToBlocks(content: unknown): Block[] {
+function contentToBlocks(content: unknown, idPrefix: string, offset = 0): Block[] {
   const list = Array.isArray(content) ? (content as ContentBlock[]) : [];
   const out: Block[] = [];
   let i = 0;
   for (const b of list) {
     i += 1;
+    const id = `${idPrefix}:b${offset + i - 1}`;
     if (b?.type === 'text' && b.text) {
-      out.push({ kind: 'text', id: `t${i}`, text: b.text });
+      out.push({ kind: 'text', id, text: b.text });
     } else if (b?.type === 'reasoning' && b.text) {
-      out.push({ kind: 'thinking', id: `r${i}`, text: b.text });
+      out.push({ kind: 'thinking', id, text: b.text });
     } else if (b?.type === 'image') {
       const att = (b as { attachment?: { name?: string } }).attachment;
       const label = att?.name ? `[图片: ${att.name}]` : '[图片]';
-      out.push({ kind: 'text', id: `i${i}`, text: label });
+      out.push({ kind: 'text', id, text: label });
     } else if (b?.type === 'file') {
       const att = (b as { attachment?: { name?: string } }).attachment;
       const label = att?.name ? `[附件: ${att.name}]` : '[附件]';
-      out.push({ kind: 'text', id: `f${i}`, text: label });
+      out.push({ kind: 'text', id, text: label });
     }
     // tool-call 块跳过：工具卡片统一由 tool/call 事件生成，避免重复
   }
@@ -109,7 +111,15 @@ export interface Projection {
  *  - tool/result        → 按 callId 回填工具块状态与详情
  *  - turn/end           → 收尾
  */
-export function projectRecords(records: RealRecord[]): Projection {
+export interface ProjectOptions {
+  /**
+   * 没有 turn/end 的 assistant 回合是否按完成处理。
+   * sessions.get 对仍在运行的会话要传 false，否则当前 live 回合会被错误标成 done。
+   */
+  finalizeUnfinished?: boolean;
+}
+
+export function projectRecords(records: RealRecord[], options: ProjectOptions = {}): Projection {
   const turns: Turn[] = [];
   let title: string | null = null;
   let model: string | null = null;
@@ -122,7 +132,10 @@ export function projectRecords(records: RealRecord[]): Projection {
 
   const newTurn = (role: 'user' | 'assistant', createdAt: number, id?: string, runId?: string): Turn => {
     const turn: Turn = {
-      id: id ?? `${role}-${turns.length + 1}`,
+      id:
+        role === 'assistant' && runId
+          ? canonicalTurnId(runId)
+          : id ?? `${role}-${turns.length + 1}`,
       ...(runId ? { runId } : {}),
       role,
       createdAt,
@@ -149,14 +162,15 @@ export function projectRecords(records: RealRecord[]): Projection {
 
         current = newTurn('user', time, typeof d.id === 'string' ? d.id : undefined);
         currentTurnNo = -1;
-        current.blocks = contentToBlocks(d.content);
+        const userId = current.id;
+        current.blocks = contentToBlocks(d.content, userId);
         current.status = 'done';
         break;
       }
 
       case 'assistant/message': {
         const turnNo = typeof d.turn === 'number' ? d.turn : -1;
-        const runId = turnNo >= 0 ? `turn:${turnNo}` : undefined;
+        const runId = canonicalRunId(d.turn);
         const msg = (d.message ?? {}) as Record<string, any>;
         if (!current || current.role !== 'assistant' || currentTurnNo !== turnNo) {
           current = newTurn(
@@ -169,7 +183,8 @@ export function projectRecords(records: RealRecord[]): Projection {
         } else if (runId && !current.runId) {
           current.runId = runId;
         }
-        current.blocks.push(...contentToBlocks(msg.content));
+        const blockPrefix = current.runId ?? current.id;
+        current.blocks.push(...contentToBlocks(msg.content, blockPrefix, current.blocks.length));
         if (d.usage) {
           const u = d.usage as Record<string, number>;
           current.usage = {
@@ -188,11 +203,11 @@ export function projectRecords(records: RealRecord[]): Projection {
             'assistant',
             time,
             undefined,
-            typeof d.turn === 'number' ? `turn:${d.turn}` : undefined
+            canonicalRunId(d.turn)
           );
           currentTurnNo = typeof d.turn === 'number' ? d.turn : -1;
-        } else if (typeof d.turn === 'number' && !current.runId) {
-          current.runId = `turn:${d.turn}`;
+        } else if (d.turn !== undefined && !current.runId) {
+          current.runId = canonicalRunId(d.turn);
         }
         blockSeq += 1;
         const callName = str(d.name) || 'tool';
@@ -202,7 +217,7 @@ export function projectRecords(records: RealRecord[]): Projection {
         if (callName === 'ask_user_question' && callId) {
           const block: Extract<Block, { kind: 'approval' }> = {
             kind: 'approval',
-            id: `ask-${blockSeq}`,
+            id: `${current.runId ?? current.id}:ask-${blockSeq}`,
             approvalId: callId,
           };
           current.blocks.push(block);
@@ -211,7 +226,7 @@ export function projectRecords(records: RealRecord[]): Projection {
 
         const block: Extract<Block, { kind: 'tool' }> = {
           kind: 'tool',
-          id: `tool-${blockSeq}`,
+          id: `${current.runId ?? current.id}:tool-${callId || blockSeq}`,
           name: callName,
           summary: summarizeArgs(d.arguments),
           state: 'running',
@@ -227,7 +242,7 @@ export function projectRecords(records: RealRecord[]): Projection {
         const block = callId ? toolIndex.get(callId) : undefined;
         if (block) {
           block.state = msg.isError === true ? 'error' : 'done';
-          const text = contentToBlocks(msg.content)
+          const text = contentToBlocks(msg.content, current?.runId ?? 'tool-result')
             .map((b) => (b.kind === 'text' ? b.text : ''))
             .join('\n');
           if (text) block.detail = clip(text, 200);
@@ -279,11 +294,12 @@ export function projectRecords(records: RealRecord[]): Projection {
     }
   }
 
-  // 没有 turn/end 收尾的回合（比如还在跑）保持 streaming，交给界面显示"生成中"
-  for (const t of turns) {
-    if (t.role === 'assistant' && t.status === 'streaming' && t.blocks.length > 0) {
-      // 事件流已经结束但没收到 turn/end：按完成处理
-      t.status = 'done';
+  // 历史记录缺 turn/end 时默认按完成处理；活跃会话必须保留 streaming。
+  if (options.finalizeUnfinished !== false) {
+    for (const t of turns) {
+      if (t.role === 'assistant' && t.status === 'streaming' && t.blocks.length > 0) {
+        t.status = 'done';
+      }
     }
   }
 

@@ -77,6 +77,7 @@ cd app/android && sh gradlew :app:assembleDebug
 | [docs/TECHNICAL.md](docs/TECHNICAL.md) | **技术**：架构、协议、dsh API、proot/轻引擎、路由、登录配对、UI、构建 |
 | [docs/PITFALLS.md](docs/PITFALLS.md) | **踩坑**：现象 → 原因 → 处理 → 验证 |
 | [docs/AI-TASKS.md](docs/AI-TASKS.md) | **给 AI 的清单**：任务、工程债、待决、分支/提交规则、命令 |
+| [docs/STREAMING-FIX.md](docs/STREAMING-FIX.md) | **专项方案**：长会话流式的根因、改动、验证与剩余项 |
 
 旧文档在 [docs/archive/](docs/archive/)（只读，2026-11-03 归档）。
 
@@ -94,7 +95,7 @@ engine/                 mock 引擎 + 真 dsh 桥（real/）
 test/                   e2e / 审批卡 / 单元
 scripts/                探针、建桥、构建准备、真机脚本
 runtime/                rootfs 分层与 profile
-docs/                   四篇文档 + archive/
+docs/                   四篇主文档 + 专项方案 + archive/
 ```
 
 ## 约定
@@ -102,7 +103,7 @@ docs/                   四篇文档 + archive/
 - **分支**：从 `develop` 切，一个方面的任务一个分支，走 MR 合并；不直推 `develop`。
   具体见 [docs/AI-TASKS.md](docs/AI-TASKS.md) §5。
 - **文档**：任务状态只改 AI-TASKS；技术只改 TECHNICAL；新坑进 PITFALLS；
-  需求只改 REQUIREMENTS。不要写死测试条数。
+  需求只改 REQUIREMENTS；长流专项记录进 STREAMING-FIX。不要写死测试条数。
 - 依赖统一用 **npm**，不要混 pnpm（会破坏 autolinking）。
 
 ## License

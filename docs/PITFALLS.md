@@ -300,8 +300,8 @@
 
 - 现象：长回答时代码侧每 token 触发一次 store 更新。
 - 历史处理：U3 曾计划 32ms 合并；实际先后试过 50ms 定时器、requestAnimationFrame（约 16ms）。
-- 现状（2026-11-04）：改成 `queueMicrotask`，同一事件栈内的 token 合并，其余逐 token 提交；Markdown 只重解析 stable/tail。
-- 结果：逐 token 已做到，但 20+ 分钟长会话仍会抖；剩余原因和未完成项见 **H7**。
+- 现状（2026-11-04）：`queueMicrotask` + chunk 数组缓冲，同一事件栈内的 token 合并；Markdown 只重解析 stable/tail。
+- 结果：主链路已收口，工具密集长流和真机滚动验证通过；剩余 20 分钟 soak 见 **H7**。
 
 ### H5. adb 点击坐标与截图不一致
 
@@ -317,7 +317,7 @@
 - 处理：统一走 `SmoothKeyboardAvoid`；底部安全区单独留；不重复加 padding。
 - 验证：1–6 行输入、中文候选都不遮。
 
-### H7. 长会话流式仍抖 / 思考重复（2026-11-04 未完全解决）
+### H7. 长会话流式仍抖 / 思考重复（2026-11-04 主体已修，20 分钟 soak 待补）
 
 **现象**
 
@@ -336,8 +336,10 @@
 5. **布局竞争**：最后一行长高、键盘避让、用户滚动三方同时改 offset；Android 上即使每 token 更新，也会表现为跳动。
 6. **状态不同步**：`run.started/finished` 只改 detail，不改 `sessions` 列表；`refreshSessions` 也不收口 detail 里残留的 streaming 回合。
 7. **缓存脏数据**：重装/恢复后 UI 缓存可能还指向旧模型 id（如 `flash`），发消息 1 秒内被宿主拒绝，表现为“出错”。
+8. **实时 block id 跨步骤撞车**：每个 assistant-stream 步骤都从 `block index 0` 重新开始，但 runId 不变；实时 id 会重复，多个步骤的思考可能被合错/重复。
+9. **追底状态被测量修正误伤**：仅靠 offset 变化判断用户上滑，会被 FlatList 动态测量修正误触发；跳到底部按钮又放在键盘 padding 区域，键盘弹出时被盖住。
 
-**已经做了**
+**第一轮已做（历史）**
 
 - 渲染前 `cleanTurns`：连续同 run/同 streaming 的 assistant 回合合并，重复 text/thinking 按内容去重，空 thinking 丢弃；
 - `sameBlock` 对 thinking 加前缀判定，保留更长的那份；
@@ -347,14 +349,22 @@
 - 修复缓存模型 id 校验（不在 models.list 就回退宿主默认）；
 - 重新打包 bridge、卸载重装 APK，rootfs 里已确认是新 bridge。
 
-**仍未完成（按优先级）**
+**2026-11-04 收口**
 
-1. **列表布局（最大头）**：`ChatScreen` 仍是 `ScrollView`，最后一行流式长高会触发整页 layout。需要换 `FlatList`/`KeyboardChatScrollView`/预留 `blankSpace`，把“增长”从 layout 操作变成滚动内容。
-2. **稳定块 memo**：目前 stable 前缀只缓存了解析结果，`blocks.map` 仍重建所有元素；需要 `React.memo` 的 BlockView + 只渲染 tail 增量。
-3. **文本拼接**：`block.text += delta` 仍是 O(n²)；需要 chunk 数组/rope，渲染时再 join。
-4. **滚动跟随策略**：用户上滑后必须冻结自动追底；目前只靠 `nearBottom` 阈值，长文里会抢。
-5. **宿主 runId**：bridge 里的 `project.ts` 已带 `turn:N`，但如果宿主跑的是旧 dsh 投影，快照仍可能没有 runId；需要确认部署的是新 bridge/新 dsh。
-6. **验证脚本**：需要一条 20+ 分钟、带工具和多次重进的回归用例，目前只能人工长任务观察。
+- 新增 `app/src/protocol/turns.ts`：桥和客户端共用 canonical runId / blockId、同 run 合并和跨 run 隔离；删除 UI 层逐 token 去重。
+- 桥的 `run.started/finished`、turn、快照投影统一使用 `turn:<n>`；实时 block id 改为 `<runId>:live:<step>:b<index>`，步骤间不再撞车。
+- `sessions.get/rename/setPermission/setModel` 都合并当前 live 回合；活跃会话不再把未结束回合标成 done。
+- store 的 delta 改成 chunk 数组，微任务 flush；只替换活跃 turn/block 引用；`replace`/`block.updated` 也改成不可变更新。
+- `TurnView`、`AssistantTurn`、`ThinkingRow`、`ToolRow`、`MarkdownView`、稳定块列表全部 memo；stable/tail 分开渲染。
+- `ChatScreen` 换 `FlatList` + footer blankSpace；follow 状态机要求真实触摸 + `onScrollBeginDrag` 才冻结，避免程序滚动/测量修正误判。
+- “回到底部”移入列表容器，键盘弹出时仍在 Composer 上方。
+- 新增 `test/stream-turns.test.ts` 与 `scripts/stream-replay.ts`；10 万 delta 回放通过。
+
+**仍然待做**
+
+1. **20 分钟真机 soak**：本轮完成 3000 字、工具密集长流和多次重进，但还没跑到连续 20 分钟。需要补一条带工具、键盘反复开关、多次退出重进的回归。
+2. **APK 直装**：设备旧包签名不一致，本轮按 E8 用 Metro + 手动更新 rootfs 桥验证；统一调试签名后再直接 `adb install -r` 验证 APK 内补丁。
+3. **VirtualizedList 警告**：真机仍偶发 `large list slow to update` 警告，暂不阻塞交互；后续结合性能基准调窗口参数。
 
 **验证方式**
 
@@ -364,6 +374,8 @@
 - 退出重进：live 思考不丢、不重复；
 - 结束后：一个“已完成”、一个用时、列表 status=idle；
 - 观察 `adb logcat -s ReactNativeJS` 是否有 duplicate key / 长任务 OOM。
+
+本轮真机已验证：工具密集回合无重复思考；流式中上滑 6 秒内容不动；回到底部按钮可见且可点击；退出重进无重复。
 
 ## G. 调试
 

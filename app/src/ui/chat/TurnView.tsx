@@ -6,7 +6,7 @@ import { MarkdownView } from '../MarkdownView';
 import { colors, font, radius } from '../theme';
 import { ApprovalCard } from './ApprovalCard';
 
-function ThinkingRow({
+const ThinkingRow = React.memo(function ThinkingRow({
   text,
   onToggle,
   live,
@@ -74,9 +74,13 @@ function ThinkingRow({
       </View>
     </View>
   );
-}
+});
 
-function ToolRow({ block }: { block: Extract<Block, { kind: 'tool' }> }): React.ReactElement {
+const ToolRow = React.memo(function ToolRow({
+  block,
+}: {
+  block: Extract<Block, { kind: 'tool' }>;
+}): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const detail = block.detail?.slice(0, 4000);
   const color =
@@ -109,7 +113,7 @@ function ToolRow({ block }: { block: Extract<Block, { kind: 'tool' }> }): React.
       ) : null}
     </View>
   );
-}
+});
 
 function renderBlock(
   block: Block,
@@ -191,7 +195,7 @@ function processSummary(blocks: Block[]): string {
   return parts.length > 0 ? parts.join('，') + '等' : '';
 }
 
-function AssistantTurn({
+const AssistantTurn = React.memo(function AssistantTurn({
   turn,
   approvals,
   onToggleThinking,
@@ -204,16 +208,24 @@ function AssistantTurn({
 }): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const completed = turn.status !== 'streaming';
-  const visible = (b: Block): boolean => !(b.kind === 'thinking' && !b.text.trim());
-  const visibleBlocks = turn.blocks.filter(visible);
-  const processBlocks = visibleBlocks.filter((b) => b.kind === 'thinking' || b.kind === 'tool');
-  const answerBlocks = turn.blocks.filter((b) => b.kind === 'text');
-  const answerText = answerBlocks
-    .filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text')
-    .map((b) => b.text)
-    .join('\n');
+  const visibleBlocks = React.useMemo(
+    () => turn.blocks.filter((b) => !(b.kind === 'thinking' && !b.text.trim())),
+    [turn.blocks],
+  );
+  const processBlocks = React.useMemo(
+    () => visibleBlocks.filter((b) => b.kind === 'thinking' || b.kind === 'tool'),
+    [visibleBlocks],
+  );
+  const answerBlocks = React.useMemo(
+    () => turn.blocks.filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text'),
+    [turn.blocks],
+  );
+  const answerText = React.useMemo(
+    () => answerBlocks.map((b) => b.text).join('\n'),
+    [answerBlocks],
+  );
   const duration = formatDuration(turn.meta?.durationMs ?? fallbackDurationMs);
-  const summary = processSummary(turn.blocks);
+  const summary = React.useMemo(() => processSummary(turn.blocks), [turn.blocks]);
 
   return (
     <View style={styles.assistant}>
@@ -262,9 +274,9 @@ function AssistantTurn({
       {completed ? <AssistantActions text={answerText} /> : null}
     </View>
   );
-}
+});
 
-export function TurnView({
+function TurnViewImpl({
   turn,
   approvals,
   onToggleThinking,
@@ -298,6 +310,8 @@ export function TurnView({
     />
   );
 }
+
+export const TurnView = React.memo(TurnViewImpl);
 
 const styles = StyleSheet.create({
   userRow: { alignItems: 'flex-end' },

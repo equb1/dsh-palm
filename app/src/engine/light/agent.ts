@@ -192,6 +192,7 @@ export class Agent {
         /* ------------------------- 一个 assistant 回合 ------------------------- */
         const turn: Turn = {
           id: newBlockId('t'),
+          runId: run.runId,
           role: 'assistant',
           createdAt: this.now(),
           blocks: [],
