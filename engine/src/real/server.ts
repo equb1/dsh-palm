@@ -83,6 +83,28 @@ function basename(p: string | undefined): string {
   return parts[parts.length - 1] ?? '';
 }
 
+/** 工具参数可能是 JSON 字符串或对象；实时 tool 行也要有可读摘要 */
+function summarizeToolArgs(raw: unknown): string {
+  let value = raw;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return String(value).replace(/\s+/g, ' ').trim().slice(0, 60);
+    }
+  }
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    for (const key of ['query', 'command', 'cmd', 'path', 'file_path', 'filePath', 'url', 'text', 'prompt']) {
+      const v = o[key];
+      if (typeof v === 'string' && v.trim()) return v.replace(/\s+/g, ' ').trim().slice(0, 60);
+    }
+    const first = Object.values(o).find((v) => typeof v === 'string' && v.trim());
+    if (typeof first === 'string') return first.replace(/\s+/g, ' ').trim().slice(0, 60);
+  }
+  return '';
+}
+
 function toSummary(item: RealSessionListItem): SessionSummary {
   const v = item.projections?.values;
   const title = v?.title?.trim();
@@ -616,12 +638,13 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
           liveTurns.set(sessionId, liveTurn);
         }
         const name = String(d.name ?? 'tool');
-        const args = typeof d.arguments === 'string' ? d.arguments : '';
+        const args = summarizeToolArgs(d.arguments);
         liveTurn.blocks.push({
           kind: 'tool',
           id: `${liveRunId}:tool:${String(d.callId ?? crypto.randomUUID())}`,
+          ...(typeof d.callId === 'string' ? { callId: d.callId } : {}),
           name,
-          summary: args.replace(/\s+/g, ' ').slice(0, 60),
+          summary: args,
           state: 'running',
         });
         broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });

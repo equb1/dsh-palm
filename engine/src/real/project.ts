@@ -227,6 +227,7 @@ export function projectRecords(records: RealRecord[], options: ProjectOptions = 
         const block: Extract<Block, { kind: 'tool' }> = {
           kind: 'tool',
           id: `${current.runId ?? current.id}:tool-${callId || blockSeq}`,
+          ...(callId ? { callId } : {}),
           name: callName,
           summary: summarizeArgs(d.arguments),
           state: 'running',

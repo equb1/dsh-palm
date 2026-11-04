@@ -55,10 +55,8 @@ export function sameBlock(a: Block, b: Block): boolean {
   const texts = textPair(a, b);
   if (texts) return prefixMatch(texts[0], texts[1]);
   if (a.kind === 'tool' && b.kind === 'tool') {
-    return (
-      (a.name === b.name && a.summary === b.summary) ||
-      (a.name === b.name && Boolean(a.detail) && a.detail === b.detail)
-    );
+    if (a.callId && b.callId) return a.callId === b.callId;
+    return a.name === b.name && a.summary === b.summary;
   }
   if (a.kind === 'approval' && b.kind === 'approval') return a.approvalId === b.approvalId;
   return false;
@@ -78,6 +76,14 @@ function preferLongerText(
 }
 
 export function mergeBlock(oldBlock: Block, nextBlock: Block): Block {
+  if (oldBlock.kind === 'tool' && nextBlock.kind === 'tool') {
+    // 同一 callId 的快照块和实时块：优先 done、非空 summary/detail
+    const score = (b: Extract<Block, { kind: 'tool' }>): number =>
+      (b.state === 'done' ? 4 : b.state === 'error' ? 3 : 0) +
+      (b.summary.trim() ? 2 : 0) +
+      (b.detail ? 1 : 0);
+    return score(nextBlock) > score(oldBlock) ? nextBlock : oldBlock;
+  }
   if (oldBlock.id === nextBlock.id) {
     const oldText = textPair(oldBlock, nextBlock);
     if (oldText) return preferLongerText(oldBlock as never, nextBlock as never) as Block;
@@ -205,6 +211,30 @@ export function mergeLiveTurn(turns: Turn[], live: Turn): Turn[] {
   if (index < 0) return [...turns, live];
   const next = turns.slice();
   next[index] = mergeTurn(next[index]!, live);
+  return next;
+}
+
+/**
+ * 切回会话时不要把两份回合按 block 内容拼：当前 run 的 live 回合是权威顺序，
+ * 直接替换快照里的同 run 回合，避免正文/思考暂时交错。
+ */
+export function overlayLiveTurn(turns: Turn[], live: Turn): Turn[] {
+  let index = -1;
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const turn = turns[i]!;
+    if (turn.role !== 'assistant') continue;
+    const same =
+      sameRun(turn, live) ||
+      turn.id === live.id ||
+      (turn.status === 'streaming' && (!turn.runId || !live.runId));
+    if (same) {
+      index = i;
+      break;
+    }
+  }
+  if (index < 0) return [...turns, live];
+  const next = turns.slice();
+  next[index] = live;
   return next;
 }
 

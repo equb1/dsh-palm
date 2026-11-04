@@ -115,6 +115,8 @@ export type Block =
   | {
       kind: 'tool';
       id: string;
+      /** 工具调用 id；快照和实时用同一个 callId 对齐 */
+      callId?: string;
       name: string;
       /** 一行摘要，例如「读取 src/app.ts」 */
       summary: string;

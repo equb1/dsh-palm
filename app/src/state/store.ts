@@ -41,7 +41,7 @@ import type {
 } from '../protocol';
 import {
   findRunTurnIndex,
-  mergeLiveTurn,
+  overlayLiveTurn,
   mergeNearbyTurns,
   normalizeTurns,
   sameBlock,
@@ -629,7 +629,7 @@ export class Store {
       const live = active
         ? cached?.turns.find((t) => t.role === 'assistant' && t.status === 'streaming')
         : undefined;
-      if (live) turns = mergeLiveTurn(turns, live);
+      if (live) turns = overlayLiveTurn(turns, live);
       turns = normalizeTurns(turns);
       this.patch({ detail: { ...session, turns }, currentId: id, busy: false });
       // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
