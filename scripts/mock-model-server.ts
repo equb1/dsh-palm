@@ -16,6 +16,16 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const PORT = Number(process.argv[2] ?? process.env.PORT ?? 8799);
 
+/**
+ * 生图返回模式（P0 1.5）：
+ *   b64      默认：data[0].b64_json（1x1 PNG）
+ *   url      data[0].url 指向本服务的 `/mock/image.png`（验证二次下载 + content-type/魔数）
+ *   dataurl  data[0].url 直接是 data:image/png;base64,…
+ *   html     200 + text/html（验证“返回不是 JSON”的人话错误）
+ *   401/429  对应状态码
+ *   slow     等 3s 再回 b64（验证超时/慢渠道）
+ */
+const IMAGE_MODE = (process.env.MOCK_IMAGE_MODE ?? 'b64').toLowerCase();
 /** 1x1 透明 PNG：生图接口回这个，验证落盘和尺寸解析 */
 const TINY_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -327,15 +337,55 @@ const server = createServer((req, res) => {
     res.end(JSON.stringify({ ok: true }));
     return;
   }
+  if (req.method === 'GET' && url.startsWith('/mock/image.png')) {
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Length', String(Buffer.from(TINY_PNG, 'base64').byteLength));
+    res.end(Buffer.from(TINY_PNG, 'base64'));
+    return;
+  }
   if (req.method === 'POST' && url.includes('/images/generations')) {
     let body = '';
     req.on('data', (chunk: Buffer) => {
       body += chunk.toString('utf8');
     });
     req.on('end', () => {
-      console.log(`[mock] image ${url} body=${body.replace(/\s+/g, ' ').slice(0, 160)}`);
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ data: [{ b64_json: TINY_PNG, revised_prompt: 'a tiny pixel' }] }));
+      console.log(
+        `[mock] image mode=${IMAGE_MODE} ${url} body=${body.replace(/\s+/g, ' ').slice(0, 160)}`,
+      );
+      void (async (): Promise<void> => {
+        if (IMAGE_MODE === 'slow') await delay(3_000);
+        if (IMAGE_MODE === '401' || IMAGE_MODE === '403') {
+          res.statusCode = 401;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: { message: 'invalid api key (mock)' } }));
+          return;
+        }
+        if (IMAGE_MODE === '429') {
+          res.statusCode = 429;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: { message: 'rate limited (mock)' } }));
+          return;
+        }
+        if (IMAGE_MODE === 'html') {
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.end('<html><body><h1>Welcome to the gateway</h1><p>not an image API</p></body></html>');
+          return;
+        }
+        if (IMAGE_MODE === 'url' || IMAGE_MODE === 'dataurl') {
+          const host = req.headers.host ?? `127.0.0.1:${PORT}`;
+          const imageUrl =
+            IMAGE_MODE === 'dataurl'
+              ? `data:image/png;base64,${TINY_PNG}`
+              : `http://${host}/mock/image.png`;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({ data: [{ url: imageUrl, revised_prompt: 'a tiny pixel (mock url)' }] }),
+          );
+          return;
+        }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ data: [{ b64_json: TINY_PNG, revised_prompt: 'a tiny pixel' }] }));
+      })();
     });
     return;
   }
@@ -379,6 +429,7 @@ server.listen(PORT, '0.0.0.0', () => {
     }
   }
   console.log(`[mock] listening on :${PORT}`);
+  console.log(`[mock] 生图模式 MOCK_IMAGE_MODE=${IMAGE_MODE}（b64|url|dataurl|html|401|429|slow）`);
   console.log(`[mock] 手机里填 Base URL：http://<PC-IP>:${PORT}/v1，或 adb reverse 后用 127.0.0.1`);
   for (const address of addresses) console.log(`[mock]   http://${address}:${PORT}/v1`);
 });

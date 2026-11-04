@@ -15,7 +15,7 @@
 import type { AgentTool, AgentTool as Tool, PermissionPreset, ToolContext } from './types';
 import { buildDocx, extractDocxText, type DocxBlock } from '../docs/docx';
 import { buildXlsx, extractXlsxText, type SheetSpec } from '../docs/xlsx';
-import { generateImage, pngSize } from './image';
+import { generateImage, extensionForImageMime, pngSize } from './image';
 import { joinPath, normalizePath } from '../fs/path';
 import { truncateMiddle } from '../shell/bash';
 
@@ -572,14 +572,17 @@ const generateImageTool: Tool = {
         ...(typeof args.size === 'string' && args.size.trim() ? { size: args.size.trim() } : {}),
         signal: ctx.signal,
       });
-      const ext = image.mime === 'image/jpeg' ? '.jpg' : image.mime === 'image/webp' ? '.webp' : '.png';
+      const ext = `.${extensionForImageMime(image.mime)}`;
       const finalTarget = ensureExtension(target, ext);
       const parent = finalTarget.slice(0, finalTarget.lastIndexOf('/')) || '/';
       if (parent !== '/') await ctx.fs.mkdir(parent, { recursive: true });
       await ctx.fs.writeFile(finalTarget, image.bytes);
       const size = pngSize(image.bytes);
       const dimensions = size ? `${size.width}×${size.height}` : image.mime;
-      return `已生成图片 ${toDisplayPath(finalTarget)}（${dimensions}，${(image.bytes.length / 1024).toFixed(1)} KB）`;
+      const revised = image.revisedPrompt
+        ? `；渠道改写后的 prompt：${image.revisedPrompt.replace(/\s+/g, ' ').trim().slice(0, 120)}`
+        : '';
+      return `已生成图片 ${toDisplayPath(finalTarget)}（${dimensions}，${(image.bytes.length / 1024).toFixed(1)} KB${revised}）`;
     } catch (error) {
       return `[错误] ${error instanceof Error ? error.message : String(error)}`;
     }

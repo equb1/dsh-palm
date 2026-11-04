@@ -8,7 +8,7 @@
  *  2. 轻引擎：进程内的 agent loop，连上之后主界面完全一样。
  */
 import React from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
   loadLightConfig,
@@ -17,11 +17,18 @@ import {
   type LightEngineSetup,
   type WorkspaceSelfCheck,
 } from '../lib/light';
-import { DEEPSEEK_DEFAULT, normalizeSetup, setupProblem } from '../engine/light/config';
+import { DEEPSEEK_DEFAULT, normalizeResponseFormat, normalizeSetup, setupProblem } from '../engine/light/config';
+import type { ImageResponseFormat } from '../engine/light/types';
 import { Btn, Card, IconButton, Mono, Pill } from './parts';
 import { colors, font, radius, space, topInset } from './theme';
 import { useStore, store } from './useStore';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
+
+const RESPONSE_FORMATS: Array<{ value: ImageResponseFormat; label: string }> = [
+  { value: 'auto', label: '自动' },
+  { value: 'b64_json', label: 'Base64' },
+  { value: 'url', label: '图片 URL' },
+];
 
 export function LightEngineScreen({ onClose }: { onClose: () => void }): React.ReactElement {
   const state = useStore();
@@ -33,6 +40,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
   const [imageModel, setImageModel] = React.useState('');
   const [imageApiKey, setImageApiKey] = React.useState('');
   const [imageSize, setImageSize] = React.useState('1024x1024');
+  const [imageResponseFormat, setImageResponseFormat] = React.useState<ImageResponseFormat>('auto');
   const [note, setNote] = React.useState<string | null>(null);
   const [checking, setChecking] = React.useState(false);
   const [check, setCheck] = React.useState<WorkspaceSelfCheck | null>(null);
@@ -48,6 +56,9 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
       if (config.imageModel) setImageModel(config.imageModel);
       if (config.imageApiKey) setImageApiKey(config.imageApiKey);
       if (config.imageSize) setImageSize(config.imageSize);
+      if (config.imageResponseFormat) {
+        setImageResponseFormat(normalizeResponseFormat(config.imageResponseFormat));
+      }
     });
   }, []);
 
@@ -60,6 +71,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
     imageModel,
     imageApiKey,
     imageSize,
+    imageResponseFormat,
   });
 
   const runCheck = async (): Promise<void> => {
@@ -282,6 +294,34 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
               autoCorrect={false}
               accessibilityLabel="生图尺寸"
             />
+
+            <Text style={styles.label}>返回格式</Text>
+            <View style={styles.formatRow}>
+              {RESPONSE_FORMATS.map((format) => {
+                const active = imageResponseFormat === format.value;
+                return (
+                  <Pressable
+                    key={format.value}
+                    accessibilityRole="button"
+                    accessibilityLabel={`生图返回格式 ${format.label}`}
+                    accessibilityState={{ selected: active }}
+                    onPress={() => setImageResponseFormat(format.value)}
+                    style={({ pressed }) => [
+                      styles.format,
+                      active && styles.formatActive,
+                      pressed && { opacity: 0.75 },
+                    ]}
+                  >
+                    <Text style={[styles.formatText, active && styles.formatTextActive]}>
+                      {format.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.hint}>
+              「自动」不传 response_format，b64 和 url 两种返回都接受；老网关不认这个字段时也选自动。
+            </Text>
           </Card>
 
           <View style={styles.actions}>
@@ -339,6 +379,23 @@ const styles = StyleSheet.create({
   },
   keyRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   keyInput: { flex: 1 },
+  formatRow: {
+    flexDirection: 'row',
+    gap: 4,
+    padding: 3,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glassStrong,
+  },
+  format: {
+    flex: 1,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.xs,
+  },
+  formatActive: { backgroundColor: colors.bg },
+  formatText: { color: colors.textDim, fontSize: 13 },
+  formatTextActive: { color: colors.text, fontWeight: '600' },
   rootLabel: { color: colors.textDim, fontFamily: font.mono, fontSize: 11 },
   actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
   result: {

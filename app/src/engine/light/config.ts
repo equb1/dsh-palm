@@ -4,7 +4,7 @@
  * 文本模型只有一个渠道（Base URL + 模型 + Key）；生图是**可选渠道**
  * （官方账号没有图像模型，要用户自己配）。
  */
-import type { LightImageConfig } from './types';
+import type { ImageResponseFormat, LightImageConfig } from './types';
 
 export interface LightEngineSetup {
   baseURL: string;
@@ -17,6 +17,8 @@ export interface LightEngineSetup {
   imageApiKey?: string;
   imageModel?: string;
   imageSize?: string;
+  /** 生图返回格式；默认 auto（不传 response_format） */
+  imageResponseFormat?: ImageResponseFormat;
 }
 
 export const LIGHT_CONFIG_KEY = 'dsh-palm.light.config.v1';
@@ -34,6 +36,7 @@ export function normalizeSetup(input: Partial<LightEngineSetup>): LightEngineSet
   const imageApiKey = (input.imageApiKey ?? '').trim();
   const imageModel = (input.imageModel ?? '').trim();
   const imageSize = (input.imageSize ?? '').trim();
+  const imageResponseFormat = normalizeResponseFormat(input.imageResponseFormat);
   return {
     baseURL,
     apiKey: (input.apiKey ?? '').trim(),
@@ -43,7 +46,13 @@ export function normalizeSetup(input: Partial<LightEngineSetup>): LightEngineSet
     ...(imageApiKey ? { imageApiKey } : {}),
     ...(imageModel ? { imageModel } : {}),
     ...(imageSize ? { imageSize } : {}),
+    ...(imageResponseFormat !== 'auto' ? { imageResponseFormat } : {}),
   };
+}
+
+/** 只认三个值；旧配置没有这个字段时按 auto */
+export function normalizeResponseFormat(value: unknown): ImageResponseFormat {
+  return value === 'b64_json' || value === 'url' ? value : 'auto';
 }
 
 /** 给界面用的一句话校验；null 表示可以连 */
@@ -64,10 +73,12 @@ export function setupProblem(setup: LightEngineSetup): string | null {
 /** 生图配置齐全时才返回；否则 undefined（工具会提示没配） */
 export function imageConfigFrom(setup: LightEngineSetup): LightImageConfig | undefined {
   if (!setup.imageBaseURL || !setup.imageModel) return undefined;
+  const responseFormat = normalizeResponseFormat(setup.imageResponseFormat);
   return {
     baseURL: setup.imageBaseURL,
     apiKey: setup.imageApiKey ?? '',
     model: setup.imageModel,
     ...(setup.imageSize ? { size: setup.imageSize } : {}),
+    ...(responseFormat !== 'auto' ? { responseFormat } : {}),
   };
 }
