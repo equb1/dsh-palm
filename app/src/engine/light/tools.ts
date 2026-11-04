@@ -15,9 +15,10 @@
 import type { AgentTool, AgentTool as Tool, PermissionPreset, ToolContext } from './types';
 import { buildDocx, extractDocxText, type DocxBlock } from '../docs/docx';
 import { buildXlsx, extractXlsxText, type SheetSpec } from '../docs/xlsx';
-import { generateImage, pngSize } from './image';
+import { generateImage, extensionForImageMime, pngSize } from './image';
 import { joinPath, normalizePath } from '../fs/path';
 import { truncateMiddle } from '../shell/bash';
+import { sanitizeSandboxPath } from '../../lib/filenames';
 
 export const WORKSPACE_ROOT = '/workspace';
 
@@ -274,8 +275,9 @@ const askUserTool: Tool = {
  * 文档 / 表格 / 图片
  * ------------------------------------------------------------------ */
 
-function ensureExtension(target: string, extension: string): string {
-  return target.toLowerCase().endsWith(extension) ? target : `${target}${extension}`;
+/** 模型给的文件名先 sanitize，再交给 `toSandboxPath` 做越界检查（安全边界不变） */
+function generatedPath(path: unknown, extension: string, fallbackDir: string): string {
+  return toSandboxPath(sanitizeSandboxPath(asString(path), extension, fallbackDir));
 }
 
 function parseBlocks(input: unknown): DocxBlock[] {
@@ -380,7 +382,7 @@ const createDocxTool: Tool = {
     const path = asString(args.path);
     let display = path;
     try {
-      display = toDisplayPath(ensureExtension(toSandboxPath(path), '.docx'));
+      display = toDisplayPath(generatedPath(path, '.docx', 'docs'));
     } catch {
       display = path;
     }
@@ -393,7 +395,7 @@ const createDocxTool: Tool = {
     };
   },
   async execute(args, ctx) {
-    const target = ensureExtension(toSandboxPath(args.path), '.docx');
+    const target = generatedPath(args.path, '.docx', 'docs');
     const display = toDisplayPath(target);
     try {
       const blocks = parseBlocks(args.blocks);
@@ -471,7 +473,7 @@ const createXlsxTool: Tool = {
     const path = asString(args.path);
     let display = path;
     try {
-      display = toDisplayPath(ensureExtension(toSandboxPath(path), '.xlsx'));
+      display = toDisplayPath(generatedPath(path, '.xlsx', 'docs'));
     } catch {
       display = path;
     }
@@ -484,7 +486,7 @@ const createXlsxTool: Tool = {
     };
   },
   async execute(args, ctx) {
-    const target = ensureExtension(toSandboxPath(args.path), '.xlsx');
+    const target = generatedPath(args.path, '.xlsx', 'docs');
     const display = toDisplayPath(target);
     try {
       const sheets = parseSheets(args.sheets);
@@ -550,9 +552,18 @@ const generateImageTool: Tool = {
   describeApproval(args) {
     const prompt = asString(args.prompt);
     const size = asString(args.size);
+    const path = asString(args.path).trim();
+    let display = '';
+    try {
+      display = path ? toDisplayPath(generatedPath(path, '.png', 'images')) : 'images/<时间戳>.png';
+    } catch {
+      display = path;
+    }
     return {
       title: '生成图片',
-      command: `${prompt.slice(0, 160)}${prompt.length > 160 ? '…' : ''}${size ? `（${size}）` : ''}`,
+      command:
+        `${prompt.slice(0, 160)}${prompt.length > 160 ? '…' : ''}` +
+        `${size ? `（${size}）` : ''}${display ? ` → ${display}` : ''}`,
       risk: 'medium',
       summary: '会调用生图渠道（可能计费），并把图片存进工作区。',
     };
@@ -563,23 +574,24 @@ const generateImageTool: Tool = {
     }
     const prompt = asString(args.prompt).trim();
     if (!prompt) return '[错误] prompt 为空';
-    const extensionPath = asString(args.path).trim();
-    const target = extensionPath
-      ? toSandboxPath(extensionPath)
-      : `/images/img-${Date.now().toString(36)}.png`;
+    const rawPath = asString(args.path).trim();
+    const target = rawPath || `images/img-${Date.now().toString(36)}`;
     try {
       const image = await generateImage(ctx.image, prompt, {
         ...(typeof args.size === 'string' && args.size.trim() ? { size: args.size.trim() } : {}),
         signal: ctx.signal,
       });
-      const ext = image.mime === 'image/jpeg' ? '.jpg' : image.mime === 'image/webp' ? '.webp' : '.png';
-      const finalTarget = ensureExtension(target, ext);
+      // 扩展名按渠道真实 MIME 推导；模型给 .png 但实际是 jpeg 时会替换掉
+      const finalTarget = generatedPath(target, `.${extensionForImageMime(image.mime)}`, 'images');
       const parent = finalTarget.slice(0, finalTarget.lastIndexOf('/')) || '/';
       if (parent !== '/') await ctx.fs.mkdir(parent, { recursive: true });
       await ctx.fs.writeFile(finalTarget, image.bytes);
       const size = pngSize(image.bytes);
       const dimensions = size ? `${size.width}×${size.height}` : image.mime;
-      return `已生成图片 ${toDisplayPath(finalTarget)}（${dimensions}，${(image.bytes.length / 1024).toFixed(1)} KB）`;
+      const revised = image.revisedPrompt
+        ? `；渠道改写后的 prompt：${image.revisedPrompt.replace(/\s+/g, ' ').trim().slice(0, 120)}`
+        : '';
+      return `已生成图片 ${toDisplayPath(finalTarget)}（${dimensions}，${(image.bytes.length / 1024).toFixed(1)} KB${revised}）`;
     } catch (error) {
       return `[错误] ${error instanceof Error ? error.message : String(error)}`;
     }

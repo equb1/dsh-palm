@@ -9,6 +9,7 @@
     "app:web": "npm --prefix app run web",
     "test": "node --import tsx --test test/*.test.ts",
     "stream:replay": "node --import tsx scripts/stream-replay.ts",
+    "bench:light": "node --import tsx scripts/bench-light.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test",
     "plugin:check": "node --import tsx scripts/plugin-compat.ts"

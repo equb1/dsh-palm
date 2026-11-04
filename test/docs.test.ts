@@ -210,10 +210,11 @@ describe('generate_image', () => {
     assert.deepEqual(pngSize(image.bytes), { width: 1, height: 1 });
     assert.equal(image.mime, 'image/png');
     assert.equal(image.revisedPrompt, 'a tiny pixel');
-    const body = JSON.parse(requestedBody) as { prompt: string; size: string; response_format: string };
+    const body = JSON.parse(requestedBody) as { prompt: string; size: string; response_format?: string };
     assert.equal(body.prompt, '一只猫');
     assert.equal(body.size, '512x512');
-    assert.equal(body.response_format, 'b64_json');
+    // 1.5 起默认 auto：不传 response_format，两种返回都接受
+    assert.equal(body.response_format, undefined);
 
     const { ctx, root } = await context();
     ctx.image = { baseURL, apiKey: 'test-key', model: 'fake-image' };

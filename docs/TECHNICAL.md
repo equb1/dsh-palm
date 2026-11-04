@@ -174,14 +174,20 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
 - 工具（10）：`bash`、`read_file`、`write_file`、`list_dir`、`ask_user_question`、
   `create_docx`、`read_docx`、`create_xlsx`、`read_xlsx`、`generate_image`。
 - 文档：docx（标题/段落/列表/表格/代码/分页）、xlsx（值、多 sheet）；**无样式/公式、无编辑**。
-- 生图：OpenAI 兼容 images API；支持 `b64_json`/`url`。
-- 会话：本地 JSON 存储；支持流式、审批、提问；**附件上传未实现**。
+- 生图：OpenAI 兼容 images API；`responseFormat=auto|b64_json|url`，支持两种返回；url 下载 30s/20MB、
+  content-type+魔数校验，b64 支持 data:/URL-safe，按 MIME 定扩展名。
+- 会话：本地 JSON 存储；支持流式、审批、提问；附件已改原生收件（§6.4）。
+- 文件名：`lib/filenames.ts` 统一清洗（中文/空格/`#`/`%` 等），生成工具与审批卡共用。
 - 限制：单次读 10MB；软链 EPERM；chmod/utimes 只内存；bash 无 python/js/网络。
 
 ### 5.2 模型调用
 
-OpenAI 兼容 `/chat/completions`，SSE 流；记录 ttft/stream 耗时（`[light]` 日志）。
-渠道配置存 SecureStore（baseURL/apiKey/model），支持 `dshpalm://light?...` 深链覆盖。
+OpenAI 兼容 `/chat/completions`，SSE 流；45s 空闲超时（每分片重置）；
+成功每次调用打一行 `[light] ttft=<ms> stream=<ms> model=… step=… first=content|tool tools=… usage=… run=…`，
+失败打 `[light] error kind=timeout|offline|unauthorized|rate_limited|… status=… run=…`；
+错误经 `lib/errors.ts` 人话化后写回当前会话（ChatScreen 横幅）。
+渠道配置存 SecureStore（baseURL/apiKey/model/image），支持 `dshpalm://light?...` 深链覆盖。
+性能基准：`npm run bench:light -- --n 20`（本地 SSE mock；`--url/--key/--model` 可打真端点）。
 
 ## 6. 引擎路由与加载
 
@@ -343,7 +349,9 @@ C15 Python 走 APK 独立层（`python.bin`），不做首次下载（离线可�
 （`Card` / `Chip` / `IconButton` / `Skeleton` / `EmptyState` / `SectionHeader`）与 `SmoothKeyboardAvoid.tsx`；
 Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向滚动）、表格、链接（http/https/mailto/dshpalm）、图片、流式光标（`streaming` 属性，待接线）。
 代码高亮在 `syntax.ts`（js/ts、py、sh、json、html；未知语言回退纯文本）。
-聊天渲染在 `app/src/ui/chat/*`（`TurnView` / `ApprovalCard`），`ChatScreen.tsx` 只负责顶栏、滚动和 Composer 组装。
+聊天渲染在 `app/src/ui/chat/*`（`TurnView` / `ApprovalCard` / `CapabilityCard`），`ChatScreen.tsx` 只负责顶栏、滚动和 Composer 组装。
+生成文件面板在 `GeneratedFilesSheet.tsx`（`lib/generatedFiles.ts` 解析工具结果 + `fileActions.native.ts`
+用 expo File 的 `canPreview/preview` 打开；分享暂未做）。
 
 ### 8.3 聊天页：现状与目标
 
@@ -410,6 +418,7 @@ npm install
 npm --prefix app install
 npm run verify                    # tsc + 全部测试（数量以输出为准）
 npm --prefix app run typecheck
+npm run bench:light -- --n 20     # 轻引擎 ttft/总耗时 P50/P90（本地 mock；--url 真端点）
 node scripts/build-bridge.mjs     # 生成 dist + APK asset
 # Python/Office 层（在手机 rootfs 里跑，产物放 APK assets；日常不用重打）
 # adb shell run-as cool.cnb.dshpalm sh files/run-in-rootfs.sh <nativeLibraryDir> \

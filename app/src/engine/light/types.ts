@@ -21,6 +21,9 @@ export interface LightModelConfig {
   reasoning?: boolean;
 }
 
+/** 生图返回格式：auto 不传 response_format，b64_json / url 显式要求 */
+export type ImageResponseFormat = 'auto' | 'b64_json' | 'url';
+
 /** 生图渠道（可选）。和文本模型分开配，因为官方账号默认没有图像模型。 */
 export interface LightImageConfig {
   baseURL: string;
@@ -28,6 +31,8 @@ export interface LightImageConfig {
   model: string;
   /** 默认 1024x1024 */
   size?: string;
+  /** 默认 auto：不传 response_format，两种返回都接受 */
+  responseFormat?: ImageResponseFormat;
 }
 
 export type PermissionPreset = 'read-only' | 'workspace-write' | 'danger-full-access';

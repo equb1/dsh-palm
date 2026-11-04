@@ -2991,11 +2991,18 @@ export class Store {
         const sessions = this.state.sessions.map((s) =>
           s.id === data.sessionId ? { ...s, status: 'idle' as const, updatedAt: Date.now() } : s
         );
+        // 401/429/断网这类模型错误要在聊天页横幅里给人话，而不是只在回合上显示“出错”
+        const runError = (data as { error?: unknown }).error;
+        const banner =
+          runError != null && data.sessionId === currentId
+            ? { error: humanizeError(runError) }
+            : {};
         this.patch({
           approvals,
           sessions,
           busy: false,
           ...(nextDetail ? { detail: nextDetail } : {}),
+          ...banner,
         });
         return;
       }
