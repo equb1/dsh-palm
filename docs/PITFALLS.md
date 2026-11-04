@@ -345,6 +345,19 @@
   `gradlew :app:compileDebugKotlin` 单独过一遍，别等整包。
 - 验证：`assembleDebug` 通过；`grep -c '/\*'` 与 `*/` 数量可粗略自检。
 
+### F10. 能力门 / Handoff 的四个边界（2026-11-04）
+
+- **bash 要整段拒绝**：只拦“包含 python”不够，`touch x && python y.py` 不能先执行前半段；
+  `capability.ts` 按引号拆 shell 段、递归 `bash -c`/`xargs`，任一段命中 proot-only 就整段拒绝。
+- **合成工具结果**：拒绝后必须给每个未执行调用写 `[CAPABILITY_MISSING] not executed` 的 tool 消息，
+  否则 `history` 以 assistant `tool_calls` 结尾，下一次 light 请求会被 OpenAI 兼容接口拒。
+- **Handoff 幂等**：种子带 `[dsh-handoff:<id>]`；`sessions.create` 后先落 `fullSessionId` 再 send；
+  send 失败先 `sessions.get` 找标记，找到就算成功，找不到才重试；已完成步骤只在摘要里，绝不重放。
+- **完整权限**：bash 卡片要二次确认并把目标会话设 `danger-full-access`（F8）；预路由命中代码/后台/Office
+  时目前**直接**用 full-access（没有第二次确认），属已知取舍，后续可在设置里加“预路由也确认”。
+- 验证：`test/capability-gate.test.ts`（无审批/无文件/下一轮可发）、`test/handoff-orchestration.test.ts`
+  （切换失败不 create、create 失败不 send、并发只一次、种子丢失按标记恢复）。
+
 ## H. UI / RN
 
 ### H1. `Rendered more hooks than during the previous render`

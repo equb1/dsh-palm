@@ -27,6 +27,8 @@
   `onTrimMemory` 优先停 proot，`HostService` 改 `START_NOT_STICKY`（见 P0 1.2）。
 - 附件收件已原生化（2026-11-04）：`Intake.kt` 流式复制 + SHA-256 → `workspace/uploads/`，
   分享/相册/文件选择器三入口，JS 只拿 `FileRef` 路径；`sessions.send/steer` 带 `files`（见 P0 1.3）。
+- 预路由/能力门/Handoff v1 已落地（2026-11-04）：`router.ts` 两因子路由、`capability.ts` 整段拒绝、
+  `handoff.ts` + `ConversationLink` 一条逻辑会话；`npm run verify` 166 pass（见 P0 1.4）。
 - 已知缺口：完整引擎默认 `workspace-write` 跑不了 bash（无 bwrap/Landlock，见 PITFALLS F8），
   跑 Python/Office 命令需把会话切「完全权限」；轻引擎渠道没配置时轻引擎显示未就绪。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
@@ -74,12 +76,21 @@
     文字分享冷启动直接进输入框（`最终分享验证 2026`）；`HostModule` 里 base64 路径已删。
     分享 `content://` 时若对方没给读权限，错误条给人话（不再未捕获 rejection）。
 
-- [ ] **1.4 预路由 + 能力门 + Handoff v1**
-  - [ ] 发送前按 R2/R3 预路由（代码/后台/转格式 → proot）
-  - [ ] 轻引擎工具执行前检查能力 → `capability_missing`（无副作用）
-  - [ ] Handoff：摘要 + 最近 8 轮 + 工具结果 + 文件引用 + 待执行步骤
-  - [ ] 一条逻辑会话（`ConversationLink`）；只重发未执行步骤；失败回退
+- [x] **1.4 预路由 + 能力门 + Handoff v1**
+  - [x] 发送前按 R2/R3 预路由（代码/后台/转格式 → proot）
+  - [x] 轻引擎工具执行前检查能力 → `capability_missing`（无副作用）
+  - [x] Handoff：摘要 + 最近 8 轮 + 工具结果 + 文件引用 + 待执行步骤
+  - [x] 一条逻辑会话（`ConversationLink`）；只重发未执行步骤；失败回退
   - 验收：手动/能力门切换都能续跑；重复副作用 0；用户看不到两个会话
+  - 结果（2026-11-04）：`router.ts` 两因子预路由（动作词 + 解释器，裸代码块/提问不误判）；
+    `capability.ts` 整段拒绝 bash（不执行前缀）、`read_file` >10MB、未知工具；
+    `agent.ts` 先落 `[CAPABILITY_MISSING]` 合成结果再停，不产生审批/文件副作用；
+    `handoff.ts` 摘要+8 轮+已完成步骤+文件引用+待执行调用，`[dsh-handoff:<id>]` 幂等种子；
+    `store.beginHandoff` 两阶段 + `models.list` 预检 + create 后立即落 fullSessionId + 失败回滚；
+    `ConversationLink` 隐藏完整会话、事件 sessionId 重写、列表合并；桥补 `job.done`。
+    验证：`npm run verify` 166 pass / 0 fail（新增 router/capability/handoff/orchestration 36 条）；
+    真机冷启动 322ms、无 proot，抽屉「自动选择引擎」开关可见。未配轻引擎渠道，端到端模型触发的
+    CapabilityCard → Handoff 未真机跑（逻辑由单测覆盖）。
 
 - [ ] **1.5 M1 收尾剩余**
   - [ ] 真生图渠道（`b64_json`/`url` 两种返回）

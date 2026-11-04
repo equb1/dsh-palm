@@ -202,19 +202,39 @@ OpenAI 兼容 `/chat/completions`，SSE 流；记录 ttft/stream 耗时（`[ligh
 
 ### 6.2 预路由
 
+实现在 `app/src/state/router.ts`（纯函数，`routeTurn()`），发消息前调用。规则按优先级：
+
 | 命中 | 引擎 |
 |---|---|
-| 跑代码/脚本、python/node/npm/git/ffmpeg、编译、测试、装依赖 | proot |
-| 转 PDF/渲染/旧格式 | **默认不做**；需要时电脑端或 proot 可选 LibreOffice |
-| 后台/锁屏长任务 | proot（light 后台会冻结） |
-| 其余 | light，失败走能力门 |
+| 用户前缀 `完整/全/用完整引擎`、`轻/留在轻引擎` 或会话 pin | 按用户 |
+| PDF 转换/render/recalc/旧 .doc/.ppt（含旧格式附件） | `blocked-unsupported`，不启动 proot |
+| pptx/zip/视频/>10MB 附件 | proot |
+| 后台/锁屏/“继续跑/别停” | proot |
+| **动作词 + 解释器/编译器**（python/node/npm/pip/git/ffmpeg/apt/make/gcc…） | proot |
+| 编辑已有 docx/xlsx、pptx 操作 | proot |
+| 其余（含裸代码块、只问“python 是什么”） | light |
+| 忙/待审批/`starting-proot`/远程宿主 | 不自动切，按当前引擎 |
+
+proot 的代码/后台/Office 预路由会要求 `danger-full-access`（见 PITFALLS F8）；能力门卡片路径要二次确认。
 
 ### 6.3 能力门与 Handoff
 
-1. light 工具执行前检查能力；缺能力返回 `capability_missing`，**无副作用**；
-2. 用户确认 → 启/连 proot → Handoff → 只重发未执行步骤；
-3. 已执行工具结果原样带走，**绝不重放**；
-4. 失败回退 light，保留当前回合。
+1. light 工具执行前 `capability.ts` 检查：bash 命令按 shell 段拆分，任一段调用 proot-only 二进制就**整段拒绝**
+   （不执行 `touch x && python y.py` 的前半段）；`read_file` >10MB、未知/只有完整引擎有的工具也拒绝。
+2. 拒绝时先给每个未执行调用写 `[CAPABILITY_MISSING] not executed` 合成工具结果（避免 OpenAI 协议里
+   dangling tool_calls），再落 `capability` block、发 `capability.missing` 事件、以 `capability_missing` 结束回合；
+   **无审批、无文件副作用**。UI 的 `CapabilityCard` 给「用完整模式继续 / 留在轻引擎」。
+3. Handoff v1（`app/src/lib/handoff.ts` + light `sessions.handoff`）：摘要（最后一条用户请求 + 已完成工具名 + 文件）、
+   最近 8 轮（含工具结果）、已完成步骤、文件引用 `/workspace/...`、待执行调用（callId/name/args）。
+   `handoffId` 由 light session + 末回合 + 被拦 callId 哈希得到，种子文本带 `[dsh-handoff:<id>]`。
+4. `store.beginHandoff`：guard `canSwitch` → 保存源 `currentId/detail` → 两阶段切 proot → `models.list` 非空
+   → `sessions.create` 后立即持久化 `fullSessionId` → rename → setPermission（bash 需 `danger-full-access`）
+   → setModel（同渠道模型优先，否则宿主默认并记录 notice）→ 只发一次种子。任何 send 前失败回滚 light；
+   send 后不确定时先 `sessions.get` 找种子标记，绝不重放已完成步骤。
+5. `ConversationLink`：`currentId` 保持逻辑 id，物理 id 由 `physicalIdFor()` 映射；入站事件重写 sessionId；
+   会话列表隐藏 `fullSessionId`，只显示一条逻辑会话（角标 轻/完整）；打开时合并 light 缓存 + proot 回合，
+   丢掉种子 user 回合；proot 死后会话只读，不在 light 重放。链接/pin/autoRoute 存 ui-cache；
+   active-full 时 idle 回收不 stop proot。
 
 Handoff 字段：`conversationId`、`presetId`、`permission`、模型/渠道、摘要、
 最近 8 轮原文（含工具结果）、文件引用、`pendingIntent`。
