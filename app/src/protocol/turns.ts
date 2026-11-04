@@ -40,6 +40,7 @@ function textPair(a: Block, b: Block): [string, string] | null {
 function prefixMatch(a: string, b: string): boolean {
   const left = a.trim();
   const right = b.trim();
+  if (!left || !right) return false;
   if (left === right) return true;
   return (
     left.length >= PREFIX_MIN_LENGTH &&
