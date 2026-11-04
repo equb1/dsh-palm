@@ -20,7 +20,8 @@ import type {
 } from '../../protocol';
 import { streamChat } from './provider';
 import { newBlockId } from './sessionRepo';
-import { permissionNote, TOOL_CONTEXT_HELP, toolsForPermission, toDisplayPath } from './tools';
+import { checkToolCapability } from './capability';
+import { permissionNote, TOOL_CONTEXT_HELP, toolsForPermission, toDisplayPath, toSandboxPath } from './tools';
 import type {
   AgentTool,
   AskAnswer,
@@ -62,7 +63,7 @@ export interface AgentDeps {
 }
 
 export interface RunOutcome {
-  reason: 'done' | 'stopped' | 'error';
+  reason: 'done' | 'stopped' | 'error' | 'capability_missing';
   error?: string;
   usage?: { inputTokens?: number; outputTokens?: number };
 }
@@ -323,6 +324,76 @@ export class Agent {
           }
 
           const tool = toolMap.get(call.function.name);
+
+          /* ------------------- 能力门：执行前检查，缺能力就停 ------------------- */
+          let capabilitySize: number | undefined;
+          if (!parseError && tool?.name === 'read_file') {
+            try {
+              const stat = await this.deps.workspace.stat(toSandboxPath(args.path));
+              capabilitySize = stat.size;
+            } catch {
+              /* stat 失败交给工具自己报错；这里只负责 >10MB 的提前拦截 */
+            }
+          }
+          // read-only 下工具本来就不暴露：维持原来的「没有这个工具」错误，
+          // 不把权限问题说成能力缺失（与 1.2 的行为保持一致）。
+          const unknownUnderReadOnly = session.permission === 'read-only' && !tool;
+          const capability =
+            parseError || unknownUnderReadOnly
+              ? null
+              : checkToolCapability({
+                  name: call.function.name,
+                  args,
+                  known: Boolean(tool),
+                  ...(capabilitySize != null ? { size: capabilitySize } : {}),
+                });
+
+          if (capability && !capability.ok) {
+            const capabilityBlock: Extract<Turn['blocks'][number], { kind: 'capability' }> = {
+              kind: 'capability',
+              id: `cap_${call.id}`,
+              code: 'capability_missing',
+              tool: capability.tool,
+              summary: capability.summary,
+              reason: capability.reason,
+              missing: capability.missing,
+              ...(capability.command ? { command: capability.command } : {}),
+              status: 'pending',
+              callId: call.id,
+            };
+            turn.blocks.push(capabilityBlock);
+            sink.emit('block.appended', { sessionId: session.id, runId: run.runId, turn: cloneTurn(turn) });
+
+            // 从当前调用起（含）都不执行；每个 tool_call 都要有结果，历史里不能悬空。
+            // 已执行的工具保持原样，绝不重放。
+            const startIndex = toolCalls.indexOf(call);
+            for (const pendingCall of toolCalls.slice(Math.max(startIndex, 0))) {
+              session.history.push({
+                role: 'tool',
+                tool_call_id: pendingCall.id,
+                name: pendingCall.function.name,
+                content: '[CAPABILITY_MISSING] not executed',
+              });
+            }
+
+            turn.status = 'done';
+            turn.meta = { steps: step + 1 };
+            sink.emit('block.appended', { sessionId: session.id, runId: run.runId, turn: cloneTurn(turn) });
+            await sink.persist();
+            sink.emit('capability.missing', {
+              sessionId: session.id,
+              runId: run.runId,
+              turnId: turn.id,
+              callId: call.id,
+              tool: capability.tool,
+              missing: capability.missing,
+              reason: capability.reason,
+              ...(capability.command ? { command: capability.command } : {}),
+              block: capabilityBlock,
+            });
+            return this.finish(run, { reason: 'capability_missing', ...(usage ? { usage } : {}) });
+          }
+
           const block = {
             kind: 'tool' as const,
             id: newBlockId('tool'),

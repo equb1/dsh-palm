@@ -5,6 +5,7 @@ import type { Approval, Block, Turn } from '../../protocol';
 import { MarkdownView } from '../MarkdownView';
 import { colors, font, radius } from '../theme';
 import { ApprovalCard } from './ApprovalCard';
+import { CapabilityCard } from './CapabilityCard';
 
 const ThinkingRow = React.memo(function ThinkingRow({
   text,
@@ -148,6 +149,8 @@ function renderBlock(
       const approval = approvals[block.approvalId];
       return approval ? <ApprovalCard key={block.id} approval={approval} /> : null;
     }
+    case 'capability':
+      return <CapabilityCard key={block.id} block={block} />;
     default:
       return null;
   }
@@ -234,8 +237,9 @@ const AssistantTurn = React.memo(function AssistantTurn({
     () => turn.blocks.filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text'),
     [turn.blocks],
   );
-  const approvalBlocks = React.useMemo(
-    () => visibleBlocks.filter((b) => b.kind === 'approval'),
+  // 审批/能力卡是"必须看见"的动作卡，不跟着完整过程折叠
+  const noticeBlocks = React.useMemo(
+    () => visibleBlocks.filter((b) => b.kind === 'approval' || b.kind === 'capability'),
     [visibleBlocks],
   );
   const answerText = React.useMemo(
@@ -276,8 +280,8 @@ const AssistantTurn = React.memo(function AssistantTurn({
 
       {completed
         ? [
-            ...approvalBlocks.map((b, i) => (
-              <React.Fragment key={`ap-${b.id}-${i}`}>
+            ...noticeBlocks.map((b, i) => (
+              <React.Fragment key={`notice-${b.id}-${i}`}>
                 {renderBlock(b, approvals, onToggleThinking)}
               </React.Fragment>
             )),

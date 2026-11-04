@@ -31,6 +31,7 @@ import {
   type EngineTarget,
   type PrewarmTier,
 } from './engineManager';
+import { routeNeedsFullPermission, routeTurn, type RouteTurnResult } from './router';
 import { LocalEngineClient } from '../engine/light/localClient';
 import type { LightHost } from '../engine/light/host';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
@@ -43,21 +44,39 @@ import {
 } from '../lib/attachments/intake';
 import { classify, hashPrefix } from '../lib/attachments/classify';
 import type { AttachmentEngine, AttachmentKind, IntakeSource } from '../lib/attachments/types';
+import {
+  buildSeedText,
+  detailHasSeedMarker,
+  findSeedTurnId,
+  isConversationReadOnly,
+  lastAssistantTextFromDetail,
+  lastUserTextFromDetail,
+  logicalIdFor,
+  mapPresetForTarget,
+  mergeDetail,
+  physicalIdFor,
+  upsertConversationLink,
+  type ConversationLink,
+} from '../lib/handoff';
 import type {
   AccountState,
   Approval,
+  Block,
+  Capabilities,
   CatalogProvider,
   FileRef,
+  HandoffBlockedCall,
+  HandoffV1,
+  Method,
+  ModelChoice,
+  ModelOption,
+  PermissionOption,
   ProviderModel,
   ProviderProtocol,
   ProviderRow,
   RequestParams,
+  RequestResults,
   ApprovalDecision,
-  Block,
-  Capabilities,
-  ModelChoice,
-  ModelOption,
-  PermissionOption,
   SessionDetail,
   SessionSummary,
   Turn,
@@ -157,7 +176,7 @@ const LOCAL_DEFAULT_CAPS: Capabilities = {
   ],
   workspaces: [],
   limits: { maxAttachmentMB: 20, maxFetchFileMB: 20 },
-  events: ['engine.status', 'session.created', 'session.updated', 'run.started', 'block.appended', 'block.delta', 'block.updated', 'run.finished', 'approval.requested', 'approval.resolved', 'account.updated'],
+  events: ['engine.status', 'session.created', 'session.updated', 'run.started', 'block.appended', 'block.delta', 'block.updated', 'run.finished', 'approval.requested', 'approval.resolved', 'capability.missing', 'account.updated'],
   actions: ['create_session', 'steer', 'stop', 'approve', 'reject'],
 };
 
@@ -225,6 +244,15 @@ export interface AppState {
   prewarmTier: PrewarmTier;
   /** 轻引擎配置页是否打开（HomeScreen 的「配置轻引擎」入口） */
   lightSetupOpen: boolean;
+  /**
+   * 一条逻辑会话 → 两个物理会话的映射（1.4）。
+   * 列表只显示 lightSessionId；fullSessionId 的会话被隐藏。
+   */
+  links: ConversationLink[];
+  /** 会话级引擎 pin：用户点「留在轻引擎」后，这一条会话不再自动切 */
+  sessionPins: Record<string, 'light' | 'full'>;
+  /** 全局自动路由（默认 true），持久化在 ui-cache */
+  autoRoute: boolean;
 }
 
 /**
@@ -276,6 +304,34 @@ export interface EngineDeps {
   setRunActive: (active: boolean) => void | Promise<unknown>;
   loadLightConfig: () => Promise<LightEngineSetup | null>;
   now: () => number;
+}
+
+/**
+ * Handoff 的副作用依赖。
+ * 生产环境全走真实现；单测注入假 client / 假切换，验证 create/send/rollback 顺序。
+ */
+export interface HandoffDeps {
+  requestLight?<M extends Method>(method: M, params: RequestParams[M]): Promise<RequestResults[M]>;
+  requestFull?<M extends Method>(method: M, params: RequestParams[M]): Promise<RequestResults[M]>;
+  switchToFull?(): Promise<boolean>;
+  switchToLight?(): Promise<boolean>;
+  now?(): number;
+}
+
+/** 一次交接的输入；预路由和能力门共用 */
+export interface BeginHandoffInput {
+  logicalId: string;
+  reason: string;
+  userText: string;
+  assistantText?: string;
+  missing?: string[];
+  blockedCallIds?: string[];
+  files?: FileRef[];
+  /** 能力卡 block id，成功后回填 handed_off */
+  blockId?: string;
+  /** F8：proot 里跑 bash 需要 danger-full-access，能力卡确认后为 true */
+  escalate?: boolean;
+  title?: string;
 }
 
 /** 列表/会话事件说这一轮已经结束，但 detail 里还挂着 streaming 时，把它收口 */
@@ -352,11 +408,19 @@ export class Store {
     engine: initialEngineState,
     prewarmTier: initialEngineState.tier,
     lightSetupOpen: false,
+    links: [],
+    sessionPins: {},
+    autoRoute: true,
   };
 
   private readonly engineDeps: EngineDeps;
+  private readonly handoffDeps: HandoffDeps;
+  /** 同一时刻只允许一次交接；并发调用复用同一个 promise（避免重复 create） */
+  private handoffInFlight: Promise<boolean> | null = null;
+  /** 轻引擎侧的原始 detail，交接后 mergeDetail 要用 */
+  private readonly baseDetails = new Map<string, SessionDetail>();
 
-  constructor(engineDeps: Partial<EngineDeps> = {}) {
+  constructor(engineDeps: Partial<EngineDeps> = {}, handoffDeps: Partial<HandoffDeps> = {}) {
     this.engineDeps = {
       hostAvailable,
       hostStatus,
@@ -368,6 +432,7 @@ export class Store {
       now: () => Date.now(),
       ...engineDeps,
     };
+    this.handoffDeps = handoffDeps;
   }
 
   private listeners = new Set<Listener>();
@@ -596,6 +661,70 @@ export class Store {
     this.patch({ error: humanizeError(err), busy: false });
   }
 
+  /* ------------------------ 逻辑会话 / 物理会话 ------------------------ */
+
+  /** 逻辑 id、轻引擎 id、完整引擎 id 都能查到同一条 link */
+  linkForSession(id: string | null | undefined): ConversationLink | undefined {
+    if (!id) return undefined;
+    return this.state.links.find(
+      (link) => link.id === id || link.lightSessionId === id || link.fullSessionId === id,
+    );
+  }
+
+  private linkByFullSession(fullId: string | null | undefined): ConversationLink | undefined {
+    if (!fullId) return undefined;
+    return this.state.links.find((link) => link.fullSessionId === fullId);
+  }
+
+  private logicalIdOf(physicalId: string | null | undefined): string | undefined {
+    if (!physicalId) return undefined;
+    return this.linkByFullSession(physicalId)?.id ?? physicalId;
+  }
+
+  /** 界面上/发送用的物理 sessionId；没有 link 时原样返回 */
+  physicalIdFor(logicalId: string): string {
+    const link = this.linkForSession(logicalId);
+    if (!link) return logicalId;
+    return (link.activeSide === 'full' ? link.fullSessionId : link.lightSessionId) ?? link.lightSessionId;
+  }
+
+  private setLink(link: ConversationLink): void {
+    // 完整物理会话永远不在列表里单独出现（事件可能比 setLink 先到，这里补一次清理）
+    const sessions = link.fullSessionId
+      ? this.state.sessions.filter((session) => session.id !== link.fullSessionId)
+      : this.state.sessions;
+    this.patch({
+      links: upsertConversationLink(this.state.links, { ...link, updatedAt: this.now() }),
+      ...(sessions !== this.state.sessions ? { sessions } : {}),
+    });
+    this.persistUiCache();
+  }
+
+  /** 全局自动路由开关（默认 true） */
+  setAutoRoute(enabled: boolean): void {
+    this.patch({ autoRoute: enabled });
+    this.persistUiCache();
+  }
+
+  /**
+   * 会话级 pin：'light' 表示以后不再自动切完整；null 清除。
+   * TODO(1.4): 还没做 pin 的 UI 入口（按裁剪顺序最后补；规则与持久化已就绪）。
+   */
+  setSessionPin(side: 'light' | 'full' | null, logicalId: string | null = this.state.currentId): void {
+    if (!logicalId) return;
+    const pins = { ...this.state.sessionPins };
+    if (side) pins[logicalId] = side;
+    else delete pins[logicalId];
+    this.patch({ sessionPins: pins });
+    this.persistUiCache();
+  }
+
+  /** 「留在轻引擎」按钮：这个会话以后不自动切；能力门仍会在下次缺能力时提示 */
+  stayOnLight(_block?: Extract<Block, { kind: 'capability' }>): void {
+    this.setSessionPin('light', this.state.currentId);
+    this.setError('已留在轻引擎；需要时再点能力卡完成交接。');
+  }
+
   /* ------------------------------------------------------------ */
 
   setUrl(url: string): void {
@@ -621,6 +750,9 @@ export class Store {
         draftPresetId: this.state.draftPresetId,
         defaultModel: this.state.defaultModel,
         prewarmTier: this.state.prewarmTier,
+        links: this.state.links.slice(0, 40),
+        sessionPins: this.state.sessionPins,
+        autoRoute: this.state.autoRoute,
       });
       void writeHostUiCache(payload);
     } catch {
@@ -640,9 +772,24 @@ export class Store {
           draftPresetId?: string | null;
           defaultModel?: ModelChoice;
           prewarmTier?: PrewarmTier;
+          links?: ConversationLink[];
+          sessionPins?: Record<string, 'light' | 'full'>;
+          autoRoute?: boolean;
         };
         if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
           nextPatch.sessions = parsed.sessions;
+        }
+        if (Array.isArray(parsed.links) && this.state.links.length === 0) {
+          nextPatch.links = parsed.links.filter(
+            (link): link is ConversationLink =>
+              Boolean(link && typeof link.id === 'string' && typeof link.lightSessionId === 'string'),
+          );
+        }
+        if (parsed.sessionPins && typeof parsed.sessionPins === 'object') {
+          nextPatch.sessionPins = parsed.sessionPins;
+        }
+        if (typeof parsed.autoRoute === 'boolean') {
+          nextPatch.autoRoute = parsed.autoRoute;
         }
         if (parsed.draftPresetId && !this.state.draftPresetId) {
           nextPatch.draftPresetId = parsed.draftPresetId;
@@ -911,23 +1058,77 @@ export class Store {
   async refreshSessions(): Promise<void> {
     if (!this.client) return;
     try {
-      const { sessions } = await this.client.request('sessions.list', {});
-      let detail = this.state.detail;
-      const current = sessions.find((s) => s.id === this.state.currentId);
-      if (detail && current) {
-        detail = { ...detail, ...current };
-        const last = detail.turns[detail.turns.length - 1];
-        if (
-          current.status !== 'running' &&
-          current.status !== 'waiting_approval' &&
-          last?.role === 'assistant' &&
-          last.status === 'streaming' &&
-          current.updatedAt >= last.createdAt
-        ) {
-          detail = { ...finalizeDetailTurn(detail, current.updatedAt), status: 'idle' };
+      const { sessions: incoming } = await this.client.request('sessions.list', {});
+      const links = this.state.links;
+      const visible: SessionSummary[] = [];
+      const seen = new Set<string>();
+      for (const session of incoming) {
+        const link = this.linkByFullSession(session.id);
+        if (link) {
+          // 完整物理会话 → 逻辑条目：标题/预设用轻引擎侧，状态/preview 用完整侧
+          if (seen.has(link.id)) {
+            const index = visible.findIndex((item) => item.id === link.id);
+            if (index >= 0) {
+              visible[index] = {
+                ...visible[index]!,
+                status: session.status,
+                updatedAt: session.updatedAt,
+                preview: session.preview,
+                ...(session.runningSince ? { runningSince: session.runningSince } : {}),
+              };
+            }
+            continue;
+          }
+          const previous = this.state.sessions.find((item) => item.id === link.id);
+          visible.push({
+            ...(previous ?? { ...session, id: link.id }),
+            id: link.id,
+            title: link.title || session.title,
+            presetId: link.presetId || session.presetId,
+            status: session.status,
+            updatedAt: session.updatedAt,
+            preview: session.preview,
+            ...(session.runningSince ? { runningSince: session.runningSince } : {}),
+          });
+          seen.add(link.id);
+          continue;
+        }
+        // 任何 link 的完整会话都不单独显示（失败/孤儿也藏起来）
+        if (links.some((item) => item.fullSessionId === session.id)) continue;
+        if (seen.has(session.id)) continue;
+        visible.push(session);
+        seen.add(session.id);
+      }
+      // 完整引擎的 sessions.list 只有 proot 会话：把轻引擎逻辑条目留在列表里
+      for (const link of links) {
+        if (seen.has(link.id)) continue;
+        const previous = this.state.sessions.find((item) => item.id === link.id);
+        if (previous) {
+          visible.push(previous);
+          seen.add(link.id);
         }
       }
-      this.patch({ sessions, ...(detail ? { detail } : {}) });
+      visible.sort((a, b) => b.updatedAt - a.updatedAt);
+
+      let detail = this.state.detail;
+      if (detail) {
+        const logicalId = this.linkForSession(detail.id)?.id ?? detail.id;
+        const current = visible.find((item) => item.id === logicalId);
+        if (current) {
+          detail = { ...detail, ...current };
+          const last = detail.turns[detail.turns.length - 1];
+          if (
+            current.status !== 'running' &&
+            current.status !== 'waiting_approval' &&
+            last?.role === 'assistant' &&
+            last.status === 'streaming' &&
+            current.updatedAt >= last.createdAt
+          ) {
+            detail = { ...finalizeDetailTurn(detail, current.updatedAt), status: 'idle' };
+          }
+        }
+      }
+      this.patch({ sessions: visible, ...(detail ? { detail } : {}) });
       this.persistUiCache();
     } catch (err) {
       this.fail(err);
@@ -937,14 +1138,22 @@ export class Store {
   async openSession(id: string): Promise<void> {
     if (!this.client) return;
     this.noteUserActivity();
-    const cached = this.detailCache.get(id);
-    this.detailCache.delete(id);
+    const link = this.linkForSession(id);
+    const logicalId = link?.id ?? id;
+    const cached = this.detailCache.get(logicalId);
+    this.detailCache.delete(logicalId);
     // 重进会话先把 currentId/detail 切过去，避免 sessions.get 期间到达的流式帧被丢
     this.patch(
       cached
-        ? { busy: true, error: null, currentId: id, detail: cached }
-        : { busy: true, error: null }
+        ? { busy: true, error: null, currentId: logicalId, detail: cached }
+        : { busy: true, error: null },
     );
+
+    if (link) {
+      await this.openLinkedSession(link, cached);
+      return;
+    }
+
     try {
       const { session } = await this.client.request('sessions.get', { sessionId: id });
       let turns = session.turns;
@@ -967,9 +1176,85 @@ export class Store {
     }
   }
 
+  /**
+   * 逻辑会话重新打开：
+   * - active full 且完整链路在 → 拉 proot 详情，和轻引擎缓存合并；
+   * - active full 但 proot 已停 → 只读显示缓存，绝不在 light 里重放；
+   * - active light → 正常拉轻引擎详情。
+   */
+  private async openLinkedSession(link: ConversationLink, cached?: SessionDetail): Promise<void> {
+    const base = this.baseDetails.get(link.id) ?? cached ?? null;
+    const logicalId = link.id;
+    try {
+      if (link.activeSide === 'full') {
+        if (this.state.engine.mode === 'full' && link.fullSessionId) {
+          const { session } = await this.client!.request('sessions.get', {
+            sessionId: link.fullSessionId,
+          });
+          const merged = mergeDetail(link, base, session);
+          this.patch({ detail: merged ?? session, currentId: logicalId, busy: false });
+          if (merged) this.detailCache.set(logicalId, merged);
+          if (link.fullSessionId) {
+            const { approvals } = await this.client!.request('approvals.list', {
+              sessionId: link.fullSessionId,
+            });
+            const map: Record<string, Approval> = {};
+            for (const approval of approvals) map[approval.id] = approval;
+            this.patch({ approvals: map });
+          }
+          return;
+        }
+        // proot 已经停了：只读缓存；没有缓存就退回轻引擎侧（同样只读）
+        let detail = base ?? cached ?? null;
+        if (!detail && this.state.engineKind === 'light') {
+          try {
+            const { session } = await this.client!.request('sessions.get', {
+              sessionId: link.lightSessionId,
+            });
+            detail = mergeDetail(link, session, null);
+          } catch {
+            /* 连轻侧快照也拿不到时保持当前 detail */
+          }
+        }
+        this.patch({ detail: detail ?? this.state.detail, currentId: logicalId, busy: false });
+        return;
+      }
+
+      if (this.state.engineKind === 'light') {
+        const { session } = await this.client!.request('sessions.get', {
+          sessionId: link.lightSessionId,
+        });
+        let turns = normalizeTurns(session.turns);
+        const active = session.status === 'running' || session.status === 'waiting_approval';
+        const live = active
+          ? cached?.turns.find((t) => t.role === 'assistant' && t.status === 'streaming')
+          : undefined;
+        if (live) turns = overlayLiveTurn(turns, live);
+        const detail = mergeDetail(link, { ...session, turns }, null) ?? session;
+        this.patch({ detail, currentId: logicalId, busy: false });
+        const { approvals } = await this.client!.request('approvals.list', {
+          sessionId: link.lightSessionId,
+        });
+        const map: Record<string, Approval> = {};
+        for (const approval of approvals) map[approval.id] = approval;
+        this.patch({ approvals: map });
+        return;
+      }
+      // 完整链路上打开一个 active-light 逻辑会话：只读缓存
+      this.patch({ detail: base ?? this.state.detail, currentId: logicalId, busy: false });
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
   closeSession(): void {
     const { detail, currentId } = this.state;
-    if (detail && currentId) this.detailCache.set(currentId, detail);
+    if (detail && currentId) {
+      this.detailCache.set(currentId, detail);
+      const link = this.linkForSession(currentId);
+      // 只有轻引擎侧的 detail 才值得作为 merge 基底；完整侧不要反向覆盖
+      if (!link || link.activeSide === 'light') this.baseDetails.set(currentId, detail);
+    }
     this.patch({ detail: null, currentId: null });
   }
 
@@ -1193,6 +1478,22 @@ export class Store {
    * 首页输入框直接开聊：用当前选中的锦囊建会话，再把这句话（及暂存附件）发出去。
    * 标题先取这句话的前 18 个字（如果没打字只发了附件，取首个附件文件名），之后可以再让模型改。
    */
+  /** 路由输入：附件只取分类需要的字段 */
+  private routeAttachments(): Array<{ name: string; mime?: string; bytes?: number; kind: string }> {
+    return this.state.pendingAttachments.map((item) => ({
+      name: item.name,
+      ...(item.displayName ? { displayName: item.displayName } : {}),
+      ...(item.mime ? { mime: item.mime } : {}),
+      ...(typeof item.bytes === 'number' ? { bytes: item.bytes } : {}),
+      kind: item.kind,
+    }));
+  }
+
+  private currentPin(): 'light' | 'full' | null {
+    const id = this.state.currentId;
+    return id ? this.state.sessionPins[id] ?? null : null;
+  }
+
   async startWith(text: string): Promise<boolean> {
     const trimmed = text.trim();
     const hasAttachments = this.state.pendingAttachments.length > 0;
@@ -1208,10 +1509,42 @@ export class Store {
       }
       return false;
     }
+    // 预路由在创建会话之前：错误/不支持时不建会话、不丢草稿
+    const route = routeTurn({
+      text: trimmed,
+      attachments: this.routeAttachments(),
+      manualPin: null,
+      activeFull: this.state.engine.mode === 'full',
+      autoRoute: this.state.autoRoute,
+      engine: this.state.engine,
+    });
+    if (route.target === 'blocked-unsupported') {
+      this.setError(`暂不支持：${route.reason}`);
+      return false;
+    }
+    if (
+      route.override === 'light' &&
+      this.state.engine.mode === 'full'
+    ) {
+      this.setError('反向交接（完整 → 轻）暂未支持；请点顶栏切回轻引擎后再发。');
+      return false;
+    }
+    if (route.target === 'full' && this.state.engine.mode !== 'full') {
+      const guard = canSwitch(this.state.engine, 'full');
+      if (!guard.ok || !this.engineDeps.hostAvailable) {
+        this.setError(
+          !this.engineDeps.hostAvailable
+            ? '这台设备不支持完整引擎（需要原生构建，Expo Go 不行）'
+            : (guard.reason ?? '现在不能切换到完整引擎'),
+        );
+        return false;
+      }
+    }
+    const outgoing = route.text;
     const presetId = this.state.draftPresetId ?? this.state.caps?.presets[0]?.id ?? 'standard';
     const draftModel = this.state.defaultModel;
     const draftPermission = this.state.defaultPermission;
-    const rawTitle = trimmed || this.state.pendingAttachments[0]?.name || '新会话';
+    const rawTitle = outgoing || this.state.pendingAttachments[0]?.name || '新会话';
     this.patch({ busy: true, error: null });
     try {
       const { session } = await this.client.request('sessions.create', {
@@ -1222,14 +1555,31 @@ export class Store {
       // 首页选的模型/权限带进新会话
       if (draftPermission) await this.setPermission(draftPermission);
       if (draftModel) await this.setModel(draftModel.provider, draftModel.model, draftModel.reasoningEffort);
-      return await this.send(trimmed);
+      if (route.target === 'full' && this.state.engine.mode !== 'full') {
+        // 先有一个轻引擎源会话，再走交接；seed 里会带用户这一句
+        this.patch({ busy: false });
+        const ok = await this.beginHandoff({
+          logicalId: session.id,
+          reason: route.reason,
+          userText: outgoing,
+          ...(route.missing ? { missing: route.missing } : {}),
+          files: this.state.pendingAttachments.filter((item) => item.status === 'ready').map(toFileRef),
+          escalate: routeNeedsFullPermission(route.signals),
+        });
+        if (ok) this.patch({ pendingAttachments: [] });
+        return ok;
+      }
+      return await this.send(outgoing, { skipRoute: true });
     } catch (err) {
       this.fail(err);
       return false;
     }
   }
 
-  async send(text: string): Promise<boolean> {
+  async send(
+    text: string,
+    options: { skipRoute?: boolean; route?: RouteTurnResult } = {},
+  ): Promise<boolean> {
     const { currentId, detail } = this.state;
     const trimmed = text.trim();
     const stagedList = this.state.pendingAttachments.slice();
@@ -1238,15 +1588,62 @@ export class Store {
       this.setError('附件还在读取中，请稍候…');
       return false;
     }
+    const link = this.linkForSession(currentId);
+    // 完整侧链路断了：逻辑会话只读，绝不在轻引擎里自动重放
+    if (link && isConversationReadOnly(link, this.state.engine.mode)) {
+      this.setError('完整引擎已停止，这个会话只读；需要继续请在顶栏重新切到完整模式。');
+      return false;
+    }
     this.noteUserActivity();
+    let outgoing = trimmed;
+    let route = options.route;
+    if (!options.skipRoute) {
+      route = routeTurn({
+        text: trimmed,
+        attachments: this.routeAttachments(),
+        manualPin: this.currentPin(),
+        activeFull: this.state.engine.mode === 'full' || link?.activeSide === 'full',
+        autoRoute: this.state.autoRoute,
+        engine: this.state.engine,
+      });
+      outgoing = route.text;
+      if (route.target === 'blocked-unsupported') {
+        this.setError(`暂不支持：${route.reason}`);
+        return false;
+      }
+      // 明确要「轻」但当前人在完整引擎：反向交接未做，别把消息发错引擎
+      // TODO(1.4): 反向交接（完整 → 轻）按裁剪顺序后置。
+      if (
+        route.target === 'light' &&
+        this.state.engine.mode === 'full' &&
+        (route.override === 'light' || this.currentPin() === 'light')
+      ) {
+        this.setError('反向交接（完整 → 轻）暂未支持；请点顶栏切回轻引擎后再发。');
+        return false;
+      }
+      // 预路由命中完整引擎且当前链路还是轻：走 Handoff（seed 带用户这句话）
+      if (route.target === 'full' && this.state.engine.mode !== 'full') {
+        const ok = await this.beginHandoff({
+          logicalId: currentId,
+          reason: route.reason,
+          userText: outgoing,
+          ...(route.missing ? { missing: route.missing } : {}),
+          files: stagedList.filter((item) => item.status === 'ready').map(toFileRef),
+          escalate: routeNeedsFullPermission(route.signals),
+        });
+        if (ok) this.patch({ pendingAttachments: [] });
+        return ok;
+      }
+    }
+    const physicalId = this.physicalIdFor(currentId);
     const running = detail.status === 'running' || detail.status === 'waiting_approval';
     // 附件只传路径引用；文件早已由原生收件落进 workspace/uploads
     const files = stagedList.filter((item) => item.status === 'ready').map(toFileRef);
     this.patch({ busy: true, error: null });
     try {
       const payload = {
-        sessionId: currentId,
-        text: trimmed,
+        sessionId: physicalId,
+        text: outgoing,
         ...(files.length > 0 ? { files } : {}),
       };
       if (running) await this.client.request('sessions.steer', payload);
@@ -1264,25 +1661,337 @@ export class Store {
     }
   }
 
+  /** 能力卡上的「用完整模式继续」：确认后交接；bash 会升级 proot 权限（F8） */
+  async continueHandoff(block: Extract<Block, { kind: 'capability' }>): Promise<boolean> {
+    const currentId = this.state.currentId;
+    if (!currentId) return false;
+    if (block.status === 'handed_off') return true;
+    const callId = block.callId ?? (block.id.startsWith('cap_') ? block.id.slice(4) : undefined);
+    return this.beginHandoff({
+      logicalId: currentId,
+      reason: 'capability_missing',
+      userText: lastUserTextFromDetail(this.state.detail),
+      ...(lastAssistantTextFromDetail(this.state.detail)
+        ? { assistantText: lastAssistantTextFromDetail(this.state.detail) }
+        : {}),
+      missing: block.missing,
+      ...(callId ? { blockedCallIds: [callId] } : {}),
+      blockId: block.id,
+      escalate: block.tool === 'bash',
+    });
+  }
+
+  private markCapabilityHandedOff(blockId: string, handoffId: string): void {
+    const detail = this.state.detail;
+    if (!detail) return;
+    let changed = false;
+    const turns = detail.turns.map((turn) => {
+      let blocks = turn.blocks;
+      for (let i = 0; i < blocks.length; i += 1) {
+        const block = blocks[i]!;
+        if (block.kind !== 'capability' || block.id !== blockId) continue;
+        if (blocks === turn.blocks) blocks = turn.blocks.slice();
+        blocks[i] = { ...block, status: 'handed_off', handoffId };
+        changed = true;
+      }
+      return blocks === turn.blocks ? turn : { ...turn, blocks };
+    });
+    if (changed) this.patch({ detail: { ...detail, turns } });
+  }
+
   async stop(): Promise<void> {
     const { currentId } = this.state;
     if (!this.client || !currentId) return;
     try {
-      await this.client.request('sessions.stop', { sessionId: currentId });
+      await this.client.request('sessions.stop', { sessionId: this.physicalIdFor(currentId) });
     } catch (err) {
       this.fail(err);
     }
+  }
+
+  /* ------------------------ Handoff v1 ------------------------ */
+
+  private requestLight<M extends Method>(method: M, params: RequestParams[M]): Promise<RequestResults[M]> {
+    const injected = this.handoffDeps.requestLight;
+    if (injected) return injected(method, params);
+    if (!this.client) return Promise.reject(new Error('轻引擎还没连上'));
+    return this.client.request(method, params);
+  }
+
+  private requestFull<M extends Method>(method: M, params: RequestParams[M]): Promise<RequestResults[M]> {
+    const injected = this.handoffDeps.requestFull;
+    if (injected) return injected(method, params);
+    if (!this.client) return Promise.reject(new Error('完整引擎还没连上'));
+    return this.client.request(method, params);
+  }
+
+  private switchToFullForHandoff(): Promise<boolean> {
+    return this.handoffDeps.switchToFull ? this.handoffDeps.switchToFull() : this.switchEngine('full');
+  }
+
+  private switchToLightForHandoff(): Promise<boolean> {
+    return this.handoffDeps.switchToLight ? this.handoffDeps.switchToLight() : this.switchEngine('light');
+  }
+
+  /**
+   * 一条逻辑会话的交接入口：
+   *  1. 用轻引擎历史生成 HandoffV1（确定性 id/marker）；
+   *  2. 两阶段切到完整引擎（失败留在轻引擎，源会话不动）；
+   *  3. models.list → create → rename → permission → model → seed 一次；
+   *  4. 任一步在 seed 前失败都回滚源 currentId/detail；seed 结果不确定时先查 marker。
+   *
+   * 并发调用复用同一个 promise，避免重复 create。
+   */
+  async beginHandoff(input: BeginHandoffInput): Promise<boolean> {
+    const existing = this.linkForSession(input.logicalId);
+    if (existing?.status === 'active' && existing.activeSide === 'full') return true;
+    if (this.handoffInFlight) return this.handoffInFlight;
+    const run = this.beginHandoffInner(input).finally(() => {
+      if (this.handoffInFlight === run) this.handoffInFlight = null;
+    });
+    this.handoffInFlight = run;
+    return run;
+  }
+
+  private async beginHandoffInner(input: BeginHandoffInput): Promise<boolean> {
+    const logicalId = input.logicalId;
+    const sourceId = this.state.currentId;
+    const sourceDetail = this.state.detail;
+    if (!sourceId || !sourceDetail || sourceId !== logicalId) {
+      this.setError('交接失败：当前会话不在轻引擎里');
+      return false;
+    }
+    const guard = canSwitch(this.state.engine, 'full');
+    if (!guard.ok) {
+      this.setError(guard.reason ?? '现在不能切换到完整引擎');
+      return false;
+    }
+    if (!this.engineDeps.hostAvailable) {
+      this.setError('这台设备不支持完整引擎（需要原生构建，Expo Go 不行）');
+      return false;
+    }
+    this.noteUserActivity();
+    this.baseDetails.set(logicalId, sourceDetail);
+
+    let handoff: HandoffV1;
+    try {
+      handoff = await this.requestLight('sessions.handoff', {
+        sessionId: this.physicalIdFor(logicalId),
+        reason: input.reason,
+        ...(input.userText ? { userText: input.userText } : {}),
+        ...(input.assistantText ? { assistantText: input.assistantText } : {}),
+        ...(input.missing && input.missing.length > 0 ? { missing: input.missing } : {}),
+        ...(input.blockedCallIds && input.blockedCallIds.length > 0
+          ? { blockedCallIds: input.blockedCallIds }
+          : {}),
+        ...(input.files && input.files.length > 0 ? { files: input.files } : {}),
+      });
+    } catch (error) {
+      this.setError(`交接包生成失败：${humanizeError(error)}`);
+      return false;
+    }
+
+    // 两阶段切换：失败时 switchEngine 自己会回轻引擎，源会话只读保留
+    const switched = await this.switchToFullForHandoff();
+    if (!switched) {
+      this.patch({ currentId: sourceId, detail: sourceDetail, busy: false });
+      this.setError('完整引擎没启动起来，已留在轻引擎；草稿还在');
+      return false;
+    }
+    // connectLocal 会把 currentId 清空，这里先把逻辑会话接回来
+    this.patch({ currentId: sourceId, detail: sourceDetail, busy: true, error: null });
+
+    let fullSessionId: string | undefined;
+    let link: ConversationLink | undefined;
+    try {
+      /* 建会话之前先确认完整引擎有模型；没有就回滚，不留下不可用的会话 */
+      const models = await this.requestFull('models.list', {});
+      if (models.models.length === 0) throw new Error('完整引擎没有可用模型，交接已取消');
+
+      const sourceModel = handoff.model.source;
+      const matched = sourceModel
+        ? models.models.find(
+            (option) => option.provider === sourceModel.provider && option.id === sourceModel.model,
+          )
+        : undefined;
+      const fallbackOption = models.default
+        ? models.models.find(
+            (option) =>
+              option.provider === models.default?.provider && option.id === models.default?.model,
+          ) ?? models.models[0]
+        : models.models[0];
+      const targetModel: ModelChoice | undefined = matched
+        ? { provider: matched.provider, model: matched.id }
+        : fallbackOption
+          ? { provider: fallbackOption.provider, model: fallbackOption.id }
+          : undefined;
+      const targetPresetIds = this.state.caps?.presets.map((preset) => preset.id) ?? [];
+      const presetForTarget = mapPresetForTarget(handoff.presetId, targetPresetIds);
+      const targetPermission = input.escalate
+        ? 'danger-full-access'
+        : handoff.permission.source;
+
+      handoff = {
+        ...handoff,
+        presetForTarget,
+        permission: {
+          source: handoff.permission.source,
+          target: targetPermission,
+          escalated: input.escalate === true,
+        },
+        model: {
+          ...handoff.model,
+          ...(targetModel ? { target: targetModel } : {}),
+          matched: Boolean(matched),
+          ...(!matched && targetModel
+            ? { notice: `模型已切换为 ${targetModel.model}（完整引擎没有 ${sourceModel?.model ?? '原模型'}）` }
+            : {}),
+        },
+      };
+
+      const title = (input.title ?? sourceDetail.title).trim() || '交接会话';
+      const created = await this.requestFull('sessions.create', {
+        presetId: presetForTarget,
+        title,
+      });
+      fullSessionId = created.session.id;
+
+      link = {
+        id: logicalId,
+        lightSessionId: sourceDetail.id,
+        fullSessionId,
+        title,
+        presetId: handoff.presetId,
+        activeSide: 'full',
+        status: 'pending',
+        handoffId: handoff.handoffId,
+        seedMarker: handoff.seedMarker,
+        updatedAt: this.now(),
+      };
+      // 立刻持久化 fullSessionId：后面失败也能从 ui-cache 找到孤儿会话
+      this.setLink(link);
+
+      await this.requestFull('sessions.rename', { sessionId: fullSessionId, title });
+      await this.requestFull('sessions.setPermission', {
+        sessionId: fullSessionId,
+        preset: targetPermission,
+      });
+      if (targetModel) {
+        await this.requestFull('sessions.setModel', {
+          sessionId: fullSessionId,
+          provider: targetModel.provider,
+          model: targetModel.model,
+        });
+      }
+
+      const seedText = buildSeedText(handoff);
+      try {
+        await this.requestFull('sessions.send', { sessionId: fullSessionId, text: seedText });
+      } catch (sendError) {
+        // 发送结果不确定：先看完整引擎里有没有 seed marker；有就说明其实落地了。
+        // 绝不重发 seed（更不会重放已完成的工具）。
+        let seeded = false;
+        try {
+          const got = await this.requestFull('sessions.get', { sessionId: fullSessionId });
+          seeded = detailHasSeedMarker(got.session, handoff.seedMarker);
+        } catch {
+          /* 查不到就按失败回滚 */
+        }
+        if (!seeded) throw sendError;
+      }
+
+      let fullDetail: SessionDetail | null = null;
+      try {
+        fullDetail = (await this.requestFull('sessions.get', { sessionId: fullSessionId })).session;
+      } catch {
+        /* seed 已发成功；拿不到快照就先显示轻引擎侧，等下一次 refresh */
+      }
+      const seedTurnId = findSeedTurnId(fullDetail, handoff.seedMarker);
+      const activeLink: ConversationLink = {
+        ...link,
+        status: 'active',
+        activeSide: 'full',
+        ...(seedTurnId ? { seedTurnId } : {}),
+        updatedAt: this.now(),
+      };
+      this.setLink(activeLink);
+      const merged = mergeDetail(activeLink, sourceDetail, fullDetail);
+      const running = merged?.status === 'running' || merged?.status === 'waiting_approval';
+      this.patch({
+        currentId: logicalId,
+        detail: merged ?? sourceDetail,
+        busy: running,
+        error: null,
+      });
+      if (merged) {
+        this.detailCache.set(logicalId, merged);
+        this.baseDetails.set(logicalId, sourceDetail);
+      }
+      if (input.blockId) this.markCapabilityHandedOff(input.blockId, handoff.handoffId);
+      // 用户已经选择继续完整引擎：清掉「留在轻引擎」的 pin，避免下一条又走反向交接报错
+      if (this.state.sessionPins[logicalId]) this.setSessionPin(null, logicalId);
+      void this.refreshSessions();
+      this.persistUiCache();
+      return true;
+    } catch (error) {
+      // TODO(1.4): 失败的 full 会话目前只标记 failed 并隐藏，孤儿清理后置。
+      if (link) {
+        this.setLink({
+          ...link,
+          status: 'failed',
+          activeSide: 'light',
+          lastError: humanizeError(error),
+        });
+      }
+      await this.rollbackHandoff(sourceId, sourceDetail, error);
+      return false;
+    }
+  }
+
+  /** seed 之前的失败：回轻引擎、恢复源会话；完整会话只留在 link 里，列表不显示 */
+  private async rollbackHandoff(
+    sourceId: string,
+    sourceDetail: SessionDetail,
+    error: unknown,
+  ): Promise<void> {
+    const message = humanizeError(error);
+    this.patch({ busy: false, error: null });
+    if (this.state.engine.mode === 'full') {
+      try {
+        await this.switchToLightForHandoff();
+      } catch {
+        /* switchEngine 自己会把错误写进 state */
+      }
+    }
+    this.baseDetails.set(sourceId, sourceDetail);
+    this.detailCache.set(sourceId, sourceDetail);
+    if (this.state.engine.mode === 'full') {
+      // 回轻失败：至少别让下一条消息发到错误的物理会话
+      this.patch({ currentId: null, detail: sourceDetail, busy: false, error: message });
+      return;
+    }
+    this.patch({ currentId: sourceId, detail: sourceDetail, busy: false, error: message });
   }
 
   /* ------------------------ 会话管理 ------------------------ */
 
   async renameSession(id: string, title: string): Promise<void> {
     if (!this.client) return;
+    const logicalId = this.linkForSession(id)?.id ?? id;
     try {
-      const { session } = await this.client.request('sessions.rename', { sessionId: id, title });
-      const sessions = this.state.sessions.map((s) => (s.id === id ? { ...s, title: session.title } : s));
+      const { session } = await this.client.request('sessions.rename', {
+        sessionId: this.physicalIdFor(logicalId),
+        title,
+      });
+      const sessions = this.state.sessions.map((s) =>
+        s.id === logicalId ? { ...s, title: session.title } : s,
+      );
+      const link = this.linkForSession(logicalId);
+      if (link) this.setLink({ ...link, title: session.title });
       const patch: Partial<AppState> = { sessions };
-      if (this.state.detail?.id === id) patch.detail = session;
+      if (this.state.detail?.id === logicalId) {
+        patch.detail = { ...this.state.detail, title: session.title };
+      }
       this.patch(patch);
     } catch (err) {
       this.fail(err);
@@ -1292,7 +2001,10 @@ export class Store {
   async setSessionPinned(id: string, pinned: boolean): Promise<void> {
     if (!this.client) return;
     try {
-      await this.client.request('sessions.pin', { sessionId: id, pinned });
+      await this.client.request('sessions.pin', {
+        sessionId: this.physicalIdFor(this.linkForSession(id)?.id ?? id),
+        pinned,
+      });
       await this.refreshSessions();
     } catch (err) {
       this.fail(err);
@@ -1301,9 +2013,13 @@ export class Store {
 
   async archiveSession(id: string, archived: boolean): Promise<void> {
     if (!this.client) return;
+    const logicalId = this.linkForSession(id)?.id ?? id;
     try {
-      await this.client.request('sessions.archive', { sessionId: id, archived });
-      if (archived && this.state.currentId === id) this.closeSession();
+      await this.client.request('sessions.archive', {
+        sessionId: this.physicalIdFor(logicalId),
+        archived,
+      });
+      if (archived && this.state.currentId === logicalId) this.closeSession();
       await this.refreshSessions();
     } catch (err) {
       this.fail(err);
@@ -1450,6 +2166,21 @@ export class Store {
     }
   }
 
+  /** 完整引擎返回的 detail 只取状态/模型/权限，逻辑会话的合并回合不能丢 */
+  private mergePhysicalDetail(session: SessionDetail): SessionDetail {
+    const current = this.state.detail;
+    const link = this.linkForSession(this.state.currentId);
+    if (!link || !current || current.id !== link.id) return session;
+    return {
+      ...current,
+      status: session.status,
+      updatedAt: session.updatedAt,
+      ...(session.model ? { model: session.model } : {}),
+      permission: session.permission,
+      contract: session.contract,
+    };
+  }
+
   /** 切当前会话的权限（沙箱 + 审批策略一起换）；还没开会话时记成默认 */
   async setPermission(preset: string): Promise<void> {
     const { currentId } = this.state;
@@ -1459,8 +2190,11 @@ export class Store {
       return;
     }
     try {
-      const { session } = await this.client.request('sessions.setPermission', { sessionId: currentId, preset });
-      this.patch({ detail: session });
+      const { session } = await this.client.request('sessions.setPermission', {
+        sessionId: this.physicalIdFor(currentId),
+        preset,
+      });
+      this.patch({ detail: this.mergePhysicalDetail(session) });
     } catch (err) {
       this.fail(err);
     }
@@ -1479,12 +2213,12 @@ export class Store {
     }
     try {
       const { session } = await this.client.request('sessions.setModel', {
-        sessionId: currentId,
+        sessionId: this.physicalIdFor(currentId),
         provider,
         model,
         ...(reasoningEffort ? { reasoningEffort } : {}),
       });
-      this.patch({ detail: session, modelSheetOpen: false });
+      this.patch({ detail: this.mergePhysicalDetail(session), modelSheetOpen: false });
     } catch (err) {
       this.fail(err);
     }
@@ -1531,7 +2265,7 @@ export class Store {
     }
     try {
       await this.client.request('questions.answer', {
-        sessionId: currentId,
+        sessionId: this.physicalIdFor(currentId),
         callId,
         answers: [{ id: questionId, selected, ...(custom ? { custom } : {}) }],
       });
@@ -1776,6 +2510,13 @@ export class Store {
    * - 其它（手动/低内存）：完整引擎在线就先切回轻引擎，再停宿主。
    */
   async reclaimProot(reason: string = 'manual'): Promise<void> {
+    // 有逻辑会话正在完整侧时，空闲回收不能停 proot；用户显式切换/停止除外
+    if (
+      reason === 'idle' &&
+      this.state.links.some((link) => link.activeSide === 'full' && link.status === 'active')
+    ) {
+      return;
+    }
     // 正在起完整引擎时取消：PROOT_FAILED 会走 stop-host + 回轻引擎
     if (this.state.engine.mode === 'starting-proot') {
       this.warming = null;
@@ -1846,9 +2587,13 @@ export class Store {
       // 完整引擎链路断了：立刻回轻引擎（failed 连续 3 帧才算死，给 HostRuntime 重试时间）
       if (before.mode === 'full' && before.link === 'proot' && (stopped || this.hostDeadTicks >= 3)) {
         this.hostDeadTicks = 0;
-        // 旧会话属于已经死掉的完整引擎：清 currentId，detail 留在屏幕上只读
+        // 旧会话属于已经死掉的完整引擎：普通完整会话清 currentId 只读；
+        // 逻辑会话保留 currentId（activeSide=full 在轻引擎里天然只读），绝不自动重放。
+        const activeLink = this.state.links.some(
+          (link) => link.activeSide === 'full' && link.status === 'active',
+        );
         this.suppressAutoOpen = true;
-        this.patch({ currentId: null });
+        if (!activeLink) this.patch({ currentId: null });
         try {
           await this.runEngineEffects(
             this.emitEngine({ type: 'LINK_LOST', error: '完整引擎已停止，已回到轻引擎', now: this.now() }),
@@ -1961,11 +2706,86 @@ export class Store {
 
   /* ------------------------------------------------------------ */
 
+  /** 完整引擎的物理会话事件 → 逻辑条目；绝不让第二个会话出现在列表里 */
+  private applyLinkedSessionUpdate(link: ConversationLink, incoming: SessionSummary): void {
+    const existing = this.state.sessions.find((item) => item.id === link.id);
+    const summary: SessionSummary = {
+      ...(existing ?? { ...incoming, id: link.id }),
+      id: link.id,
+      title: link.title || incoming.title,
+      presetId: link.presetId || incoming.presetId,
+      status: incoming.status,
+      updatedAt: incoming.updatedAt,
+      preview: incoming.preview,
+      ...(incoming.runningSince ? { runningSince: incoming.runningSince } : {}),
+    };
+    const sessions = existing
+      ? this.state.sessions.map((item) => (item.id === link.id ? summary : item))
+      : [summary, ...this.state.sessions];
+    let detail = this.state.detail;
+    if (detail && detail.id === link.id) {
+      let next = { ...detail, ...summary };
+      if (incoming.status !== 'running' && incoming.status !== 'waiting_approval') {
+        next = finalizeDetailTurn(next, incoming.updatedAt);
+      }
+      detail = next;
+    }
+    this.patch({ sessions, ...(detail ? { detail } : {}) });
+    this.persistUiCache();
+  }
+
   /** 事件统一在这里落到状态上；UI 不做任何拼装 */
-  private applyEvent(name: string, data: any): void {
+  private applyEvent(name: string, rawData: any): void {
+    let data = rawData;
+
+    // 完整物理会话 id → 逻辑 id；UI/store 的其余逻辑只认逻辑会话
+    if ((name === 'session.created' || name === 'session.updated') && rawData?.session) {
+      const incoming = rawData.session as SessionSummary;
+      const link = this.linkByFullSession(incoming.id);
+      if (link) {
+        this.applyLinkedSessionUpdate(link, incoming);
+        return;
+      }
+    } else if (rawData && typeof rawData === 'object') {
+      const physical =
+        (typeof rawData.sessionId === 'string' ? rawData.sessionId : undefined) ??
+        (rawData.approval && typeof rawData.approval.sessionId === 'string'
+          ? rawData.approval.sessionId
+          : undefined);
+      const link = physical ? this.linkByFullSession(physical) : undefined;
+      if (link) {
+        data = {
+          ...rawData,
+          ...(typeof rawData.sessionId === 'string' ? { sessionId: link.id } : {}),
+          ...(rawData.approval
+            ? { approval: { ...rawData.approval, sessionId: link.id } }
+            : {}),
+        };
+      }
+    }
+
     const { detail, currentId } = this.state;
 
     switch (name) {
+      case 'capability.missing': {
+        // capability block 已经通过 block.appended 进时间线；这里只做兜底：
+        // 如果 UI 漏了事件，把 block 补进当前回合。
+        const block = data.block as Extract<Block, { kind: 'capability' }> | undefined;
+        if (!block || !detail || data.sessionId !== currentId) return;
+        const has = detail.turns.some((turn) =>
+          turn.blocks.some((item) => item.kind === 'capability' && item.id === block.id),
+        );
+        if (has) return;
+        const turns = detail.turns.slice();
+        for (let i = turns.length - 1; i >= 0; i -= 1) {
+          if (turns[i]?.role !== 'assistant') continue;
+          turns[i] = { ...turns[i]!, blocks: [...turns[i]!.blocks, block] };
+          this.patch({ detail: { ...detail, turns } });
+          return;
+        }
+        return;
+      }
+
       case 'session.created':
       case 'session.updated': {
         const session = data.session as SessionSummary;

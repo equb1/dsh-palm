@@ -21,6 +21,7 @@ import {
   type EventName,
   type EventPayloads,
   type FileRef,
+  type HandoffBlockedCall,
   type Method,
   type PermissionOption,
   type Preset,
@@ -33,6 +34,7 @@ import {
 } from '../../protocol';
 import { Agent, userTurnFromText, type RunOutcome, type RunSink } from './agent';
 import { SessionRepo, newRunId, newSessionId } from './sessionRepo';
+import { buildHandoff } from '../../lib/handoff';
 import { toolsForPermission } from './tools';
 import type {
   AskAnswer,
@@ -182,6 +184,7 @@ export class LightHost {
         'run.finished',
         'approval.requested',
         'approval.resolved',
+        'capability.missing',
       ],
       actions: ['approve', 'reject', 'steer', 'stop', 'switch_preset', 'create_session'],
       presets: PRESETS,
@@ -367,6 +370,72 @@ export class LightHost {
           this.startRun(session);
         }
         return { accepted: true as const };
+      },
+      /**
+       * 轻引擎专用交接包：只从 StoredSession.history 里抽，
+       * 保证工具参数/结果原样带走（不重新跑一遍）。
+       */
+      'sessions.handoff': async ({
+        sessionId,
+        reason,
+        userText,
+        assistantText,
+        missing,
+        blockedCallIds,
+        files,
+        recentTurns,
+      }: {
+        sessionId: string;
+        reason?: string;
+        userText?: string;
+        assistantText?: string;
+        missing?: string[];
+        blockedCallIds?: string[];
+        files?: FileRef[];
+        recentTurns?: number;
+      }) => {
+        const session = this.requireSession(sessionId);
+        const wanted = new Set(blockedCallIds ?? []);
+        const blocked: HandoffBlockedCall[] = [];
+        if (wanted.size > 0) {
+          for (const message of session.history) {
+            for (const call of message.tool_calls ?? []) {
+              if (!wanted.has(call.id)) continue;
+              let args: Record<string, unknown> = {};
+              try {
+                const parsed = JSON.parse(call.function.arguments || '{}') as unknown;
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                  args = parsed as Record<string, unknown>;
+                }
+              } catch {
+                /* 参数损坏就带空对象，至少保留调用 id/name */
+              }
+              blocked.push({ callId: call.id, name: call.function.name, args });
+            }
+          }
+        }
+        return buildHandoff({
+          conversationId: session.id,
+          reason: reason?.trim() || 'capability_missing',
+          from: { engine: 'light', sessionId: session.id, hostId: LIGHT_HOST_ID },
+          presetId: session.presetId,
+          presetForTarget: session.presetId,
+          permission: { source: session.permission, target: session.permission, escalated: false },
+          model: { source: session.model ?? this.modelChoice(), matched: true },
+          channel: {
+            baseURL: this.options.model.baseURL,
+            model: this.options.model.model,
+            apiKeyRef: 'light-engine',
+          },
+          history: session.history,
+          turns: session.turns,
+          ...(userText ? { userText } : {}),
+          ...(assistantText ? { assistantText } : {}),
+          ...(files && files.length > 0 ? { files } : {}),
+          ...(blocked.length > 0 ? { blocked } : {}),
+          ...(missing && missing.length > 0 ? { missing } : {}),
+          ...(recentTurns ? { limit: recentTurns } : {}),
+        });
       },
       'sessions.stop': async ({ sessionId }: { sessionId: string }) => {
         const run = this.runs.get(sessionId);

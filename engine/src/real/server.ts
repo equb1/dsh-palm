@@ -1015,6 +1015,9 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { accepted: true as const };
     },
     'sessions.setPreset': async () => unsupported('sessions.setPreset'),
+    // 交接只从轻引擎发起；完整引擎侧没有可回退的历史。
+    // TODO(1.4): 真宿主侧交接（跨设备）后置。
+    'sessions.handoff': async () => unsupported('sessions.handoff'),
 
     'sessions.rename': async ({ sessionId, title }) => {
       const trimmed = title.trim();

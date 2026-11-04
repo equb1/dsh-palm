@@ -16,6 +16,7 @@ import { store, useStore } from './useStore';
 import { IconButton, Pill } from './parts';
 import { EngineBadge } from './EngineBadge';
 import { badgeFor, canSwitch } from '../state/engineManager';
+import { isConversationReadOnly } from '../lib/handoff';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { ModelSheet } from './ModelSheet';
@@ -49,8 +50,18 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const running = session.status === 'running' || session.status === 'waiting_approval';
   const engineBadge = badgeFor(state.engine);
   const engineSwitch = canSwitch(state.engine);
-  // 切换引擎后 currentId 被清空，但 detail 留在屏幕上：只读，不再往旧引擎里发消息
-  const readOnly = !state.currentId;
+  // 逻辑会话按 activeSide 判断只读：完整侧链路断了就只读，绝不在轻引擎里重放
+  const link = state.links.find(
+    (item) =>
+      item.id === session.id ||
+      item.lightSessionId === session.id ||
+      item.fullSessionId === session.id,
+  );
+  const readOnly = link ? isConversationReadOnly(link, state.engine.mode) : !state.currentId;
+  const readOnlyText =
+    link?.activeSide === 'full' && state.engine.mode !== 'full'
+      ? '完整引擎已停止，这个会话只读；点这里回首页，需要继续时在顶栏重新切到完整模式 ›'
+      : '已切换引擎，这个会话只读；点这里回首页新建会话继续 ›';
   const turns = session.turns;
   let lastAssistantIndex = -1;
   for (let i = turns.length - 1; i >= 0; i--) {
@@ -240,7 +251,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
 
       {readOnly ? (
         <Pressable onPress={() => store.closeSession()}>
-          <Text style={styles.readOnly}>已切换引擎，这个会话只读；点这里回首页新建会话继续 ›</Text>
+          <Text style={styles.readOnly}>{readOnlyText}</Text>
         </Pressable>
       ) : null}
 

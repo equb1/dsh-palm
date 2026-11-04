@@ -512,6 +512,11 @@ const handlers: { [M in Method]: Handler<M> } = {
     return { accepted: true as const };
   },
 
+  // 交接只从轻引擎发起；完整引擎侧没有可回退的历史
+  'sessions.handoff': () => {
+    throw Object.assign(new Error('完整引擎不支持 sessions.handoff'), { code: 'unsupported' });
+  },
+
   'sessions.setPreset': ({ sessionId, presetId }) => {
     const s = requireSession(sessionId);
     const preset = presetById(presetId);

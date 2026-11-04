@@ -124,6 +124,25 @@ export type Block =
       detail?: string;
     }
   | { kind: 'approval'; id: string; approvalId: string }
+  | {
+      kind: 'capability';
+      id: string;
+      code: 'capability_missing';
+      tool: string;
+      /** 一行摘要，例如「执行 python 脚本」 */
+      summary: string;
+      /** 为什么轻引擎做不了 */
+      reason: string;
+      /** 缺的能力，界面上做胶囊展示，例如 ['python'] */
+      missing: string[];
+      /** bash 的原始命令（审批前就要展示） */
+      command?: string;
+      /** 交接后回填，用于把卡片和 ConversationLink 对上 */
+      handoffId?: string;
+      status: 'pending' | 'handed_off';
+      /** 原始工具调用 id；Handoff 要按它从历史里取回参数（1.4 新增） */
+      callId?: string;
+    }
   | { kind: 'image'; id: string; ref: string; mime: string };
 
 export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'error';
@@ -322,10 +341,26 @@ export interface EventPayloads {
   'run.finished': {
     sessionId: string;
     runId: string;
-    reason: 'done' | 'stopped' | 'error';
+    reason: 'done' | 'stopped' | 'error' | 'capability_missing';
     usage?: { inputTokens?: number; outputTokens?: number };
     error?: string;
     preview?: string;
+  };
+  /**
+   * 轻引擎工具执行前发现缺能力：这一轮不执行任何剩余工具，
+   * 时间线里已经插入 capability block，历史里已补 [CAPABILITY_MISSING] 结果。
+   * （1.4 新增；PROTOCOL_VERSION 保持 1，旧客户端忽略未知事件即可。）
+   */
+  'capability.missing': {
+    sessionId: string;
+    runId: string;
+    turnId: string;
+    callId: string;
+    tool: string;
+    missing: string[];
+    reason: string;
+    command?: string;
+    block: Extract<Block, { kind: 'capability' }>;
   };
   'approval.requested': { approval: Approval };
   'approval.resolved': { approvalId: string; decision: ApprovalDecision; by: string };
@@ -377,6 +412,70 @@ export interface FileRef {
 }
 
 /* ------------------------------------------------------------------ *
+ * Handoff v1（轻引擎 → 完整引擎）
+ *
+ * 只在回合边界交接：已执行工具原样带走，未执行步骤只出现在
+ * pendingIntent 里；seed 文本交给完整引擎，由它继续。
+ * ------------------------------------------------------------------ */
+
+export interface HandoffRecentTurn {
+  role: 'user' | 'assistant' | 'tool';
+  content?: string;
+  /** assistant 的原始 tool_calls（参数是模型输出的原始 JSON 字符串） */
+  toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+  toolCallId?: string;
+  name?: string;
+}
+
+export interface HandoffCompletedStep {
+  callId: string;
+  name: string;
+  summary: string;
+}
+
+export interface HandoffBlockedCall {
+  callId: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface HandoffV1 {
+  version: 1;
+  /** 逻辑会话 id（= 轻引擎会话 id） */
+  conversationId: string;
+  reason: string;
+  from: { engine: 'light' | 'full'; sessionId: string; hostId?: string };
+  presetId: string;
+  /** 完整引擎里映射后的预设 */
+  presetForTarget: string;
+  permission: { source: string; target: string; escalated: boolean };
+  model: {
+    source?: ModelChoice;
+    target?: ModelChoice;
+    matched: boolean;
+    /** 模型被换掉时给用户看的说明 */
+    notice?: string;
+  };
+  channel: { baseURL: string; model: string; apiKeyRef: string };
+  summary: string;
+  /** 最近 8 条消息（含工具调用与结果） */
+  recentTurns: HandoffRecentTurn[];
+  completedSteps: HandoffCompletedStep[];
+  fileRefs: FileRef[];
+  pendingIntent: {
+    kind: string;
+    userText: string;
+    assistantText?: string;
+    blocked: HandoffBlockedCall[];
+    missing?: string[];
+  };
+  /** 确定性 hash（同一会话 + 同一待执行步骤得到同一个 id） */
+  handoffId: string;
+  seedMarker: string;
+  createdAt: number;
+}
+
+/* ------------------------------------------------------------------ *
  * 请求 / 响应
  * ------------------------------------------------------------------ */
 
@@ -387,6 +486,24 @@ export interface RequestParams {
   'sessions.create': { presetId: string; workspaceId?: string; title?: string };
   'sessions.send': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
   'sessions.steer': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
+  /**
+   * 轻引擎专用：把当前会话的历史打包成 HandoffV1。
+   * 完整引擎返回 unsupported（交接只会从轻引擎发起）。
+   */
+  'sessions.handoff': {
+    sessionId: string;
+    reason?: string;
+    /** 用户这一轮的原话（预路由交接时还没进历史） */
+    userText?: string;
+    assistantText?: string;
+    missing?: string[];
+    /** 能力门拦截的调用 id；宿主按 id 从历史里取回精确参数 */
+    blockedCallIds?: string[];
+    /** 本轮待发附件（预路由时还没进历史） */
+    files?: FileRef[];
+    /** 最近多少条消息，默认 8 */
+    recentTurns?: number;
+  };
   'sessions.stop': { sessionId: string };
   'sessions.setPreset': { sessionId: string; presetId: string };
   /** 列出宿主机上可用的模型 */
@@ -469,6 +586,7 @@ export interface RequestResults {
   'sessions.create': { session: SessionSummary };
   'sessions.send': { accepted: true; runId: string };
   'sessions.steer': { accepted: true };
+  'sessions.handoff': HandoffV1;
   'sessions.stop': { accepted: true };
   'sessions.setPreset': { session: SessionDetail };
   'models.list': { models: ModelOption[]; default?: ModelChoice };
@@ -520,6 +638,7 @@ export interface ProtocolError {
     | 'unsupported'
     | 'busy'
     | 'unauthorized'
+    | 'capability_missing'
     | 'internal';
   message: string;
   /** 能直接告诉用户怎么办的一句话 */

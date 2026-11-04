@@ -207,6 +207,7 @@ export function HomeScreen(): React.ReactElement {
               <Text style={styles.sectionTitle}>最近</Text>
               {state.sessions.slice(0, 8).map((s) => {
                 const p = presets.find((x) => x.id === s.presetId);
+                const link = state.links.find((item) => item.id === s.id);
                 return (
                   <Pressable
                     key={s.id}
@@ -226,6 +227,13 @@ export function HomeScreen(): React.ReactElement {
                         <Text style={styles.rowPreview} numberOfLines={1}>
                           {s.preview || p?.name || ''}
                         </Text>
+                        {link ? (
+                          <View style={[styles.engineTag, link.activeSide === 'full' && styles.engineTagFull]}>
+                            <Text style={[styles.engineTagText, link.activeSide === 'full' && styles.engineTagTextFull]}>
+                              {link.activeSide === 'full' ? '完整' : '轻'}
+                            </Text>
+                          </View>
+                        ) : null}
                         <StatusTag s={s} />
                       </View>
                     </View>
@@ -335,6 +343,15 @@ const styles = StyleSheet.create({
   rowTime: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
   rowBottom: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowPreview: { color: colors.textDim, fontSize: 13, lineHeight: 20, flex: 1 },
+  engineTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.xs,
+    backgroundColor: colors.glassStrong,
+  },
+  engineTagFull: { backgroundColor: colors.blueSoft },
+  engineTagText: { color: colors.textFaint, fontSize: 10, fontWeight: '600' },
+  engineTagTextFull: { color: colors.blue },
   tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill },
   tagText: { fontSize: 10, fontWeight: '600' },
 
