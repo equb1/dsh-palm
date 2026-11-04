@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 
 import type { SessionSummary } from '../protocol';
-import { pickAttachments, type AttachmentKind } from '../lib/pickImage';
+import type { AttachmentKind } from '../lib/attachments/types';
 import { store, useStore } from './useStore';
 import { Dot, IconButton } from './parts';
 import { EngineBadge } from './EngineBadge';
@@ -56,11 +56,11 @@ export function HomeScreen(): React.ReactElement {
   const [refreshing, setRefreshing] = React.useState(false);
   const [drawer, setDrawer] = React.useState(false);
 
-  // 从系统分享菜单进来的文字：填进输入框（只填一次）
+  // 从系统分享菜单进来的文字：填进输入框（只填一次；回前台再分享也生效）
   React.useEffect(() => {
     const shared = store.takeShareText();
     if (shared) setDraft((d) => (d.trim().length > 0 ? d : shared));
-  }, []);
+  }, [state.pendingShare?.text]);
 
   React.useEffect(() => {
     if (!drawer) return;
@@ -121,16 +121,8 @@ export function HomeScreen(): React.ReactElement {
   };
 
   const handlePickAttachment = (kind: AttachmentKind): void => {
-    void (async () => {
-      try {
-        const list = await pickAttachments(kind);
-        for (const item of list) {
-          await store.uploadAttachment(item.base64, item.name, item.kind ?? kind);
-        }
-      } catch (err) {
-        store.setError((err as Error).message || '读取附件失败');
-      }
-    })();
+    // 原生收件落盘 → store 里分类、去重；错误由 store 统一展示
+    void store.attachFromPicker(kind);
   };
 
   return (
@@ -185,14 +177,6 @@ export function HomeScreen(): React.ReactElement {
       {engine.mode === 'light' && !engine.lightReady && Boolean(engine.error) ? (
         <Pressable accessibilityRole="button" onPress={() => store.openLightSetup()} style={styles.lightSetup}>
           <Text style={styles.lightSetupText}>轻引擎未就绪 · 点这里配置模型渠道 ›</Text>
-        </Pressable>
-      ) : null}
-
-      {state.pendingShare?.imagePath ? (
-        <Pressable onPress={() => void store.attachSharedImage()}>
-          <Text style={styles.shareHint}>
-            {state.currentId ? '点这里把分享的图片放进当前会话' : '已收到分享的图片，发一句话时一起带上'}
-          </Text>
         </Pressable>
       ) : null}
 
@@ -276,6 +260,7 @@ export function HomeScreen(): React.ReactElement {
           activePermission={state.defaultPermission}
           onPickPermission={(value) => void store.setPermission(value)}
           attachments={state.pendingAttachments}
+          attaching={state.attaching}
           onPickAttachment={handlePickAttachment}
           onRemoveAttachment={(id) => store.removeAttachment(id)}
         />
@@ -320,13 +305,6 @@ const styles = StyleSheet.create({
   },
   brandGlyph: { color: colors.gold, fontSize: 18, fontWeight: '700' },
   brand: { color: colors.text, fontSize: 16, fontWeight: '600', letterSpacing: 1.2 },
-  shareHint: {
-    color: colors.blue,
-    fontSize: 11.5,
-    textAlign: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-  },
   subRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   lightSetup: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 16 },
   lightSetupText: { color: colors.blue, fontSize: 11.5, textAlign: 'center' },

@@ -352,6 +352,31 @@ export interface EngineEvent<K extends EventName = EventName> {
 }
 
 /* ------------------------------------------------------------------ *
+ * 附件（原生收件后的路径引用）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 原生收件管线落到 `workspace/uploads/<hash16>-<name>` 后的文件引用。
+ *
+ * 这是 1.3 起的附件主路径：只传路径，不再传 base64。
+ * 轻引擎把它拼成 `/workspace/<relPath>`，完整引擎拼成 `/root/work/<relPath>`。
+ */
+export interface FileRef {
+  /** 手机上的绝对路径（调试用；模型只消费 relPath） */
+  path: string;
+  /** 引擎工作区里的相对路径，必须形如 `uploads/<file>` */
+  relPath: string;
+  /** 落盘用的文件名（已 sanitize，不含 hash 前缀） */
+  name: string;
+  /** 用户看到的原始文件名 */
+  displayName?: string;
+  mime?: string;
+  bytes?: number;
+  /** SHA-256（hex），用于去重 */
+  hash?: string;
+}
+
+/* ------------------------------------------------------------------ *
  * 请求 / 响应
  * ------------------------------------------------------------------ */
 
@@ -360,8 +385,8 @@ export interface RequestParams {
   'sessions.list': { cursor?: string; limit?: number };
   'sessions.get': { sessionId: string };
   'sessions.create': { presetId: string; workspaceId?: string; title?: string };
-  'sessions.send': { sessionId: string; text: string; attachments?: string[] };
-  'sessions.steer': { sessionId: string; text: string; attachments?: string[] };
+  'sessions.send': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
+  'sessions.steer': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
   'sessions.stop': { sessionId: string };
   'sessions.setPreset': { sessionId: string; presetId: string };
   /** 列出宿主机上可用的模型 */

@@ -20,7 +20,7 @@ import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { ModelSheet } from './ModelSheet';
 import { TurnView, JumpButton } from './chat';
-import { pickAttachments } from '../lib/pickImage';
+import type { AttachmentKind } from '../lib/attachments/types';
 import { colors, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
@@ -60,10 +60,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     }
   }
 
-  // 从分享菜单带进来的图片：进到会话里就传上去
-  React.useEffect(() => {
-    if (state.pendingShare?.imagePath) void store.attachSharedImage();
-  }, [session.id, state.pendingShare?.imagePath]);
+  // 系统分享进来的文件已由 store 收进待发列表，这里不用再单独处理
   const hasText = draft.trim().length > 0;
 
   // 头部模型徽标：优先会话自己选的，其次宿主默认；名字太长就把 DeepSeek- 前缀砍掉
@@ -326,18 +323,10 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           activePermission={session.permission ?? state.defaultPermission}
           onPickPermission={(value) => void store.setPermission(value)}
           attachments={state.pendingAttachments}
+          attaching={state.attaching}
           onRemoveAttachment={(id) => store.removeAttachment(id)}
-          onPickAttachment={(kind) => {
-            void (async () => {
-              try {
-                const list = await pickAttachments(kind);
-                for (const item of list) {
-                  await store.uploadAttachment(item.base64, item.name, item.kind ?? kind);
-                }
-              } catch (err) {
-                store.setError(err instanceof Error ? err.message : String(err));
-              }
-            })();
+          onPickAttachment={(kind: AttachmentKind) => {
+            void store.attachFromPicker(kind);
           }}
         />
       </SmoothKeyboardAvoid>

@@ -28,6 +28,7 @@ import type {
 import { PROTOCOL_VERSION } from '../../../app/src/protocol';
 import { DshRealClient, type RealSessionListItem } from './dshClient';
 import { projectRecords, type RealRecord } from './project';
+import { promptWithProotFiles } from './promptParts';
 import { canonicalRunId, canonicalTurnId, liveBlockId, mergeLiveTurn } from '../../../app/src/protocol/turns';
 import { DeviceStore } from './devices';
 
@@ -81,6 +82,12 @@ function basename(p: string | undefined): string {
   if (!p) return '';
   const parts = p.split(/[\\/]/).filter(Boolean);
   return parts[parts.length - 1] ?? '';
+}
+
+/** 用户回合的展示文案：附件计数与模型看到的正文分开算 */
+function userDisplayText(cleanText: string, rawText: string, extraCount: number): string {
+  if (cleanText.length > 0) return extraCount > 0 ? `${cleanText}\n[已附带 ${extraCount} 个文件]` : rawText;
+  return extraCount > 0 ? `[已发送 ${extraCount} 个附件]` : rawText;
 }
 
 /** 工具参数可能是 JSON 字符串或对象；实时 tool 行也要有可读摘要 */
@@ -957,21 +964,17 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     },
 
     // 真引擎的发消息：session/prompt。mode=queue 排队，steer 立刻插入当前回合。
-    'sessions.send': async ({ sessionId, text, attachments }) => {
+    'sessions.send': async ({ sessionId, text, attachments, files }) => {
       startFollow(sessionId);
       const cleanText = text.trim();
       const attList = attachments ?? [];
-      const displayText =
-        cleanText.length > 0
-          ? attList.length > 0
-            ? `${cleanText}\n[已附带 ${attList.length} 个文件]`
-            : text
-          : attList.length > 0
-            ? `[已发送 ${attList.length} 个附件]`
-            : text;
-      broadcastUserTurn(sessionId, displayText);
+      const fileList = files ?? [];
+      // 附件由原生收件复制进 workspace/uploads，这里只把 /root/work 下的路径告诉模型，
+      // 不再走 fileUploads/upload 的 base64（旧客户端的 receipts 继续兼容）。
+      const promptText = promptWithProotFiles(cleanText, fileList);
+      broadcastUserTurn(sessionId, userDisplayText(cleanText, text, attList.length + fileList.length));
       const parts: Array<Record<string, unknown>> = [
-        { type: 'text', text: cleanText.length > 0 ? text : '请查看并处理我上传的附件。' },
+        { type: 'text', text: promptText.length > 0 ? promptText : '请查看并处理我上传的附件。' },
       ];
       for (const receiptId of attList) parts.push({ type: 'file', receiptId });
       await client.rpc('session/prompt', {
@@ -985,21 +988,15 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { accepted: true as const, runId: crypto.randomUUID() };
     },
 
-    'sessions.steer': async ({ sessionId, text, attachments }) => {
+    'sessions.steer': async ({ sessionId, text, attachments, files }) => {
       startFollow(sessionId);
       const cleanText = text.trim();
       const attList = attachments ?? [];
-      const displayText =
-        cleanText.length > 0
-          ? attList.length > 0
-            ? `${cleanText}\n[已附带 ${attList.length} 个文件]`
-            : text
-          : attList.length > 0
-            ? `[已发送 ${attList.length} 个附件]`
-            : text;
-      broadcastUserTurn(sessionId, displayText);
+      const fileList = files ?? [];
+      const promptText = promptWithProotFiles(cleanText, fileList);
+      broadcastUserTurn(sessionId, userDisplayText(cleanText, text, attList.length + fileList.length));
       const parts: Array<Record<string, unknown>> = [
-        { type: 'text', text: cleanText.length > 0 ? text : '请查看并处理我上传的附件。' },
+        { type: 'text', text: promptText.length > 0 ? promptText : '请查看并处理我上传的附件。' },
       ];
       for (const receiptId of attList) parts.push({ type: 'file', receiptId });
       await client.rpc('session/prompt', {

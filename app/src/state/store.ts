@@ -35,12 +35,19 @@ import { LocalEngineClient } from '../engine/light/localClient';
 import type { LightHost } from '../engine/light/host';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
 import { isAppActive, openUrl } from '../lib/platform';
-import { getInitialShare, readFileBase64 } from '../lib/share';
-import type { AttachmentKind } from '../lib/pickImage';
+import {
+  intakeFiles,
+  intakeImagePicker,
+  intakeShare,
+  pickAttachments,
+} from '../lib/attachments/intake';
+import { classify, hashPrefix } from '../lib/attachments/classify';
+import type { AttachmentEngine, AttachmentKind, IntakeSource } from '../lib/attachments/types';
 import type {
   AccountState,
   Approval,
   CatalogProvider,
+  FileRef,
   ProviderModel,
   ProviderProtocol,
   ProviderRow,
@@ -64,14 +71,43 @@ import {
   sameBlock,
 } from '../protocol/turns';
 
-export interface PendingAttachment {
-  /** 已上传拿到的回执 id；列表页暂存阶段为 staged-* 临时 id */
-  receiptId: string;
-  name: string;
-  kind?: AttachmentKind;
-  /** 列表页尚未创建会话时暂存的 base64，建会话后自动上传 */
-  base64?: string;
-  uploading?: boolean;
+/**
+ * 待发附件：原生收件落盘后的路径引用 + 分类结果。
+ * 1.3 起没有整文件编码 / 回执 id，发消息时直接把 `files: FileRef[]` 交给引擎。
+ */
+export interface PendingAttachment extends FileRef {
+  /** `<hash16>:<name>`，去重键也是 React key */
+  id: string;
+  kind: AttachmentKind;
+  engine: AttachmentEngine;
+  /** 只保存路径、不解析内容（PDF / 旧 Office / 音视频 / 未知格式） */
+  saveOnly: boolean;
+  /** chip 下面那行提示（PDF 暂不解析 / 超过 20MB 只按路径） */
+  hint?: string;
+  /** 收件中不可发送；1.3 的收件在 append 前就完成，正常都是 ready */
+  status: 'ready' | 'reading';
+}
+
+/** `+` 面板各类附件的系统选择器 MIME */
+const ATTACH_MIME: Record<AttachmentKind, string> = {
+  image: 'image/*',
+  document: 'application/*',
+  file: '*/*',
+  video: 'video/*',
+  audio: 'audio/*',
+};
+
+/** PendingAttachment → 协议里的 FileRef（只发引擎需要的字段） */
+function toFileRef(item: PendingAttachment): FileRef {
+  return {
+    path: item.path,
+    relPath: item.relPath,
+    name: item.name,
+    ...(item.displayName ? { displayName: item.displayName } : {}),
+    ...(item.mime ? { mime: item.mime } : {}),
+    ...(typeof item.bytes === 'number' ? { bytes: item.bytes } : {}),
+    ...(item.hash ? { hash: item.hash } : {}),
+  };
 }
 
 const LOCAL_DEFAULT_CAPS: Capabilities = {
@@ -170,8 +206,10 @@ export interface AppState {
   providers: ProviderRow[];
   /** 内置提供商目录（第三方） */
   providerCatalog: CatalogProvider[];
-  /** 从系统分享菜单进来的内容（冷启动读一次） */
-  pendingShare: { text?: string; imagePath?: string; imageName?: string } | null;
+  /** 从系统分享菜单进来的文字（冷启动/回前台读一次；文件已落 uploads 直接进 pendingAttachments） */
+  pendingShare: { text?: string } | null;
+  /** 原生收件进行中（读取大文件时禁用发送） */
+  attaching: boolean;
   /** 本机引擎（原生宿主服务）的状态；null 表示这台设备不支持 */
   host: HostStatus | null;
   /** 本机引擎最近日志 */
@@ -304,6 +342,7 @@ export class Store {
     providers: [],
     providerCatalog: [],
     pendingShare: null,
+    attaching: false,
     host: null,
     hostLogs: [],
     hostEngineCmd: '',
@@ -981,37 +1020,24 @@ export class Store {
 
   /* ------------------------ 分享进来的内容 ------------------------ */
 
-  /** 冷启动时读一次「分享到锦囊」；没有就什么都不做 */
-  async consumeInitialShare(): Promise<void> {
-    const share = await getInitialShare();
+  /**
+   * 冷启动 / 回前台时读一次「分享到锦囊」。
+   * 文字进输入框；文件已由原生收件复制进 workspace/uploads，直接挂进待发列表。
+   */
+  async consumeShare(): Promise<void> {
+    const share = await intakeShare();
     if (!share) return;
-    if (!share.text && !share.path) return;
-    this.patch({
-      pendingShare: {
-        ...(share.text ? { text: share.text } : {}),
-        ...(share.path ? { imagePath: share.path } : {}),
-        ...(share.name ? { imageName: share.name } : {}),
-      },
-    });
+    if (share.files.length > 0) this.appendIntake(share.files);
+    if (share.errors?.length) this.setError(share.errors[0] ?? '有附件没能读取');
+    if (share.text) this.patch({ pendingShare: { text: share.text } });
   }
 
   /** 首页取走分享来的文字（取完清掉，只填一次输入框） */
   takeShareText(): string | null {
     const text = this.state.pendingShare?.text;
     if (!text) return null;
-    const { text: _drop, ...rest } = this.state.pendingShare ?? {};
-    this.patch({ pendingShare: Object.keys(rest).length > 0 ? rest : null });
+    this.patch({ pendingShare: null });
     return text;
-  }
-
-  /** 当前会话里把分享来的图片传上去 */
-  async attachSharedImage(): Promise<void> {
-    const share = this.state.pendingShare;
-    if (!share?.imagePath || !this.state.currentId || !this.client) return;
-    const base64 = await readFileBase64(share.imagePath);
-    if (!base64) return;
-    await this.uploadAttachment(base64, share.imageName ?? 'share');
-    this.patch({ pendingShare: share.text ? { text: share.text } : null });
   }
 
   /* ------------------------ 模型提供商 ------------------------ */
@@ -1164,7 +1190,7 @@ export class Store {
    */
   async startWith(text: string): Promise<boolean> {
     const trimmed = text.trim();
-    const hasAttachments = this.state.pendingAttachments.length > 0 || Boolean(this.state.pendingShare?.imagePath);
+    const hasAttachments = this.state.pendingAttachments.length > 0;
     if (!trimmed && !hasAttachments) return false;
     this.noteUserActivity();
     if (!this.client || this.state.conn !== 'connected') {
@@ -1191,7 +1217,6 @@ export class Store {
       // 首页选的模型/权限带进新会话
       if (draftPermission) await this.setPermission(draftPermission);
       if (draftModel) await this.setModel(draftModel.provider, draftModel.model, draftModel.reasoningEffort);
-      if (this.state.pendingShare?.imagePath) await this.attachSharedImage();
       return await this.send(trimmed);
     } catch (err) {
       this.fail(err);
@@ -1204,44 +1229,31 @@ export class Store {
     const trimmed = text.trim();
     const stagedList = this.state.pendingAttachments.slice();
     if (!this.client || !currentId || !detail || (!trimmed && stagedList.length === 0)) return false;
-    if (stagedList.some((a) => a.uploading)) {
-      this.setError('附件还在上传中，请稍候…');
+    if (this.state.attaching) {
+      this.setError('附件还在读取中，请稍候…');
       return false;
     }
     this.noteUserActivity();
     const running = detail.status === 'running' || detail.status === 'waiting_approval';
-    this.patch({ busy: true, error: null, pendingAttachments: [] });
+    // 附件只传路径引用；文件早已由原生收件落进 workspace/uploads
+    const files = stagedList.filter((item) => item.status === 'ready').map(toFileRef);
+    this.patch({ busy: true, error: null });
     try {
-      const receiptIds: string[] = [];
-      for (const item of stagedList) {
-        if (item.base64) {
-          const uploaded = await this.client.request('attachments.upload', {
-            sessionId: currentId,
-            data: item.base64,
-            name: item.name,
-          });
-          receiptIds.push(uploaded.receiptId);
-        } else if (item.receiptId && !item.receiptId.startsWith('staged-')) {
-          receiptIds.push(item.receiptId);
-        }
-      }
-
       const payload = {
         sessionId: currentId,
         text: trimmed,
-        ...(receiptIds.length > 0 ? { attachments: receiptIds } : {}),
+        ...(files.length > 0 ? { files } : {}),
       };
       if (running) await this.client.request('sessions.steer', payload);
       else await this.client.request('sessions.send', payload);
       // 提交成功后立刻置为 running：停止按钮要马上出现，
       // 下一条消息也要走 steer（插话）而不是再排一个回合。
       const { detail: latest } = this.state;
-      if (latest) this.patch({ busy: false, detail: { ...latest, status: 'running' } });
-      else this.patch({ busy: false });
+      // 附件只在发送成功后清空：失败时用户不用重选
+      this.patch({ busy: false, pendingAttachments: [], ...(latest ? { detail: { ...latest, status: 'running' } } : {}) });
       return true;
     } catch (err) {
-      // 发送失败时把附件放回待发列表，避免用户重选
-      this.patch({ pendingAttachments: stagedList });
+      this.patch({ busy: false });
       this.fail(err);
       return false;
     }
@@ -1309,47 +1321,84 @@ export class Store {
     }
   }
 
-  /* ---------------------------- 模型 ---------------------------- */
+  /* ---------------------------- 附件 ---------------------------- */
 
   /**
-   * 上传或暂存一个附件，成功后挂进待发送列表。
-   * - 在会话详情页（有 currentId 且已连上）：立即调 attachments.upload 拿回执；
-   * - 在首页列表页（还没建会话）：先暂存在内存 pendingAttachments 里，点发送建会话后自动上传。
+   * 相册 / 系统文件选择器 → 原生收件进 workspace/uploads → 挂进待发列表。
+   * 图片相册只拿 URI（不把图片读进 JS 内存），其它类型走 SAF（原生内部已收件）。
    */
-  async uploadAttachment(base64: string, name: string, kind: AttachmentKind = 'file'): Promise<void> {
-    const { currentId } = this.state;
-    if (!currentId || !this.client || this.state.conn !== 'connected') {
-      const stagedId = `staged-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      this.patch({
-        error: null,
-        pendingAttachments: [...this.state.pendingAttachments, { receiptId: stagedId, name, kind, base64 }],
-      });
-      return;
-    }
-
-    const tempId = `uploading-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    this.patch({
-      error: null,
-      pendingAttachments: [...this.state.pendingAttachments, { receiptId: tempId, name, kind, uploading: true }],
-    });
+  async attachFromPicker(kind: AttachmentKind): Promise<void> {
+    if (this.state.attaching) return;
     try {
-      const res = await this.client.request('attachments.upload', { sessionId: currentId, data: base64, name });
-      this.patch({
-        pendingAttachments: this.state.pendingAttachments.map((a) =>
-          a.receiptId === tempId ? { receiptId: res.receiptId, name: res.name ?? name, kind, uploading: false } : a,
-        ),
-      });
+      if (kind === 'image') {
+        // null = 用户在相册里取消；[] = 相册不可用，回退到系统文件选择器
+        const picked = await intakeImagePicker();
+        if (picked === null) return;
+        if (picked.length > 0) {
+          await this.attachFiles(picked);
+          return;
+        }
+      }
+      const refs = await pickAttachments(ATTACH_MIME[kind]);
+      this.attachRefs(refs);
     } catch (err) {
-      this.patch({
-        pendingAttachments: this.state.pendingAttachments.filter((a) => a.receiptId !== tempId),
-      });
-      this.fail(err);
+      this.setError(err instanceof Error ? err.message : String(err));
     }
   }
 
-  removeAttachment(receiptId: string): void {
-    this.patch({ pendingAttachments: this.state.pendingAttachments.filter((a) => a.receiptId !== receiptId) });
+  /** 一批来源交给原生收件；全失败时原生会 reject（中文原因），这里原样展示 */
+  async attachFiles(sources: IntakeSource[]): Promise<void> {
+    const list = sources.filter((source) => Boolean(source.uri || source.path));
+    if (list.length === 0 || this.state.attaching) return;
+    this.patch({ attaching: true, error: null });
+    try {
+      const refs = await intakeFiles(list);
+      if (refs.length === 0) {
+        this.setError('没能读取附件；如果是从相册/文件选择器选的，请重新选一次');
+        return;
+      }
+      this.attachRefs(refs);
+    } catch (err) {
+      this.setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.patch({ attaching: false });
+    }
   }
+
+  /** 已落盘的 FileRef[] → 待发列表（分类 + 去重 + 提示） */
+  private attachRefs(refs: FileRef[]): void {
+    if (refs.length === 0) return;
+    const added = this.appendIntake(refs);
+    if (added === 0) this.setError('这些附件已经在待发列表里了');
+  }
+
+  /** 按 `<hash16>:<name>` 去重后追加；返回新增数量 */
+  private appendIntake(refs: FileRef[]): number {
+    const existing = this.state.pendingAttachments;
+    const added: PendingAttachment[] = [];
+    for (const ref of refs) {
+      const id = `${hashPrefix(ref.hash ?? ref.relPath, 16)}:${ref.name}`;
+      if (existing.some((item) => item.id === id) || added.some((item) => item.id === id)) continue;
+      const classified = classify(ref.mime, ref.name, ref.bytes);
+      added.push({
+        ...ref,
+        id,
+        kind: classified.kind,
+        engine: classified.engine,
+        saveOnly: classified.saveOnly,
+        ...(classified.hint ? { hint: classified.hint } : {}),
+        status: 'ready',
+      });
+    }
+    if (added.length > 0) this.patch({ pendingAttachments: [...existing, ...added] });
+    return added.length;
+  }
+
+  removeAttachment(id: string): void {
+    this.patch({ pendingAttachments: this.state.pendingAttachments.filter((a) => a.id !== id) });
+  }
+
+  /* ---------------------------- 模型 ---------------------------- */
 
   /** 拉一次宿主可用模型；打开面板前调用，失败不打扰用户 */
   async refreshModels(): Promise<void> {

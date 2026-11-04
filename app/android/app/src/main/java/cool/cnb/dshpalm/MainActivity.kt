@@ -9,6 +9,7 @@ import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
+import cool.cnb.dshpalm.host.ShareInbox
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
@@ -18,11 +19,15 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    // 冷启动：先收下分享 Intent，等 JS 调 intakeShare 时再复制文件
+    ShareInbox.offer(intent)
   }
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
+    // App 在后台时分享进来也要接住（见 PITFALLS E2）
+    ShareInbox.offer(intent)
   }
 
   /**

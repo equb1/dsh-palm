@@ -1,27 +1,34 @@
 import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import type { AttachmentKind } from '../lib/pickImage';
+import type { AttachmentEngine, AttachmentKind } from '../lib/attachments/types';
 import type { PermissionOption, Preset } from '../protocol';
+import { AttachmentChips } from './AttachmentChips';
 import { PickerSheet } from './components';
 import { colors, radius, space } from './theme';
 
 export interface ComposerAttachment {
-  receiptId: string;
+  id: string;
   name: string;
-  kind?: AttachmentKind;
-  uploading?: boolean;
+  kind: AttachmentKind;
+  engine?: AttachmentEngine;
+  /** 只保存路径、不解析内容（PDF/旧 Office/音视频/未知格式） */
+  saveOnly?: boolean;
+  hint?: string;
+  status?: 'ready' | 'reading';
 }
 
 const KIND_BADGE: Record<AttachmentKind, string> = {
   image: '图',
+  document: '文',
+  file: '件',
   video: '视',
   audio: '音',
-  file: '件',
 };
 
 const ATTACH_TYPES: Array<{ kind: AttachmentKind; label: string }> = [
   { kind: 'image', label: '图片' },
+  { kind: 'document', label: '文档' },
   { kind: 'file', label: '文件' },
   { kind: 'video', label: '视频' },
   { kind: 'audio', label: '音频' },
@@ -62,6 +69,7 @@ export function Composer({
   canStop = true,
   canSteer = true,
   attachments = [],
+  attaching = false,
   onAttach,
   onPickAttachment,
   onRemoveAttachment,
@@ -84,15 +92,17 @@ export function Composer({
   canStop?: boolean;
   canSteer?: boolean;
   attachments?: ComposerAttachment[];
+  /** 原生收件进行中（大文件复制时禁用发送） */
+  attaching?: boolean;
   onAttach?: () => void;
   onPickAttachment?: (kind: AttachmentKind) => void;
-  onRemoveAttachment?: (receiptId: string) => void;
+  onRemoveAttachment?: (id: string) => void;
 }): React.ReactElement {
   const hasText = draft.trim().length > 0;
   const hasAttachments = attachments.length > 0;
-  const anyUploading = attachments.some((a) => a.uploading);
+  const reading = attaching || attachments.some((a) => a.status === 'reading');
   const showStop = running && !hasText && !hasAttachments && canStop;
-  const canSend = (hasText || hasAttachments) && !anyUploading && (!running || canSteer);
+  const canSend = (hasText || hasAttachments) && !reading && (!running || canSteer);
   const [contentHeight, setContentHeight] = React.useState(40);
   const [plusOpen, setPlusOpen] = React.useState(false);
   const [presetMenuOpen, setPresetMenuOpen] = React.useState(false);
@@ -111,6 +121,16 @@ export function Composer({
   const showBar =
     (permissions.length > 0 && Boolean(onPickPermission)) || (showPresets && presets.length > 0);
 
+  // chip 下面那行：只保存/不解析、超大文件、读取中，各说一句
+  const hints = React.useMemo(() => {
+    const out: string[] = [];
+    for (const item of attachments) {
+      if (item.hint && !out.includes(item.hint)) out.push(item.hint);
+    }
+    if (reading) out.push('正在读取附件…');
+    return out;
+  }, [attachments, reading]);
+
   const handlePlus = () => {
     if (onPickAttachment) setPlusOpen((v) => !v);
     else if (onAttach) onAttach();
@@ -127,29 +147,24 @@ export function Composer({
 
   return (
     <View style={styles.wrap}>
-      {attachments.length > 0 ? (
+      {attachments.length > 0 || hints.length > 0 ? (
         <View style={styles.tray}>
-          {attachments.map((a) => {
-            const badge = KIND_BADGE[a.kind ?? 'file'] ?? '件';
-            return (
-              <Pressable
-                key={a.receiptId}
-                accessibilityRole="button"
-                accessibilityLabel={'移除附件 ' + a.name}
-                onPress={() => onRemoveAttachment?.(a.receiptId)}
-                style={[styles.attachChip, a.uploading && { opacity: 0.65 }]}
-              >
-                <View style={styles.attachBadge}>
-                  <Text style={styles.attachBadgeText}>{badge}</Text>
-                </View>
-                <Text style={styles.attachChipText} numberOfLines={1}>
-                  {a.name}
-                  {a.uploading ? ' · 上传中…' : ''}
-                </Text>
-                <Text style={styles.attachChipClose}>×</Text>
-              </Pressable>
-            );
-          })}
+          {attachments.length > 0 ? (
+            <AttachmentChips
+              items={attachments.map((a) => ({
+                id: a.id,
+                name: a.name,
+                kind: a.kind,
+                ...(a.engine ? { engine: a.engine } : {}),
+              }))}
+              {...(onRemoveAttachment ? { onRemove: onRemoveAttachment } : {})}
+            />
+          ) : null}
+          {hints.length > 0 ? (
+            <Text style={styles.attachHint} numberOfLines={3}>
+              {hints.join('；')}
+            </Text>
+          ) : null}
         </View>
       ) : null}
 
@@ -321,7 +336,8 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
     gap: 6,
   },
-  tray: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  tray: { gap: 4 },
+  attachHint: { color: colors.textDim, fontSize: 11.5, lineHeight: 16, paddingHorizontal: 4 },
   plusPanel: {
     flexDirection: 'row',
     gap: 8,
@@ -347,27 +363,6 @@ const styles = StyleSheet.create({
   },
   plusIconText: { color: colors.blue, fontSize: 13, fontWeight: '700' },
   plusLabel: { color: colors.text, fontSize: 12 },
-  attachChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    maxWidth: 220,
-    backgroundColor: colors.glassStrong,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  attachBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    backgroundColor: colors.blueSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attachBadgeText: { color: colors.blue, fontSize: 10, fontWeight: '700', includeFontPadding: false },
-  attachChipText: { color: colors.textDim, fontSize: 12, flexShrink: 1 },
-  attachChipClose: { color: colors.textFaint, fontSize: 14, paddingLeft: 2 },
   bar: { flexDirection: 'row', gap: 6, paddingRight: space.sm },
   barPill: {
     flexDirection: 'row',

@@ -141,6 +141,7 @@ export class Agent {
       '能读写一个真实的工作区 /workspace，并能执行受限的 bash 命令。',
       '',
       `工作区：${toDisplayPath('/')}`,
+      '用户发来的文件在 /workspace/uploads，直接用路径读取，不要用 base64。',
       permissionNote(session.permission),
       '',
       TOOL_CONTEXT_HELP,

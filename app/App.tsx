@@ -25,11 +25,11 @@ export default function App(): React.ReactElement {
   // dshpalm://pair?url=ws://192.168.1.7:8788/ws&code=246810 —— 扫码/外部唤起走这里
   // 冷启动及每次回到前台时：读系统分享内容 & 检查通知点击跳转
   React.useEffect(() => {
-    void store.consumeInitialShare();
+    void store.consumeShare();
     void store.checkNotificationNavigation();
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active') {
-        void store.consumeInitialShare();
+        void store.consumeShare();
         void store.checkNotificationNavigation();
         void store.onAppForeground().catch(() => undefined);
       }
