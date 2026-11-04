@@ -32,6 +32,10 @@ interface HostNativeModule {
   readUiCache?(): Promise<string | null>;
   writeUiCache?(json: string): Promise<boolean>;
   getInitialNotificationSession?(): Promise<string | null>;
+  /** 当前有没有回合在跑（onTrimMemory 回收 proot 时用） */
+  setRunActive?(active: boolean): Promise<boolean>;
+  /** 充电 / WiFi 状态（智能预热用） */
+  deviceConditions?(): Promise<{ charging: boolean; wifi: boolean }>;
 }
 
 const native: HostNativeModule | null =
@@ -39,6 +43,34 @@ const native: HostNativeModule | null =
 
 /** 这台设备能不能自己起引擎 */
 export const hostAvailable = native !== null;
+
+/** 设备条件：只有「智能预热」档用 */
+export interface DeviceConditions {
+  charging: boolean;
+  wifi: boolean;
+}
+
+/** 告诉原生层当前有没有回合在跑；老 APK 没这个方法时静默跳过 */
+export async function setHostRunActive(active: boolean): Promise<boolean> {
+  if (!native?.setRunActive) return false;
+  try {
+    return await native.setRunActive(active);
+  } catch {
+    return false;
+  }
+}
+
+/** 读充电 / WiFi 状态；问不到返回 null（智能预热就不会触发） */
+export async function deviceConditions(): Promise<DeviceConditions | null> {
+  if (!native?.deviceConditions) return null;
+  try {
+    const result = await native.deviceConditions();
+    if (!result || typeof result.charging !== 'boolean' || typeof result.wifi !== 'boolean') return null;
+    return { charging: result.charging, wifi: result.wifi };
+  } catch {
+    return null;
+  }
+}
 
 export async function startHost(options?: {
   engineCmd?: string;

@@ -14,6 +14,8 @@ import {
 import type { SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
 import { IconButton, Pill } from './parts';
+import { EngineBadge } from './EngineBadge';
+import { badgeFor, canSwitch } from '../state/engineManager';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { ModelSheet } from './ModelSheet';
@@ -45,6 +47,10 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const programmaticUntil = React.useRef(0);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
+  const engineBadge = badgeFor(state.engine);
+  const engineSwitch = canSwitch(state.engine);
+  // 切换引擎后 currentId 被清空，但 detail 留在屏幕上：只读，不再往旧引擎里发消息
+  const readOnly = !state.currentId;
   const turns = session.turns;
   let lastAssistantIndex = -1;
   for (let i = turns.length - 1; i >= 0; i--) {
@@ -168,9 +174,16 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       return;
     }
     if (!hasText && !hasAttachments) return;
+    if (readOnly) {
+      store.setError('已切换引擎，这个会话只读；回首页新建会话继续。');
+      return;
+    }
     const text = draft.trim();
-    setDraft('');
-    void store.send(text);
+    // 发送成功才清空草稿；失败时把用户这句话放回去
+    void store.send(text).then((ok) => {
+      if (ok) setDraft((current) => (current === draft ? '' : current));
+      else setDraft((current) => (current.trim().length > 0 ? current : text));
+    });
   };
 
   const renderTurn = React.useCallback(
@@ -214,8 +227,25 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             {effortName ? ` · ${effortName}` : ''}
           </Text>
         </Pill>
+        <EngineBadge
+          kind={engineBadge.kind}
+          label={engineBadge.label}
+          onPress={
+            engineSwitch.ok
+              ? () => {
+                  void store.switchEngine(state.engine.mode === 'light' ? 'full' : 'light');
+                }
+              : undefined
+          }
+        />
         <View style={{ flex: 1 }} />
       </View>
+
+      {readOnly ? (
+        <Pressable onPress={() => store.closeSession()}>
+          <Text style={styles.readOnly}>已切换引擎，这个会话只读；点这里回首页新建会话继续 ›</Text>
+        </Pressable>
+      ) : null}
 
       <SmoothKeyboardAvoid style={styles.bodyWrap}>
         <View style={styles.listWrap}>
@@ -330,6 +360,13 @@ const styles = StyleSheet.create({
   titleText: { color: colors.text, fontSize: 14, fontWeight: '600' },
   presetPill: { flexShrink: 1 },
   presetText: { color: colors.textDim, fontSize: 12 },
+  readOnly: {
+    color: colors.warn,
+    fontSize: 11.5,
+    lineHeight: 17,
+    paddingHorizontal: space.lg,
+    paddingBottom: 4,
+  },
 
   listWrap: { flex: 1 },
   list: { flex: 1 },

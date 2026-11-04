@@ -47,6 +47,16 @@ object HostRuntime {
     private const val LOG_LIMIT = 500
     private const val READY_TIMEOUT_MS = 40_000L
 
+    /**
+     * onTrimMemory 的两个档位（和 ComponentCallbacks2 里的常量同值）。
+     * - TRIM_STOP_NO_RUN：moderate 档，没有活跃回合才停 proot；
+     * - TRIM_STOP_ALWAYS：critical/complete 档，直接停。
+     */
+    const val TRIM_STOP_NO_RUN = 10      // TRIM_MEMORY_RUNNING_LOW
+    const val TRIM_STOP_ALWAYS = 15      // TRIM_MEMORY_RUNNING_CRITICAL
+    const val TRIM_STOP_MODERATE = 60    // TRIM_MEMORY_MODERATE
+    const val TRIM_STOP_COMPLETE = 80    // TRIM_MEMORY_COMPLETE
+
     /** 引擎（dsh web）固定监听本机 8787，桥的 {url} 占位符替换成它 */
     private const val ENGINE_URL = "http://127.0.0.1:8787"
 
@@ -85,12 +95,55 @@ object HostRuntime {
     @Volatile private var progress = -1
     @Volatile private var pairCode: String? = null
     @Volatile private var lastPublished = ""
+    /** 有没有回合在跑（JS 的 run.started / run.finished 会同步过来） */
+    @Volatile private var activeRun = false
     /** 连续启动失败次数：到 3 次就标记"下次安全模式" */
     @Volatile private var consecutiveFailures = 0
     private var appContext: Context? = null
 
     @Synchronized
     fun status(): Status = Status(engine, bridge, port, lastError, since, phase, progress, pairCode)
+
+    /** JS 通知：当前有/没有活跃回合；onTrimMemory 在 moderate 档据此决定停不停 proot */
+    fun setActiveRun(active: Boolean) {
+        if (activeRun == active) return
+        activeRun = active
+        log("[host] activeRun=$active")
+    }
+
+    fun hasActiveRun(): Boolean = activeRun
+
+    /**
+     * 这一内存级别要不要停 proot（纯函数，方便日志/测试）。
+     * critical/complete 无条件停；moderate 档只在没有活跃回合时停。
+     */
+    fun shouldStopOnTrim(level: Int, runActive: Boolean = activeRun): Boolean = when (level) {
+        TRIM_STOP_COMPLETE, TRIM_STOP_ALWAYS -> true
+        TRIM_STOP_MODERATE, TRIM_STOP_NO_RUN -> !runActive
+        else -> false
+    }
+
+    /**
+     * 系统内存回收：优先停 proot（全 App 最重的那块）。
+     * stop() 会扫 /proc、等进程退出，必须放到工作线程；停完顺手撤掉前台服务通知。
+     */
+    fun onTrimMemory(level: Int) {
+        val stop = shouldStopOnTrim(level)
+        log("[host] onTrimMemory level=$level activeRun=$activeRun stop=$stop")
+        if (!stop) return
+        if (engine == "stopped" && bridge == "stopped") {
+            log("[host] onTrimMemory：proot 已经不在跑")
+            return
+        }
+        Thread({
+            runCatching { stop() }
+            runCatching {
+                val ctx = appContext
+                if (ctx != null) ctx.stopService(android.content.Intent(ctx, HostService::class.java))
+            }
+            log("[host] onTrimMemory 已停 proot 并撤掉常驻通知")
+        }, "dsh-trim-stop").start()
+    }
 
     fun logs(): List<String> = synchronized(logs) { logs.toList() }
 

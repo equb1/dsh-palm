@@ -139,7 +139,9 @@ class HostService : Service() {
                 "DSH_PALM_DEVICES" to "/bridge/devices.json",
             ),
         )
-        return START_STICKY
+        // START_NOT_STICKY：系统回收后不要自己把 proot 拉起来。
+        // 轻引擎默认之后，完整引擎必须是用户显式触发的。
+        return START_NOT_STICKY
     }
 
     /**

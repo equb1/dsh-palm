@@ -14,27 +14,13 @@ import { parseDeepLink } from './src/lib/lightLink';
 export default function App(): React.ReactElement {
   const state = useStore();
 
-  // 本机宿主：App 一起来就把本地缓存恢复 + 引擎/桥拉起来（已经跑着的话服务会忽略重复启动）
-  const autoStartHost = React.useRef(false);
+  // 冷启动：恢复本地缓存 → 连轻引擎（冷启动到可输入 <1s，proot 不自动连接）
+  const autoStarted = React.useRef(false);
   React.useEffect(() => {
-    if (!hostAvailable || autoStartHost.current) return;
-    autoStartHost.current = true;
-    void store.startLocalHost().catch(() => undefined);
+    if (autoStarted.current) return;
+    autoStarted.current = true;
+    void store.engineStart().catch(() => undefined);
   }, []);
-
-  // 引擎/桥就绪后自动连一次，连上了就停止高频轮询
-  React.useEffect(() => {
-    if (!hostAvailable || state.conn === 'connected') return;
-    const tick = (): void => {
-      void store
-        .refreshHost()
-        .then(() => store.maybeAutoConnect())
-        .catch(() => undefined);
-    };
-    tick();
-    const timer = setInterval(tick, 400);
-    return () => clearInterval(timer);
-  }, [state.conn]);
 
   // dshpalm://pair?url=ws://192.168.1.7:8788/ws&code=246810 —— 扫码/外部唤起走这里
   // 冷启动及每次回到前台时：读系统分享内容 & 检查通知点击跳转
@@ -45,12 +31,7 @@ export default function App(): React.ReactElement {
       if (next === 'active') {
         void store.consumeInitialShare();
         void store.checkNotificationNavigation();
-        if (hostAvailable && store.getSnapshot().conn !== 'connected') {
-          void store
-            .refreshHost()
-            .then(() => store.maybeAutoConnect())
-            .catch(() => undefined);
-        }
+        void store.onAppForeground().catch(() => undefined);
       }
     });
     return () => sub.remove();
@@ -71,6 +52,7 @@ export default function App(): React.ReactElement {
       void store.connectLight(link.setup).then(() => {
         store.closeSession();
         store.closeSettings();
+        store.closeLightSetup();
       });
     };
     void Linking.getInitialURL()
@@ -123,7 +105,7 @@ export default function App(): React.ReactElement {
         <StatusBar barStyle="dark-content" />
         <View style={styles.webFrame}>
           {screen}
-          {hostAvailable ? <LaunchOverlay state={state} /> : null}
+          {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
         </View>
       </View>
     );
@@ -133,7 +115,7 @@ export default function App(): React.ReactElement {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
       {screen}
-      {hostAvailable ? <LaunchOverlay state={state} /> : null}
+      {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
     </View>
   );
 }

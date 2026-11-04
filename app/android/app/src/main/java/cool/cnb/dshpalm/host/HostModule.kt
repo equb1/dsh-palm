@@ -102,6 +102,48 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     }
 
     /**
+     * JS 同步「有没有回合在跑」。
+     * HostRuntime.onTrimMemory 在 moderate 档只会在没有活跃回合时停 proot，
+     * 避免把正在生成的回复一起杀掉。
+     */
+    @ReactMethod
+    fun setRunActive(active: Boolean, promise: Promise) {
+        try {
+            HostRuntime.setActiveRun(active)
+            promise.resolve(true)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    /** 智能预热用：当前是否在充电 + 是否连的是 WiFi */
+    @ReactMethod
+    fun deviceConditions(promise: Promise) {
+        try {
+            val battery = ctx.getSystemService(android.os.BatteryManager::class.java)
+            val charging = battery?.isCharging == true
+            val connectivity = ctx.getSystemService(android.net.ConnectivityManager::class.java)
+            var wifi = false
+            if (connectivity != null) {
+                val network = connectivity.activeNetwork
+                if (network != null) {
+                    val capabilities = connectivity.getNetworkCapabilities(network)
+                    wifi = capabilities?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true
+                }
+            }
+            promise.resolve(
+                Arguments.createMap().apply {
+                    putBoolean("charging", charging)
+                    putBoolean("wifi", wifi)
+                },
+            )
+        } catch (_: Throwable) {
+            // 问不到就让 JS 当成"不满足智能预热条件"
+            promise.resolve(null)
+        }
+    }
+
+    /**
      * 请求通知权限（Android 13+）。
      * 结果是异步的：这次返回当前状态，用户点完「允许」后下次调用才变 true。
      */

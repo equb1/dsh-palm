@@ -13,6 +13,8 @@ import type { SessionSummary } from '../protocol';
 import { pickAttachments, type AttachmentKind } from '../lib/pickImage';
 import { store, useStore } from './useStore';
 import { Dot, IconButton } from './parts';
+import { EngineBadge } from './EngineBadge';
+import { badgeFor, canSwitch } from '../state/engineManager';
 import { EmptyState } from './components';
 import { SessionDrawer } from './SessionDrawer';
 import { ModelSheet } from './ModelSheet';
@@ -84,20 +86,24 @@ export function HomeScreen(): React.ReactElement {
   }`;
   const hasText = draft.trim().length > 0;
 
-  // 首装解压 + 引擎冷启动有 10 多秒，这段时间首页别只显示"未连接"
-  const booting = state.conn !== 'connected' && state.host?.engine === 'starting';
-  const bootPct = state.host?.progress ?? 0;
-  const bootLabel = state.host?.phase
-    ? state.host.phase + (bootPct > 0 && bootPct < 100 ? ` ${bootPct}%` : '')
-    : '引擎启动中';
+  // 首装解压 + 完整引擎冷启动有 10 多秒，这段时间首页别只显示"未连接"
+  const engine = state.engine;
+  const engineBadge = badgeFor(engine);
+  const engineSwitch = canSwitch(engine);
+  const booting = engine.mode === 'starting-proot';
+  const bootHost = engine.host ?? state.host;
+  const bootPct = engine.progress > 0 ? engine.progress : (bootHost?.progress ?? 0);
+  const bootLabel = bootHost?.phase
+    ? bootHost.phase + (bootPct > 0 && bootPct < 100 ? ` ${bootPct}%` : '')
+    : '完整引擎启动中';
 
   const connColor =
     state.conn === 'connected' ? colors.ok : state.conn === 'reconnecting' || booting ? colors.warn : colors.danger;
   const connLabel =
-    state.conn === 'connected'
-      ? (state.caps?.host.name ?? '已连接')
-      : booting
-        ? bootLabel
+    booting
+      ? bootLabel
+      : state.conn === 'connected'
+        ? (state.caps?.host.name ?? '已连接')
         : state.conn === 'reconnecting'
           ? '重连中'
           : state.conn === 'connecting'
@@ -107,8 +113,11 @@ export function HomeScreen(): React.ReactElement {
   const send = (): void => {
     if (!hasText && state.pendingAttachments.length === 0) return;
     const text = draft.trim();
-    setDraft('');
-    void store.startWith(text);
+    // 发送成功才清空草稿：引擎没连上/切完整引擎失败时，用户这句话不能丢
+    void store.startWith(text).then((ok) => {
+      if (ok) setDraft((current) => (current === draft ? '' : current));
+      else setDraft((current) => (current.trim().length > 0 ? current : text));
+    });
   };
 
   const handlePickAttachment = (kind: AttachmentKind): void => {
@@ -133,15 +142,31 @@ export function HomeScreen(): React.ReactElement {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.brand}>锦囊</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="查看引擎连接状态"
-            onPress={() => store.openConnectModal()}
-            style={styles.connRow}
-          >
-            <Dot color={connColor} size={5} />
-            <Text style={styles.connText}>{connLabel}</Text>
-          </Pressable>
+          <View style={styles.subRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="查看引擎连接状态"
+              onPress={() => store.openConnectModal()}
+              style={styles.connRow}
+            >
+              <Dot color={connColor} size={5} />
+              <Text style={styles.connText} numberOfLines={1}>
+                {connLabel}
+              </Text>
+            </Pressable>
+            {/* 轻/完整角标：空闲时点一下切引擎，忙/有审批时不给点 */}
+            <EngineBadge
+              kind={engineBadge.kind}
+              label={engineBadge.label}
+              onPress={
+                engineSwitch.ok
+                  ? () => {
+                      void store.switchEngine(engine.mode === 'light' ? 'full' : 'light');
+                    }
+                  : undefined
+              }
+            />
+          </View>
         </View>
         {/* 模型胶囊在顶栏，和 dsh-go/聊天页一致 */}
         <Pressable
@@ -156,6 +181,12 @@ export function HomeScreen(): React.ReactElement {
           <Text style={styles.headerModelChevron}>▾</Text>
         </Pressable>
       </View>
+
+      {engine.mode === 'light' && !engine.lightReady && Boolean(engine.error) ? (
+        <Pressable accessibilityRole="button" onPress={() => store.openLightSetup()} style={styles.lightSetup}>
+          <Text style={styles.lightSetupText}>轻引擎未就绪 · 点这里配置模型渠道 ›</Text>
+        </Pressable>
+      ) : null}
 
       {state.pendingShare?.imagePath ? (
         <Pressable onPress={() => void store.attachSharedImage()}>
@@ -296,7 +327,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 16,
   },
-  connRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  subRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  lightSetup: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 16 },
+  lightSetupText: { color: colors.blue, fontSize: 11.5, textAlign: 'center' },
+  connRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   connText: { color: colors.textFaint, fontSize: 11 },
   disconnect: { color: colors.textDim, fontSize: 12 },
 

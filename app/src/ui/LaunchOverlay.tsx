@@ -27,9 +27,9 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
   const startTsRef = React.useRef(Date.now());
   const fadingOutRef = React.useRef(false);
 
-  const host = state.host;
-  const isConnected = state.conn === 'connected';
-  const isFailed = host?.engine === 'failed' || host?.bridge === 'failed';
+  const host = state.host ?? state.engine.host;
+  const isConnected = state.engine.mode === 'full';
+  const isFailed = Boolean(state.engine.error) && host?.engine === 'failed' && host?.bridge === 'failed';
   const isUnpacking = Boolean(host?.phase && host.phase.includes('解压'));
 
   // 徽标呼吸动效
@@ -69,6 +69,10 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
         setSmoothPct(Math.max(5, Math.min(95, host.progress)));
         return;
       }
+      if (state.engine.progress > 0 && state.engine.progress < 100) {
+        setSmoothPct(Math.max(5, Math.min(95, state.engine.progress)));
+        return;
+      }
       if (host?.bridge === 'ready') {
         setSmoothPct(96);
         return;
@@ -82,7 +86,7 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
       setSmoothPct((prev) => Math.max(prev, Math.min(88, curve)));
     }, 200);
     return () => clearInterval(timer);
-  }, [dismissed, isConnected, isUnpacking, host?.progress, host?.engine, host?.bridge]);
+  }, [dismissed, isConnected, isUnpacking, host?.progress, host?.engine, host?.bridge, state.engine.progress]);
 
   const dismissWithFade = React.useCallback((fast = false) => {
     if (fadingOutRef.current) return;
@@ -216,7 +220,8 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
               onPress={() => {
                 startTsRef.current = Date.now();
                 setSmoothPct(15);
-                void store.stopLocalHost().then(() => store.startLocalHost());
+                // 先取消这一轮，再重新切完整引擎；失败会自动回轻引擎
+                void store.reclaimProot('manual').then(() => store.switchEngine('full'));
               }}
             >
               <Text style={styles.actionBtnPrimaryText}>重新启动</Text>
@@ -227,8 +232,8 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
                 startTsRef.current = Date.now();
                 setSmoothPct(15);
                 void setHostSafeModeNext(true)
-                  .then(() => store.stopLocalHost())
-                  .then(() => store.startLocalHost());
+                  .then(() => store.reclaimProot('manual'))
+                  .then(() => store.switchEngine('full'));
               }}
             >
               <Text style={styles.actionBtnText}>安全模式重启</Text>

@@ -20,6 +20,13 @@ import { loadAccountPhone, saveAccountPhone } from '../lib/accountPhone';
 
 const REF = 'DEEPSEEK_API_KEY';
 
+/** 预热档位：触发式默认 / 智能预热（充电 + WiFi）/ 常备（高级） */
+const PREWARM_TIERS = [
+  { id: 'trigger' as const, label: '触发式' },
+  { id: 'smart' as const, label: '智能预热' },
+  { id: 'always' as const, label: '常备' },
+];
+
 /** 从宿主日志里捞本机引擎的 token（`dsh web: http://127.0.0.1:8787/?token=…`） */
 async function resolveEngineToken(): Promise<string | null> {
   const lines = await hostLogs();
@@ -80,6 +87,7 @@ export function SettingsScreen(): React.ReactElement {
 
   // 本机引擎状态：进设置页就每 2 秒拉一次
   const host = state.host;
+  const engine = state.engine;
   const hostReady = host?.engine === 'ready' && host?.bridge === 'ready';
   const hostStarting = host?.engine === 'starting';
   const hostLabel = !hostAvailable
@@ -93,6 +101,14 @@ export function SettingsScreen(): React.ReactElement {
             ? `启动中 ${host.progress}%`
             : '启动中'
           : '已停止';
+  const engineLabel =
+    engine.mode === 'starting-proot'
+      ? `完整引擎启动中 ${engine.progress > 0 ? engine.progress + '%' : ''}`.trim()
+      : engine.mode === 'full'
+        ? engine.link === 'proot'
+          ? '完整引擎（本机）'
+          : '远程宿主'
+        : '轻引擎（默认）';
 
   React.useEffect(() => {
     if (!hostAvailable) return;
@@ -147,6 +163,17 @@ export function SettingsScreen(): React.ReactElement {
   }
   if (lab === 'light') {
     return <LightEngineScreen onClose={() => setLab('none')} />;
+  }
+  // HomeScreen 的「配置轻引擎」入口
+  if (state.lightSetupOpen) {
+    return (
+      <LightEngineScreen
+        onClose={() => {
+          store.closeLightSetup();
+          store.closeSettings();
+        }}
+      />
+    );
   }
   if (lab === 'web' && webUrl) {
     return (
@@ -336,11 +363,36 @@ export function SettingsScreen(): React.ReactElement {
               </Pill>
             </View>
             <Text style={styles.hint}>
-              在这台手机上直接起引擎（原生服务）。启动后 App 连 ws://127.0.0.1:8788/ws 就是本机模式。
+              默认轻引擎。完整引擎只在手动切换或预热档位允许时启动；这里的「预热」只 startHost，不会连接。
             </Text>
 
             {hostAvailable ? (
               <>
+                <View style={styles.kv}>
+                  <Text style={styles.k}>当前引擎</Text>
+                  <Text style={styles.v}>{engineLabel}</Text>
+                </View>
+                <View style={styles.kv}>
+                  <Text style={styles.k}>预热档位</Text>
+                  <Text style={styles.v}>
+                    {PREWARM_TIERS.find((tier) => tier.id === state.prewarmTier)?.label}
+                  </Text>
+                </View>
+                <Text style={styles.hint}>
+                  触发式（默认）= 只在你点顶栏「完整」时启动；智能 = 充电且 WiFi 时后台预热；常备 = 开机就预热（更耗电）。
+                </Text>
+                <View style={styles.actions}>
+                  {PREWARM_TIERS.map((tier) => (
+                    <Btn
+                      key={tier.id}
+                      label={tier.label}
+                      kind={state.prewarmTier === tier.id ? 'primary' : 'ghost'}
+                      onPress={() => store.setPrewarmTier(tier.id)}
+                      style={{ flex: 1 }}
+                    />
+                  ))}
+                </View>
+
                 <View style={styles.kv}>
                   <Text style={styles.k}>引擎</Text>
                   <Text style={styles.v}>{state.host?.engine ?? 'stopped'}</Text>
@@ -360,14 +412,24 @@ export function SettingsScreen(): React.ReactElement {
                 {state.host?.error ? <Text style={styles.error}>{state.host.error}</Text> : null}
 
                 <View style={styles.actions}>
-                  <Btn label="启动" onPress={() => void store.startLocalHost()} style={{ flex: 1 }} />
                   <Btn
-                    label="停止"
+                    label="预热完整引擎"
+                    onPress={() => void store.warmLocalHost()}
+                    disabled={engine.mode !== 'light' || engine.prootWarm}
+                    style={{ flex: 1 }}
+                  />
+                  <Btn
+                    label="停止 proot"
                     kind="ghost"
-                    onPress={() => void store.stopLocalHost()}
+                    onPress={() => void store.reclaimProot('manual')}
+                    disabled={!engine.prootWarm}
                     style={{ flex: 1 }}
                   />
                 </View>
+                <Btn
+                  label={engine.mode === 'full' ? '切回轻引擎' : '切到完整引擎'}
+                  onPress={() => void store.switchEngine(engine.mode === 'full' ? 'light' : 'full')}
+                />
 
                 <Text style={styles.hint}>启动命令（留空用默认：proot 里的 dsh + node 桥）</Text>
                 <TextInput
@@ -438,8 +500,9 @@ export function SettingsScreen(): React.ReactElement {
                   onPress={() => {
                     void (async () => {
                       await setHostSafeModeNext(true);
-                      await store.stopLocalHost();
-                      await store.startLocalHost();
+                      // 回收旧宿主，再重新切完整引擎（失败会自动回轻引擎）
+                      await store.reclaimProot('manual');
+                      await store.switchEngine('full');
                     })();
                   }}
                 />

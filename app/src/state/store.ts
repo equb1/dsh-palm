@@ -1,19 +1,36 @@
 import { EngineClient, type ConnectionState, type EngineTransport } from '../lib/client';
 import { clearDeviceKey, loadDeviceKey, saveDeviceKey } from '../lib/deviceKey';
 import {
+  deviceConditions as hostDeviceConditions,
   getInitialNotificationSession,
   hostAvailable,
   hostLogs,
   hostStatus,
   readHostUiCache,
+  setHostRunActive as setNativeHostRunActive,
   startHost,
   stopHost,
   writeHostUiCache,
+  type DeviceConditions,
   type HostStatus,
 } from '../lib/host';
 import { loadHostCommands, saveHostCommands } from '../lib/hostCmd';
 import { humanizeError } from '../lib/errors';
-import { createLightHost, saveLightConfig, type LightEngineSetup } from '../lib/light';
+import { createLightHost, loadLightConfig, saveLightConfig, type LightEngineSetup } from '../lib/light';
+import {
+  canSwitch,
+  IDLE_RECLAIM_MS,
+  IDLE_SWEEP_MS,
+  initialEngineState,
+  PROOT_BOOT_TIMEOUT_MS,
+  reduceEngine,
+  type EngineEffect,
+  type EngineEvent,
+  type EngineLink,
+  type EngineSnapshot,
+  type EngineTarget,
+  type PrewarmTier,
+} from './engineManager';
 import { LocalEngineClient } from '../engine/light/localClient';
 import type { LightHost } from '../engine/light/host';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
@@ -164,6 +181,12 @@ export interface AppState {
   hostBridgeCmd: string;
   /** 当前连的是哪种引擎：远程宿主 / 本机轻引擎 */
   engineKind: 'remote' | 'light' | null;
+  /** EngineManager 快照：默认轻引擎，完整引擎按需切换 */
+  engine: EngineSnapshot;
+  /** 预热档位：触发式（默认）/ 智能 / 常备，持久化在 ui-cache */
+  prewarmTier: PrewarmTier;
+  /** 轻引擎配置页是否打开（HomeScreen 的「配置轻引擎」入口） */
+  lightSetupOpen: boolean;
 }
 
 /**
@@ -174,7 +197,48 @@ export interface AppState {
  */
 const DEFAULT_URL = hostAvailable ? 'ws://127.0.0.1:8788/ws' : 'ws://192.168.1.3:8788/ws';
 
+/** 完整引擎（proot）固定连本机桥，不能用最近一次远程地址 */
+const LOCAL_WS_URL = 'ws://127.0.0.1:8788/ws';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 给 WebSocket 连接加超时：127.0.0.1 上没进程时 RN/Node 的 onclose 不一定会来 */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+const PROOT_CONNECT_TIMEOUT_MS = 20_000;
+
 type Listener = () => void;
+
+/**
+ * EngineManager 的副作用依赖。
+ * 默认全部用真实现；单测/特殊宿主可以注入假实现（可选）。
+ */
+export interface EngineDeps {
+  hostAvailable: boolean;
+  hostStatus: () => Promise<HostStatus | null>;
+  startHost: (options?: { engineCmd?: string; bridgeCmd?: string; port?: number }) => Promise<boolean>;
+  stopHost: () => Promise<boolean>;
+  deviceConditions: () => Promise<DeviceConditions | null>;
+  setRunActive: (active: boolean) => void | Promise<unknown>;
+  loadLightConfig: () => Promise<LightEngineSetup | null>;
+  now: () => number;
+}
 
 /** 列表/会话事件说这一轮已经结束，但 detail 里还挂着 streaming 时，把它收口 */
 function finalizeDetailTurn(detail: SessionDetail, at?: number): SessionDetail {
@@ -246,7 +310,26 @@ export class Store {
     hostBridgeCmd: '',
     modelSheetOpen: false,
     engineKind: null,
+    engine: initialEngineState,
+    prewarmTier: initialEngineState.tier,
+    lightSetupOpen: false,
   };
+
+  private readonly engineDeps: EngineDeps;
+
+  constructor(engineDeps: Partial<EngineDeps> = {}) {
+    this.engineDeps = {
+      hostAvailable,
+      hostStatus,
+      startHost,
+      stopHost,
+      deviceConditions: hostDeviceConditions,
+      setRunActive: setNativeHostRunActive,
+      loadLightConfig,
+      now: () => Date.now(),
+      ...engineDeps,
+    };
+  }
 
   private listeners = new Set<Listener>();
   private client: EngineTransport | null = null;
@@ -264,6 +347,21 @@ export class Store {
   /** 已经弹过通知的审批，避免重连/重放时重复打扰 */
   private notifiedApprovals = new Set<string>();
 
+  /* ------------------------ EngineManager 内部状态 ------------------------ */
+  private engineStarted = false;
+  /** 同一时刻只跑一次 warm；切换/智能预热都走它 */
+  private warming: Promise<boolean> | null = null;
+  /** 同一时刻只跑一次完整引擎握手（状态轮询和 warm 循环可能同时触发） */
+  private connectingLocal: Promise<boolean> | null = null;
+  private statusTimer: ReturnType<typeof setInterval> | null = null;
+  private idleTimer: ReturnType<typeof setInterval> | null = null;
+  private statusPolling = false;
+  private hostDeadTicks = 0;
+  /** attach 时不要自动打开旧会话（切换引擎后旧会话只读） */
+  private suppressAutoOpen = false;
+  /** 最近一次轻引擎配置；没配置时是 null，界面给「配置轻引擎」入口 */
+  private lightSetup: LightEngineSetup | null = null;
+
   /* ------------------------------------------------------------ */
 
   subscribe = (fn: Listener): (() => void) => {
@@ -273,9 +371,66 @@ export class Store {
 
   getSnapshot = (): AppState => this.state;
 
+  private now(): number {
+    return this.engineDeps.now();
+  }
+
+  /**
+   * 所有状态修改都从这里走：顺便把 busy / 待审批数量同步进 engine 快照，
+   * 这样切换守卫永远看到一致的数据。
+   */
   private patch(next: Partial<AppState>): void {
-    this.state = { ...this.state, ...next, version: this.state.version + 1 };
+    const merged: AppState = { ...this.state, ...next };
+    const sync = reduceEngine(merged.engine, {
+      type: 'SET_BUSY',
+      busy: merged.busy,
+      pendingApprovals: Object.keys(merged.approvals).length,
+      now: this.now(),
+    });
+    if (sync.state !== merged.engine) merged.engine = sync.state;
+    this.state = { ...merged, version: this.state.version + 1 };
     for (const fn of this.listeners) fn();
+  }
+
+  /** 交给 reducer 决定，再把 effects 交给调用方按顺序执行 */
+  private emitEngine(event: EngineEvent): EngineEffect[] {
+    const step = reduceEngine(this.state.engine, event);
+    const next: Partial<AppState> = {};
+    if (step.state !== this.state.engine) {
+      next.engine = step.state;
+      next.prewarmTier = step.state.tier;
+    }
+    // 宿主状态同时镜像到 AppState.host / pairCode（LaunchOverlay / Settings / 配对都要用）
+    if (event.type === 'HOST_STATUS') {
+      next.host = event.host;
+      if (event.host.pairCode && event.host.pairCode !== this.state.pairCode) {
+        next.pairCode = event.host.pairCode;
+      }
+    }
+    if (Object.keys(next).length > 0) this.patch(next);
+    this.ensureStatusWatcher();
+    return step.effects;
+  }
+
+  private async runEngineEffects(effects: EngineEffect[]): Promise<void> {
+    for (const effect of effects) {
+      switch (effect) {
+        case 'connect-light':
+          await this.connectLightEffect();
+          break;
+        case 'warm-host':
+          await this.warmLocalHost();
+          break;
+        case 'connect-proot':
+          await this.connectLocal();
+          break;
+        case 'stop-host':
+          await this.stopHostEffect();
+          break;
+        case 'report':
+          break;
+      }
+    }
   }
 
   private scheduleDeltaFlush(): void {
@@ -426,6 +581,7 @@ export class Store {
         sessions: this.state.sessions.slice(0, 60),
         draftPresetId: this.state.draftPresetId,
         defaultModel: this.state.defaultModel,
+        prewarmTier: this.state.prewarmTier,
       });
       void writeHostUiCache(payload);
     } catch {
@@ -444,6 +600,7 @@ export class Store {
           sessions?: SessionSummary[];
           draftPresetId?: string | null;
           defaultModel?: ModelChoice;
+          prewarmTier?: PrewarmTier;
         };
         if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
           nextPatch.sessions = parsed.sessions;
@@ -453,6 +610,10 @@ export class Store {
         }
         if (parsed.defaultModel && !this.state.defaultModel) {
           nextPatch.defaultModel = parsed.defaultModel;
+        }
+        if (parsed.prewarmTier === 'trigger' || parsed.prewarmTier === 'smart' || parsed.prewarmTier === 'always') {
+          nextPatch.prewarmTier = parsed.prewarmTier;
+          this.emitEngine({ type: 'SET_TIER', tier: parsed.prewarmTier });
         }
       }
       if (Object.keys(nextPatch).length > 0) this.patch(nextPatch);
@@ -482,20 +643,116 @@ export class Store {
     this.client?.close();
   }
 
-  async connect(url?: string): Promise<void> {
-    const target = (url ?? this.state.url).trim();
+  /** 把配对码 / 设备密钥拼进地址，远程和本机完整引擎共用 */
+  private authEndpoint(target: string): string {
     const code = (this.state.pairCode.trim() || this.state.host?.pairCode || '').trim();
     const key = (this.state.deviceKey ?? '').trim();
     const params: string[] = [];
     if (key) params.push('key=' + encodeURIComponent(key));
     if (code) params.push('pair=' + encodeURIComponent(code));
     const separator = target.includes('?') ? '&' : '?';
-    const endpoint = params.length > 0 ? target + separator + params.join('&') : target;
+    return params.length > 0 ? target + separator + params.join('&') : target;
+  }
+
+  async connect(url?: string): Promise<void> {
+    const target = (url ?? this.state.url).trim();
     this.patch({ url: target, error: null, conn: 'connecting' });
 
     this.closeEngines();
-    const client = new EngineClient({ url: endpoint, autoReconnect: true });
-    await this.attach(client, 'remote');
+    const client = new EngineClient({ url: this.authEndpoint(target), autoReconnect: true });
+    const ok = await this.attach(client, 'remote', 'remote');
+    if (!ok) {
+      // 远程没连上：把轻引擎接回来，别让界面停在"无引擎"状态
+      await this.runEngineEffects(this.emitEngine({ type: 'LINK_LOST', error: this.state.error ?? '远程宿主没连上', now: this.now() }));
+    }
+  }
+
+  /**
+   * 连本机完整引擎（proot）。
+   *
+   * 两阶段：先把目标 WebSocket + 握手跑通，再关掉当前轻引擎链路。
+   * 这样目标没起来时轻引擎原封不动，用户当前的回合/草稿/会话都还在。
+   */
+  connectLocal(): Promise<boolean> {
+    if (this.connectingLocal) return this.connectingLocal;
+    const run = this.connectLocalInner().finally(() => {
+      this.connectingLocal = null;
+    });
+    this.connectingLocal = run;
+    return run;
+  }
+
+  private async connectLocalInner(): Promise<boolean> {
+    if (!this.engineDeps.hostAvailable) {
+      this.setError('这台设备不支持完整引擎（需要原生构建，Expo Go 不行）');
+      return false;
+    }
+    await this.ensurePairCode();
+    const attemptId = this.state.engine.attemptId;
+    let swapped = false;
+    this.patch({ conn: 'connecting', error: null });
+    const client = new EngineClient({ url: this.authEndpoint(LOCAL_WS_URL), autoReconnect: true });
+    try {
+      const caps = await withTimeout(
+        client.connect(),
+        PROOT_CONNECT_TIMEOUT_MS,
+        '完整引擎连接超时（20 秒）',
+      ); // 第一阶段：目标就绪
+      if (this.state.engine.attemptId !== attemptId) {
+        // 用户又点了一次切换/回退，这一枪作废
+        client.close();
+        return false;
+      }
+      // 第二阶段：换链路。旧会话 detail 留在屏幕上，只读。
+      this.suppressAutoOpen = true;
+      // 轻引擎链路马上要关：如果新链路握手后面失败，lightReady 必须是 false，
+      // 回退时才会重新连轻引擎（见 PROOT_FAILED → connectLightFallback）。
+      this.emitEngine({ type: 'LIGHT_CONNECTING' });
+      swapped = true;
+      this.closeEngines();
+      this.patch({ url: LOCAL_WS_URL });
+      const attached = await this.attach(client, 'remote', 'proot', caps);
+      this.suppressAutoOpen = false;
+      if (!attached) throw new Error(this.state.error ?? '完整引擎握手失败');
+      // 切成功之后旧会话才变只读：失败回退时 currentId 还在，用户能继续用
+      this.patch({ currentId: null });
+      return true;
+    } catch (err) {
+      client.close();
+      this.suppressAutoOpen = false;
+      const message = humanizeError(err);
+      if (!swapped && this.state.engine.lightReady && this.state.engineKind === 'light') {
+        // 第一阶段的失败：轻引擎根本没动，把 conn 恢复回去，别让界面卡在"连接中"
+        this.patch({ conn: 'connected', connDetail: undefined });
+      }
+      this.setError(message);
+      await this.runEngineEffects(
+        this.emitEngine({
+          type: 'PROOT_FAILED',
+          error: message,
+          attemptId: this.state.engine.attemptId,
+          now: this.now(),
+        }),
+      );
+      return false;
+    }
+  }
+
+  /** 本机完整引擎第一次配对：桥打印过 6 位配对码，状态/日志里捞一下 */
+  private async ensurePairCode(): Promise<void> {
+    if (this.state.pairCode.trim() || this.state.deviceKey) return;
+    const fromHost = this.state.host?.pairCode;
+    if (fromHost) {
+      this.patch({ pairCode: fromHost });
+      return;
+    }
+    try {
+      const logs = await hostLogs();
+      const found = logs.join('\n').match(/配对码\s+(\d{6})/);
+      if (found?.[1]) this.patch({ pairCode: found[1] });
+    } catch {
+      /* 读不到就退回手输配对码 */
+    }
   }
 
   /**
@@ -504,18 +761,27 @@ export class Store {
    */
   async connectLight(setup: LightEngineSetup): Promise<void> {
     this.patch({ conn: 'connecting', error: null });
-    this.closeEngines();
+    this.lightSetup = setup;
+    this.emitEngine({ type: 'LIGHT_CONNECTING' });
+    let host: LightHost | null = null;
+    let client: LocalEngineClient | null = null;
     try {
-      const host = await createLightHost(setup);
-      this.lightHost = host;
-      const client = new LocalEngineClient(host);
-      await this.attach(client, 'light');
-      await saveLightConfig(setup);
-    } catch (err) {
+      // 两阶段：轻引擎先在后台建好并握手成功，再关旧链路。
+      // createLightHost 是纯进程内操作，几十毫秒；切开时不会闪断。
+      host = await createLightHost(setup);
+      client = new LocalEngineClient(host);
+      const caps = await client.connect();
+      this.client?.close();
       this.lightHost?.close();
-      this.lightHost = null;
-      this.patch({ conn: 'closed', engineKind: null });
+      this.lightHost = host;
+      this.client = client;
+      const ok = await this.attach(client, 'light', 'light', caps);
+      if (ok) await saveLightConfig(setup);
+    } catch (err) {
+      client?.close();
+      host?.close();
       this.fail(err);
+      this.emitEngine({ type: 'LIGHT_FAILED', error: humanizeError(err) });
     }
   }
 
@@ -526,8 +792,16 @@ export class Store {
     this.lightHost = null;
   }
 
-  /** 连线之后的共同部分：远程宿主和轻引擎都走这里 */
-  private async attach(client: EngineTransport, kind: 'remote' | 'light'): Promise<void> {
+  /**
+   * 连线之后的共同部分：远程宿主、本机完整引擎和轻引擎都走这里。
+   * `preconnectedCaps` 用于两阶段切换：WebSocket 握手已经在外面做完了。
+   */
+  private async attach(
+    client: EngineTransport,
+    kind: 'remote' | 'light',
+    link: EngineLink = kind === 'light' ? 'light' : 'remote',
+    preconnectedCaps?: Capabilities,
+  ): Promise<boolean> {
     this.client = client;
     this.patch({ engineKind: kind });
 
@@ -538,7 +812,7 @@ export class Store {
     client.onAny((event) => this.applyEvent(event.event, event.data));
 
     try {
-      const caps = await client.connect();
+      const caps = preconnectedCaps ?? (await client.connect());
       this.patch({
         caps,
         conn: 'connected',
@@ -559,13 +833,20 @@ export class Store {
         this.pendingNotificationSessionId = null;
         this.patch({ view: 'main', connectModalOpen: false });
         void this.openSession(navId);
-      } else if (this.state.currentId) {
-        // 如果用户在引擎连接前已经点开了某个缓存会话，连上后自动刷新它的详情
+      } else if (this.state.currentId && !this.suppressAutoOpen) {
+        // 如果用户在引擎连接前已经点开了某个缓存会话，连上后自动刷新它的详情；
+        // 切换引擎时 suppressAutoOpen=true，旧会话保持只读，不会把用户拽回去。
         void this.openSession(this.state.currentId);
       }
+      if (link === 'light') this.emitEngine({ type: 'LIGHT_READY', now: this.now() });
+      else if (link === 'proot') this.emitEngine({ type: 'PROOT_CONNECTED' });
+      else this.emitEngine({ type: 'REMOTE_ATTACHED' });
+      return true;
     } catch (err) {
       this.patch({ conn: 'closed' });
       this.fail(err);
+      if (link === 'light') this.emitEngine({ type: 'LIGHT_FAILED', error: humanizeError(err) });
+      return false;
     }
   }
 
@@ -582,6 +863,8 @@ export class Store {
       engineKind: null,
       connectModalOpen: true,
     });
+    // 用户主动断开：只更新状态机，不自动重连（effects 不执行）
+    this.emitEngine({ type: 'LINK_LOST', error: '已断开当前连接', now: this.now() });
   }
 
   /* ------------------------------------------------------------ */
@@ -614,6 +897,7 @@ export class Store {
 
   async openSession(id: string): Promise<void> {
     if (!this.client) return;
+    this.noteUserActivity();
     const cached = this.detailCache.get(id);
     this.detailCache.delete(id);
     // 重进会话先把 currentId/detail 切过去，避免 sessions.get 期间到达的流式帧被丢
@@ -878,13 +1162,20 @@ export class Store {
    * 首页输入框直接开聊：用当前选中的锦囊建会话，再把这句话（及暂存附件）发出去。
    * 标题先取这句话的前 18 个字（如果没打字只发了附件，取首个附件文件名），之后可以再让模型改。
    */
-  async startWith(text: string): Promise<void> {
+  async startWith(text: string): Promise<boolean> {
     const trimmed = text.trim();
     const hasAttachments = this.state.pendingAttachments.length > 0 || Boolean(this.state.pendingShare?.imagePath);
-    if (!trimmed && !hasAttachments) return;
+    if (!trimmed && !hasAttachments) return false;
+    this.noteUserActivity();
     if (!this.client || this.state.conn !== 'connected') {
-      this.setError('引擎正在唤醒中，请稍候片刻再发送');
-      return;
+      if (this.state.engine.mode === 'starting-proot') {
+        this.setError('完整引擎正在启动，请稍候片刻再发送');
+      } else if (!this.state.engine.lightReady) {
+        this.setError('轻引擎还没配置或没连上，点首页「配置轻引擎」先填模型渠道');
+      } else {
+        this.setError('引擎正在唤醒中，请稍候片刻再发送');
+      }
+      return false;
     }
     const presetId = this.state.draftPresetId ?? this.state.caps?.presets[0]?.id ?? 'standard';
     const draftModel = this.state.defaultModel;
@@ -901,21 +1192,23 @@ export class Store {
       if (draftPermission) await this.setPermission(draftPermission);
       if (draftModel) await this.setModel(draftModel.provider, draftModel.model, draftModel.reasoningEffort);
       if (this.state.pendingShare?.imagePath) await this.attachSharedImage();
-      await this.send(trimmed);
+      return await this.send(trimmed);
     } catch (err) {
       this.fail(err);
+      return false;
     }
   }
 
-  async send(text: string): Promise<void> {
+  async send(text: string): Promise<boolean> {
     const { currentId, detail } = this.state;
     const trimmed = text.trim();
     const stagedList = this.state.pendingAttachments.slice();
-    if (!this.client || !currentId || !detail || (!trimmed && stagedList.length === 0)) return;
+    if (!this.client || !currentId || !detail || (!trimmed && stagedList.length === 0)) return false;
     if (stagedList.some((a) => a.uploading)) {
       this.setError('附件还在上传中，请稍候…');
-      return;
+      return false;
     }
+    this.noteUserActivity();
     const running = detail.status === 'running' || detail.status === 'waiting_approval';
     this.patch({ busy: true, error: null, pendingAttachments: [] });
     try {
@@ -945,10 +1238,12 @@ export class Store {
       const { detail: latest } = this.state;
       if (latest) this.patch({ busy: false, detail: { ...latest, status: 'running' } });
       else this.patch({ busy: false });
+      return true;
     } catch (err) {
       // 发送失败时把附件放回待发列表，避免用户重选
       this.patch({ pendingAttachments: stagedList });
       this.fail(err);
+      return false;
     }
   }
 
@@ -1197,48 +1492,355 @@ export class Store {
     }
   }
 
-  /* ------------------------ 本机引擎 ------------------------ */
+  /* ------------------------ EngineManager ------------------------ */
 
-  /** 拉一次宿主服务状态（设置页每 2 秒调一次） */
+  /**
+   * 冷启动入口：恢复本地缓存 → 通知权限 → 连轻引擎。
+   *
+   * 完整引擎**不会**在这里被连接；只有 tier==='always'（或智能预热条件满足）时
+   * 才 `warmLocalHost()` 把 proot 拉起来（只预热、不连接）。
+   * BOOT 事件本身只发 connect-light —— 回归锁在 engineManager 里。
+   */
+  async engineStart(): Promise<void> {
+    if (this.engineStarted) return;
+    this.engineStarted = true;
+    await this.hydrateLocalCache();
+    void ensureNotificationPermission();
+    const effects = this.emitEngine({ type: 'BOOT', tier: this.state.prewarmTier, now: this.now() });
+    this.startIdleSweeper();
+    await this.runEngineEffects(effects);
+    if (this.state.engine.mode !== 'light') return;
+    if (this.state.engine.tier === 'always') void this.warmLocalHost();
+    else void this.maybeSmartPrewarm();
+  }
+
+  /** 用户有动作：空闲回收计时重新开始（发送/开会话/回前台时调用） */
+  noteUserActivity(): void {
+    this.emitEngine({ type: 'USER_ACTIVITY', now: this.now() });
+  }
+
+  /** 切预热档位：触发式（默认）/ 智能 / 常备，写进 ui-cache */
+  setPrewarmTier(tier: PrewarmTier): void {
+    this.emitEngine({ type: 'SET_TIER', tier });
+    this.persistUiCache();
+    if (!this.engineDeps.hostAvailable) return;
+    if (tier === 'always' && !this.state.engine.prootWarm) void this.warmLocalHost();
+    if (tier === 'smart') void this.maybeSmartPrewarm();
+  }
+
+  /** HomeScreen 的「配置轻引擎」入口：打开 M1 实验室的轻引擎页 */
+  openLightSetup(): void {
+    this.patch({ view: 'settings', lightSetupOpen: true, error: null });
+  }
+
+  closeLightSetup(): void {
+    this.patch({ lightSetupOpen: false });
+  }
+
+  /**
+   * 只预热完整引擎：startHost，但**永不 connect**。
+   * 返回 true 表示桥已就绪（或本来就在跑）。
+   */
+  async warmLocalHost(timeoutMs = PROOT_BOOT_TIMEOUT_MS): Promise<boolean> {
+    if (!this.engineDeps.hostAvailable) {
+      this.setError('这台设备不支持完整引擎（需要原生构建，Expo Go 不行）');
+      if (this.state.engine.mode === 'starting-proot') {
+        await this.runEngineEffects(
+          this.emitEngine({ type: 'PROOT_FAILED', error: '这台设备不支持完整引擎', now: this.now() }),
+        );
+      }
+      return false;
+    }
+    if (this.warming) return this.warming;
+    const run = this.warmLocalHostInner(timeoutMs);
+    this.warming = run;
+    void run.finally(() => {
+      // 只清理自己这一枪，别把取消后新一轮 prewarm 的 promise 清掉
+      if (this.warming === run) this.warming = null;
+    });
+    return run;
+  }
+
+  private async warmLocalHostInner(timeoutMs: number): Promise<boolean> {
+    const attemptId = this.state.engine.attemptId;
+    const switching = this.state.engine.mode === 'starting-proot';
+    const before = await this.engineDeps.hostStatus().catch(() => null);
+    if (before) this.emitEngine({ type: 'HOST_STATUS', host: before });
+    const alreadyReady = before?.engine === 'ready' && before?.bridge === 'ready';
+    // 已热着：纯预热直接成功；切换时由 switchEngine 接着 connectLocal()
+    if (alreadyReady) return true;
+    const started = await this.engineDeps
+      .startHost({
+        engineCmd: this.state.hostEngineCmd.trim() || undefined,
+        bridgeCmd: this.state.hostBridgeCmd.trim() || undefined,
+      })
+      .catch(() => false);
+    if (!started) {
+      this.patch({ error: '本机完整引擎没启动起来' });
+      await this.runEngineEffects(
+        this.emitEngine({
+          type: 'PROOT_FAILED',
+          error: '本机完整引擎没启动起来',
+          attemptId,
+          now: this.now(),
+        }),
+      );
+      return false;
+    }
+    this.ensureStatusWatcher();
+    const deadline = this.now() + timeoutMs;
+    while (this.now() < deadline) {
+      await sleep(300);
+      if (this.state.engine.attemptId !== attemptId) return false; // 新一轮切换接管了
+      if (switching && this.state.engine.mode !== 'starting-proot') return false; // 被取消/回退
+      const status = await this.engineDeps.hostStatus().catch(() => null);
+      if (!status) continue;
+      // HostRuntime 自己会重试，failed 只是暂时状态：这里继续等，不立刻判死
+      this.emitEngine({ type: 'HOST_STATUS', host: status });
+      if (status.engine === 'ready' && status.bridge === 'ready') return true;
+    }
+    const timeoutError = `完整引擎 ${Math.round(timeoutMs / 1000)} 秒内没就绪，已回到轻引擎`;
+    this.patch({ error: timeoutError });
+    await this.runEngineEffects(
+      this.emitEngine({
+        type: 'PROOT_TIMEOUT',
+        error: timeoutError,
+        attemptId,
+        now: this.now(),
+      }),
+    );
+    return false;
+  }
+
+  /**
+   * 手动切换：轻 ↔ 完整。
+   * - 切完整：先预热，桥就绪后 connectLocal（两阶段，目标连上才断轻引擎）。
+   * - 切轻：先确保轻引擎连上，再停 proot。
+   * 失败/超时自动回退轻引擎，不丢当前回合/草稿/会话 detail。
+   */
+  async switchEngine(target: EngineTarget): Promise<boolean> {
+    const check = canSwitch(this.state.engine, target);
+    if (!check.ok) {
+      this.setError(check.reason ?? '现在不能切换引擎');
+      return false;
+    }
+    if (target === 'full' && !this.engineDeps.hostAvailable) {
+      this.setError('这台设备不支持完整引擎（需要原生构建，Expo Go 不行）');
+      return false;
+    }
+    this.noteUserActivity();
+    const effects = this.emitEngine({ type: 'SWITCH', target, now: this.now() });
+    if (effects.length === 0) {
+      this.setError('现在不能切换引擎');
+      return false;
+    }
+    for (const effect of effects) {
+      switch (effect) {
+        case 'warm-host': {
+          const ok = await this.warmLocalHost();
+          if (!ok) {
+            // 预热可能是更早一轮（纯预热）发起的：attemptId 对不上时 PROOT_TIMEOUT
+            // 会被忽略，这里按当前这一轮补一次失败收口，别把 UI 卡在"启动中"。
+            if (this.state.engine.mode === 'starting-proot') {
+              await this.runEngineEffects(
+                this.emitEngine({
+                  type: 'PROOT_FAILED',
+                  error: '完整引擎没启动起来',
+                  attemptId: this.state.engine.attemptId,
+                  now: this.now(),
+                }),
+              );
+            }
+            if (!this.state.engine.lightReady) await this.connectLightFallback();
+            return false;
+          }
+          // 预热完成（桥 ready）后再连本机完整引擎；两阶段切换在这里收口
+          const connected = await this.connectLocal();
+          if (!connected) {
+            if (!this.state.engine.lightReady) await this.connectLightFallback();
+            return false;
+          }
+          break;
+        }
+        case 'connect-light': {
+          const ok = await this.connectLightEffect();
+          if (!ok && target === 'light') {
+            // 轻引擎没接上就别停 proot；状态机也退回"完整引擎"，链路还在
+            this.emitEngine({ type: 'PROOT_CONNECTED' });
+            this.setError('切回轻引擎失败，仍停留在完整引擎');
+            return false;
+          }
+          break;
+        }
+        case 'connect-proot':
+          await this.connectLocal();
+          break;
+        case 'stop-host':
+          await this.stopHostEffect();
+          break;
+        case 'report':
+          break;
+      }
+    }
+    return target === 'full' ? this.state.engine.mode === 'full' : this.state.engine.mode === 'light';
+  }
+
+  /** 确保轻引擎在线（已经连着就什么都不做）；返回是否就绪 */
+  private async connectLightEffect(): Promise<boolean> {
+    if (this.state.engine.lightReady && this.state.engineKind === 'light' && this.state.conn === 'connected') {
+      return true;
+    }
+    const setup = this.lightSetup ?? (await this.engineDeps.loadLightConfig());
+    if (!setup) {
+      this.emitEngine({
+        type: 'LIGHT_FAILED',
+        error: '轻引擎还没配置：点首页「配置轻引擎」填 Base URL / 模型 / Key',
+      });
+      return false;
+    }
+    this.lightSetup = setup;
+    await this.connectLight(setup);
+    return this.state.engine.lightReady;
+  }
+
+  private async connectLightFallback(): Promise<void> {
+    await this.connectLightEffect();
+  }
+
+  /** 智能预热：只在充电 + WiFi 时把 proot 拉起来（仍然不连接） */
+  private async maybeSmartPrewarm(): Promise<void> {
+    if (!this.engineDeps.hostAvailable) return;
+    if (this.state.engine.tier !== 'smart' || this.state.engine.prootWarm) return;
+    if (this.state.engine.mode !== 'light') return;
+    const conditions = await this.engineDeps.deviceConditions().catch(() => null);
+    if (conditions?.charging && conditions.wifi) void this.warmLocalHost();
+  }
+
+  /**
+   * 回收完整引擎。
+   * - 'idle'：只在空闲 10 分钟后由 sweeper 调（reducer 自己也会校验）。
+   * - 其它（手动/低内存）：完整引擎在线就先切回轻引擎，再停宿主。
+   */
+  async reclaimProot(reason: string = 'manual'): Promise<void> {
+    // 正在起完整引擎时取消：PROOT_FAILED 会走 stop-host + 回轻引擎
+    if (this.state.engine.mode === 'starting-proot') {
+      this.warming = null;
+      await this.runEngineEffects(
+        this.emitEngine({
+          type: 'PROOT_FAILED',
+          error: '已取消完整引擎启动',
+          attemptId: this.state.engine.attemptId,
+          now: this.now(),
+        }),
+      );
+      return;
+    }
+    if (!this.state.engine.prootWarm) return;
+    if (reason !== 'idle' && this.state.engine.link === 'proot') {
+      await this.switchEngine('light');
+      return;
+    }
+    await this.runEngineEffects(this.emitEngine({ type: 'RECLAIM', reason, now: this.now() }));
+  }
+
+  private async stopHostEffect(): Promise<void> {
+    if (!this.engineDeps.hostAvailable) return;
+    await this.engineDeps.stopHost().catch(() => false);
+    const status = await this.engineDeps.hostStatus().catch(() => null);
+    if (status) this.emitEngine({ type: 'HOST_STATUS', host: status });
+    this.emitEngine({ type: 'RECLAIMED' });
+    this.ensureStatusWatcher();
+  }
+
+  /** 拉一次宿主服务状态（设置页每 2 秒调一次），顺便喂给 EngineManager */
   async refreshHost(): Promise<void> {
-    if (!hostAvailable) return;
-    const status = await hostStatus();
+    if (!this.engineDeps.hostAvailable) return;
+    const status = await this.engineDeps.hostStatus().catch(() => null);
     if (!status) return;
     const nextPatch: Partial<AppState> = {};
     if (JSON.stringify(status) !== JSON.stringify(this.state.host)) nextPatch.host = status;
     if (status.pairCode && status.pairCode !== this.state.pairCode) nextPatch.pairCode = status.pairCode;
     if (Object.keys(nextPatch).length > 0) this.patch(nextPatch);
+    this.emitEngine({ type: 'HOST_STATUS', host: status });
   }
 
-  private lastAutoConnectAt = 0;
-
-  /**
-   * 本机模式的一键连接。
-   *
-   * 引擎和桥都是 App 自己拉起来的：地址是本机 127.0.0.1，配对码由 HostRuntime 常驻保存（或存了 deviceKey）。
-   * 桥 ready 后自动连接，若中途断线也会按节流自动重连。
-   */
-  async maybeAutoConnect(): Promise<void> {
-    if (!hostAvailable) return;
-    const host = this.state.host;
-    if (!host || host.engine !== 'ready' || host.bridge !== 'ready') return;
-    if (this.state.conn === 'connected' || this.state.conn === 'connecting') return;
-    const now = Date.now();
-    if (now - this.lastAutoConnectAt < 2000) return;
-    this.lastAutoConnectAt = now;
-
-    if (host.pairCode && !this.state.pairCode.trim()) {
-      this.patch({ pairCode: host.pairCode });
-    } else if (!this.state.deviceKey && !this.state.pairCode.trim()) {
-      try {
-        const logs = await hostLogs();
-        const found = logs.join('\n').match(/配对码\s+(\d{6})/);
-        if (found) this.patch({ pairCode: found[1] });
-      } catch {
-        // 日志读不到就退回手输
-      }
+  /** proot 热着的时候每 2 秒盯一次；死了就切回轻引擎 */
+  private ensureStatusWatcher(): void {
+    const active = this.engineDeps.hostAvailable && this.state.engine.prootWarm;
+    if (active && !this.statusTimer) {
+      this.statusTimer = setInterval(() => {
+        void this.pollHostStatus();
+      }, 2000);
+    } else if (!active && this.statusTimer) {
+      clearInterval(this.statusTimer);
+      this.statusTimer = null;
+      this.hostDeadTicks = 0;
     }
-    await this.connect();
+  }
+
+  private async pollHostStatus(): Promise<void> {
+    if (this.statusPolling) return;
+    this.statusPolling = true;
+    try {
+      const status = await this.engineDeps.hostStatus().catch(() => null);
+      if (!status) return;
+      const before = this.state.engine;
+      this.emitEngine({ type: 'HOST_STATUS', host: status });
+      const stopped = status.engine === 'stopped';
+      const failing = status.engine === 'failed' && status.bridge !== 'ready';
+      this.hostDeadTicks = failing ? this.hostDeadTicks + 1 : 0;
+      // 完整引擎链路断了：立刻回轻引擎（failed 连续 3 帧才算死，给 HostRuntime 重试时间）
+      if (before.mode === 'full' && before.link === 'proot' && (stopped || this.hostDeadTicks >= 3)) {
+        this.hostDeadTicks = 0;
+        // 旧会话属于已经死掉的完整引擎：清 currentId，detail 留在屏幕上只读
+        this.suppressAutoOpen = true;
+        this.patch({ currentId: null });
+        try {
+          await this.runEngineEffects(
+            this.emitEngine({ type: 'LINK_LOST', error: '完整引擎已停止，已回到轻引擎', now: this.now() }),
+          );
+        } finally {
+          this.suppressAutoOpen = false;
+        }
+      }
+    } finally {
+      this.statusPolling = false;
+    }
+  }
+
+  /** 空闲 10 分钟回收 proot；没有活跃回合才停（RECLAIM 里还有一层校验） */
+  private startIdleSweeper(): void {
+    if (this.idleTimer) return;
+    this.idleTimer = setInterval(() => {
+      const engine = this.state.engine;
+      if (!engine.prootWarm || engine.mode !== 'light' || !engine.idleSince) return;
+      if (this.now() - engine.idleSince < IDLE_RECLAIM_MS) return;
+      void this.reclaimProot('idle');
+    }, IDLE_SWEEP_MS);
+  }
+
+  /** 回到前台：重连轻引擎、按档位补预热 */
+  async onAppForeground(): Promise<void> {
+    this.noteUserActivity();
+    if (!this.engineStarted) return;
+    const engine = this.state.engine;
+    if (engine.mode === 'light' && !engine.lightReady) {
+      await this.connectLightFallback();
+      return;
+    }
+    if (engine.mode === 'light' && !engine.prootWarm && engine.tier === 'always') {
+      void this.warmLocalHost();
+      return;
+    }
+    void this.maybeSmartPrewarm();
+  }
+
+  private reportRunActive(active: boolean): void {
+    try {
+      void this.engineDeps.setRunActive(active);
+    } catch {
+      /* 老 APK 没有这个接口 */
+    }
   }
 
   /** 读一次自定义启动命令（进设置页时调） */
@@ -1252,29 +1854,13 @@ export class Store {
     void saveHostCommands({ engineCmd, bridgeCmd });
   }
 
-  async startLocalHost(): Promise<void> {
-    if (!hostAvailable) {
-      this.setError('这台设备不支持本机引擎（需要原生构建，Expo Go 不行）');
-      return;
-    }
-    await this.hydrateLocalCache();
-    void ensureNotificationPermission();
-    await startHost({
-      engineCmd: this.state.hostEngineCmd.trim() || undefined,
-      bridgeCmd: this.state.hostBridgeCmd.trim() || undefined,
-    });
-    await this.refreshHost();
-    await this.maybeAutoConnect();
-  }
-
+  /** 直接停原生宿主（安全模式重启/设置页手动停止用）；正常回退走 reclaimProot */
   async stopLocalHost(): Promise<void> {
-    if (!hostAvailable) return;
-    await stopHost();
-    await this.refreshHost();
+    await this.stopHostEffect();
   }
 
   async refreshHostLogs(): Promise<void> {
-    if (!hostAvailable) return;
+    if (!this.engineDeps.hostAvailable) return;
     this.patch({ hostLogs: await hostLogs() });
   }
 
@@ -1479,6 +2065,8 @@ export class Store {
       case 'run.started': {
         // 回合开始：界面要变成"生成中"，发送键变成停止键，列表也立刻变运行中
         this.runStartedAt = Date.now();
+        // 原生 onTrimMemory 回收 proot 前会先问这里：有活跃回合就先不动
+        this.reportRunActive(true);
         const d = this.state.detail;
         const sessions = this.state.sessions.map((s) =>
           s.id === data.sessionId ? { ...s, status: 'running' as const, updatedAt: Date.now() } : s
@@ -1489,6 +2077,7 @@ export class Store {
 
       case 'run.finished': {
         this.flushDeltas();
+        this.reportRunActive(false);
         const d = this.state.detail;
         this.notifyRunFinished(data as { sessionId: string; reason: string });
         const runId = (data as { runId?: string }).runId;

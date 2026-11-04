@@ -25,6 +25,25 @@ export interface HostStatus {
 /** 这台设备能不能自己起引擎 */
 export const hostAvailable = false;
 
+/** 设备条件：只有「智能预热」档用 */
+export interface DeviceConditions {
+  charging: boolean;
+  wifi: boolean;
+}
+
+/**
+ * 告诉原生层「当前有没有回合在跑」。
+ * onTrimMemory 回收 proot 时，有活跃回合就先不动（老 APK 上没有这个接口，调用会安全降级）。
+ */
+export async function setHostRunActive(_active: boolean): Promise<boolean> {
+  return false;
+}
+
+/** 读充电 / WiFi 状态；这台设备问不到就返回 null */
+export async function deviceConditions(): Promise<DeviceConditions | null> {
+  return null;
+}
+
 export async function startHost(_options?: {
   engineCmd?: string;
   bridgeCmd?: string;
