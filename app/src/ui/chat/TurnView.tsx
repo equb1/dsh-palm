@@ -16,26 +16,22 @@ const ThinkingRow = React.memo(function ThinkingRow({
   live?: boolean;
 }): React.ReactElement {
   const [open, setOpen] = React.useState(false);
-  // 展开时冻结快照，避免流式每 token 重排 12k 字；收起后再展开拿最新
-  const snapshot = React.useRef<string | null>(null);
+  const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
   const MAX_OPEN = 12000;
-  const shownRaw = open && snapshot.current !== null ? snapshot.current : text;
+  const LIVE_WINDOW = 2000;
+  // 思考中展开时跟官方一样继续流，但只渲染最后 2000 字，避免每 token 重排 12k
+  const shownRaw = open && live ? text.slice(-LIVE_WINDOW) : text;
   const shown = shownRaw.length > MAX_OPEN ? shownRaw.slice(-MAX_OPEN) : shownRaw;
-  const truncated = shownRaw.length > MAX_OPEN;
+  const truncated = text.length > MAX_OPEN;
   const preview = text.trim().split('\n')[0]?.replace(/\*\*/g, '').slice(0, 120) ?? '';
 
   // dsh-go 的做法：一轮结束就把展开的全文收回去，过程收进一行摘要。
   React.useEffect(() => {
-    if (!live) {
-      snapshot.current = null;
-      setOpen(false);
-    }
+    if (!live) setOpen(false);
   }, [live]);
 
   const handleToggle = (): void => {
     onToggle?.();
-    if (!open) snapshot.current = text;
-    else snapshot.current = null;
     setOpen((v) => !v);
   };
 
@@ -70,7 +66,14 @@ const ThinkingRow = React.memo(function ThinkingRow({
     <View style={styles.thinkingOpenBox}>
       {header}
       {/* 展开态限高 + 内部滚动，不改变外层列表高度 */}
-      <ScrollView style={styles.thinkingScroll} nestedScrollEnabled>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.thinkingScroll}
+        nestedScrollEnabled
+        onContentSizeChange={() => {
+          if (live && open) scrollRef.current?.scrollToEnd({ animated: false });
+        }}
+      >
         <Text style={styles.thinkingBody} selectable>
           {shown}
         </Text>
@@ -78,7 +81,9 @@ const ThinkingRow = React.memo(function ThinkingRow({
           <Text style={styles.thinkingMore}>思考太长，这里只显示最后 {MAX_OPEN} 字。</Text>
         ) : null}
         {live ? (
-          <Text style={styles.thinkingMore}>思考仍在输出，收起后再展开可看最新内容。</Text>
+          <Text style={styles.thinkingMore}>
+            思考仍在输出，当前只跟最后 {LIVE_WINDOW} 字；收起后再展开可看全文。
+          </Text>
         ) : null}
       </ScrollView>
     </View>

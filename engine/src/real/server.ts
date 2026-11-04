@@ -576,18 +576,18 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   }
 
   function startFollow(sessionId: string): void {
-    // 每次进会话都重建 follow，避免旧 WS 断了但 followSessionId 还等于它
-    if (followSessionId === sessionId) {
-      followDispose?.();
-      followDispose = null;
-      followSessionId = null;
-    }
+    const sameSession = followSessionId === sessionId;
+    // 同一会话重开 follow 时保留 liveTurn/blockId 映射；否则中途重连后 delta 找不到 block
     followDispose?.();
     followDispose = null;
     followSessionId = sessionId;
-    liveTurn = null;
-    liveStep = 0;
-    blockIdByIndex.clear();
+    if (!sameSession) {
+      liveTurn = null;
+      liveStep = 0;
+      blockIdByIndex.clear();
+    } else if (!liveTurn) {
+      liveTurn = liveTurns.get(sessionId) ?? null;
+    }
 
     followDispose = client.follow(sessionId, (value) => {
       try {
