@@ -190,11 +190,15 @@ OpenAI 兼容 `/chat/completions`，SSE 流；记录 ttft/stream 耗时（`[ligh
 
 ### 6.1 默认
 
-- 有轻引擎配置 → **默认轻引擎**；proot 触发式（不自动连接）。
+- 有轻引擎配置 → **默认轻引擎**；proot 触发式（不自动连接）。没配置时首页给「配置模型渠道」入口。
+- 状态机在 `app/src/state/engineManager.ts`（纯 reducer，`light|starting-proot|full` + effects），
+  `store.ts` 只执行 effects；切完整是两阶段：目标 WS 握手成功后才关轻引擎，失败回退不丢回合。
 - `warmLocalHost()`：只 `startHost()` 不 `connect`，UI 继续用 light。
-- 顶栏「轻/完整」角标；手动切换仅在空闲时可用。
-- 预热档位：触发式（默认）/ 智能预热（充电+WiFi，可选）/ 常备（高级）。
-- 回收：无运行回合且 idle 10min 停 proot；`onTrimMemory` 优先停 proot。
+- 顶栏「轻/完整 42%」角标；手动切换仅在空闲（无回合、无审批）时可用。
+- 预热档位：触发式（默认）/ 智能预热（充电+WiFi，可选）/ 常备（高级）；存 ui-cache。
+- 回收：无运行回合且 idle 10min 停 proot；宿主状态看门狗发现 proot 死亡回退 light；
+  `onTrimMemory`（`MainApplication` → `HostRuntime`）在无活跃回合时停 proot + 撤通知，
+  `RUNNING_CRITICAL`/`COMPLETE` 必停；`HostService` 返回 `START_NOT_STICKY`，系统不会把 proot 拉回来。
 
 ### 6.2 预路由
 

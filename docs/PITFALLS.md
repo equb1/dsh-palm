@@ -243,6 +243,14 @@
 - 处理：不要卸载重装（会丢登录和会话）；用 Metro 热载验证：`adb reverse tcp:8081 tcp:8081` + `npx expo start --port 8081`，再重启 App 从 8081 拉 bundle。
 - 验证：`adb logcat -s ReactNativeJNI` 不再报 `Failed to connect to localhost:8081`，改动在真机生效。
 
+### E9. trim 停 proot 时出现 InterruptedIOException（2026-11-04）
+
+- 现象：`am send-trim-memory … RUNNING_LOW` 后日志有
+  `[engine] 异常: java.io.InterruptedIOException: read interrupted by close() on another thread`。
+- 原因：`HostRuntime.stop()` 主动关掉引擎 stdout，读线程被中断；属预期，不是崩溃。
+- 处理：保留日志便于排查；看门狗只在“非主动停止”时计失败。停止后 `ps` 无 proot、通知消失即为成功。
+- 验证：trim 后 `ps -A | grep proot` 为空，UI 回「轻」。
+
 ## F. 轻引擎 / Office
 
 ### F1. Hermes 缺 Buffer/crypto/fetch/WebAssembly
@@ -304,6 +312,17 @@
   调试时先 `adb shell am start -n cool.cnb.dshpalm/.MainActivity`，再跑 `apt/pip`。
 - 验证：前台 `python3 -m pip install` 20s 成功；后台同一命令 DNS 失败。
 
+### F8. 完整引擎默认 `workspace-write` 跑不了 bash（2026-11-04）
+
+- 现象：模型调 bash 直接失败：`Error: sandbox mode "workspace-write" is requested but no sandbox backend is usable on this host;
+  refusing to run the command unconfined. Install bubblewrap or run a Landlock-enforcing kernel (Linux)…`。
+- 原因：`dsh-bash-sandbox` 在 Linux 上要 bwrap 或 Landlock；proot 里 bwrap 起不来，Android 内核的 Landlock 探测也失败，
+  executor 是 fail-closed，绝不在受限模式下降级为无约束执行。
+- 处理：会话权限切「完全权限」（`danger-full-access`）后 provider 不参与，bash 正常；
+  真机已验证 `python3 -c "import docx, openpyxl, pptx; print(...)"` 返回 `1.1.0 3.1.2 1.0.2`。
+  默认 `workspace-write` 下需要 UI/能力门提示用户切权限（P0 1.4）；不要改 `DSH_PERMISSION_MODE` 全局默认。
+- 验证：`permissions.list` 默认 `workspace-write`；`sessions.setPermission` 切 full 后同一提示词工具返回 `state=done`。
+
 ## H. UI / RN
 
 ### H1. `Rendered more hooks than during the previous render`
@@ -349,7 +368,6 @@
 - 验证：1–6 行输入、中文候选都不遮。
 
 ### H7. 长会话流式仍抖 / 思考重复（2026-11-04 主体已修，20 分钟 soak 待补）
-
 **现象**
 
 - 20+ 分钟的长任务，思考或正文输出时界面一跳一跳，不是连续流；
@@ -407,6 +425,16 @@
 - 观察 `adb logcat -s ReactNativeJS` 是否有 duplicate key / 长任务 OOM。
 
 本轮真机已验证：工具密集回合无重复思考；流式中上滑 6 秒内容不动；回到底部按钮可见且可点击；退出重进无重复。
+
+### H8. 切到轻引擎默认后“未连接”（2026-11-04）
+
+- 现象：旧设备只配过 proot 账号/凭据，没有轻引擎渠道；冷启动首页显示「轻引擎未就绪」，
+  `onTrimMemory`/空闲回收掉 proot 后界面停在「重连中」。
+- 原因：轻引擎是独立的 OpenAI 兼容渠道（SecureStore 里的 baseURL/apiKey/model），
+  旧版本默认直连 proot，从来没配过；不是 1.2 的回归。
+- 处理：首页横幅「轻引擎未就绪 · 点这里配置模型渠道」进 `LightEngineScreen`；配置后轻引擎 connected。
+  不要为了这个把 proot 改回自动连接（违反 1.2 验收）；首次引导放到后续打磨。
+- 验证：未配置时仍可手动切「完整」并正常对话；配置轻渠道后角标回「轻」、可发消息。
 
 ## G. 调试
 

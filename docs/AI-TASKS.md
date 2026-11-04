@@ -23,6 +23,10 @@
   `PITFALLS.md` H7 和 [STREAMING-FIX](STREAMING-FIX.md)。
 - 完整引擎（proot）自带 Python/Office 层（2026-11-04）：`assets/python.bin` 首次启动解压到 rootfs，
   `python3` + docx/openpyxl/pptx；三格式创建/读回/编辑在真机通过（见 P0 1.1）。
+- 默认引擎已改轻（2026-11-04）：冷启动只连轻引擎、不预热 proot；切完整走角标两阶段，
+  `onTrimMemory` 优先停 proot，`HostService` 改 `START_NOT_STICKY`（见 P0 1.2）。
+- 已知缺口：完整引擎默认 `workspace-write` 跑不了 bash（无 bwrap/Landlock，见 PITFALLS F8），
+  跑 Python/Office 命令需把会话切「完全权限」；轻引擎渠道没配置时轻引擎显示未就绪。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
 
@@ -43,13 +47,17 @@
     不用 dpkg（app 私有目录禁 `link()`），用 `dpkg-deb --fsys-tarfile | tar --hard-dereference` 解包；
     构建脚本 `scripts/build-python-layer.sh`，验证 `scratch/office-smoke.py`。
 
-- [ ] **1.2 EngineManager + 轻引擎默认**
-  - [ ] 状态机：`light` 默认、`proot` 触发式
-  - [ ] `warmLocalHost()`：只 `startHost()` 不 `connect`
-  - [ ] 顶栏「轻/完整」角标 + 空闲时手动切换
-  - [ ] 预热档位（触发式默认 / 智能预热可选 / 常备高级）
-  - [ ] idle 10min 回收、`onTrimMemory` 优先停 proot
+- [x] **1.2 EngineManager + 轻引擎默认**
+  - [x] 状态机：`light` 默认、`proot` 触发式
+  - [x] `warmLocalHost()`：只 `startHost()` 不 `connect`
+  - [x] 顶栏「轻/完整」角标 + 空闲时手动切换
+  - [x] 预热档位（触发式默认 / 智能预热可选 / 常备高级）
+  - [x] idle 10min 回收、`onTrimMemory` 优先停 proot
   - 验收：冷启动到可输入 <1s；proot 不自动连接；切换有进度；失败回退不丢回合
+  - 结果（2026-11-04）：`app/src/state/engineManager.ts` 纯 reducer + `store` 执行 effects；
+    冷启动 `am start -W` 296–385ms，`ps` 无 proot/HostService；角标点按切完整 14s 内 ready 并显示「完整」；
+    `am send-trim-memory … RUNNING_LOW` 停 proot、撤通知、回「轻」；force-stop 后重开不再拉起 HostService。
+    已知缺口：本机还没配轻引擎渠道时，回退轻引擎会停在「重连中」，首页有「配置模型渠道」入口。
 
 - [ ] **1.3 附件收件管线（原生）**
   - [ ] 分享/相册/文件选择器 → `workspace/uploads/<hash>-<name>`
