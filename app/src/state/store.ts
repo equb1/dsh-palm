@@ -1025,11 +1025,16 @@ export class Store {
    * 文字进输入框；文件已由原生收件复制进 workspace/uploads，直接挂进待发列表。
    */
   async consumeShare(): Promise<void> {
-    const share = await intakeShare();
-    if (!share) return;
-    if (share.files.length > 0) this.appendIntake(share.files);
-    if (share.errors?.length) this.setError(share.errors[0] ?? '有附件没能读取');
-    if (share.text) this.patch({ pendingShare: { text: share.text } });
+    try {
+      const share = await intakeShare();
+      if (!share) return;
+      if (share.files.length > 0) this.appendIntake(share.files);
+      if (share.errors?.length) this.setError(share.errors[0] ?? '有附件没能读取');
+      if (share.text) this.patch({ pendingShare: { text: share.text } });
+    } catch (err) {
+      // 分享方没给读权限 / 文件被删：别让未捕获的 Promise 抛到红屏，给人话提示
+      this.setError(err instanceof Error ? err.message : '读取分享内容失败');
+    }
   }
 
   /** 首页取走分享来的文字（取完清掉，只填一次输入框） */
