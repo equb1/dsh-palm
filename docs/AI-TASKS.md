@@ -25,6 +25,8 @@
   `python3` + docx/openpyxl/pptx；三格式创建/读回/编辑在真机通过（见 P0 1.1）。
 - 默认引擎已改轻（2026-11-04）：冷启动只连轻引擎、不预热 proot；切完整走角标两阶段，
   `onTrimMemory` 优先停 proot，`HostService` 改 `START_NOT_STICKY`（见 P0 1.2）。
+- 附件收件已原生化（2026-11-04）：`Intake.kt` 流式复制 + SHA-256 → `workspace/uploads/`，
+  分享/相册/文件选择器三入口，JS 只拿 `FileRef` 路径；`sessions.send/steer` 带 `files`（见 P0 1.3）。
 - 已知缺口：完整引擎默认 `workspace-write` 跑不了 bash（无 bwrap/Landlock，见 PITFALLS F8），
   跑 Python/Office 命令需把会话切「完全权限」；轻引擎渠道没配置时轻引擎显示未就绪。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
@@ -59,13 +61,18 @@
     `am send-trim-memory … RUNNING_LOW` 停 proot、撤通知、回「轻」；force-stop 后重开不再拉起 HostService。
     已知缺口：本机还没配轻引擎渠道时，回退轻引擎会停在「重连中」，首页有「配置模型渠道」入口。
 
-- [ ] **1.3 附件收件管线（原生）**
-  - [ ] 分享/相册/文件选择器 → `workspace/uploads/<hash>-<name>`
-  - [ ] 生成路径引用（不走 base64），两种引擎都能读
-  - [ ] 附件 chip 标注「轻/完整」
-  - [ ] PDF/未支持格式只保存 + 提示
-  - [ ] 大文件只走路径
+- [x] **1.3 附件收件管线（原生）**
+  - [x] 分享/相册/文件选择器 → `workspace/uploads/<hash>-<name>`
+  - [x] 生成路径引用（不走 base64），两种引擎都能读
+  - [x] 附件 chip 标注「轻/完整」
+  - [x] PDF/未支持格式只保存 + 提示
+  - [x] 大文件只走路径
   - 验收：分享图片/文档进 `uploads/`；不出现 base64 大包
+  - 结果（2026-11-04）：`Intake.kt` 流式复制 + SHA-256 + 200MB 上限 + `.part` 原子改名；
+    `ShareInbox` 接冷启动/onNewIntent；Manifest 补 SEND/SEND_MULTIPLE（text/image/*）。
+    真机：文件选择器选图落到 `uploads/910fd81f6ca0de0e-dsh-trim.png`，chip 显示文件名；
+    文字分享冷启动直接进输入框（`最终分享验证 2026`）；`HostModule` 里 base64 路径已删。
+    分享 `content://` 时若对方没给读权限，错误条给人话（不再未捕获 rejection）。
 
 - [ ] **1.4 预路由 + 能力门 + Handoff v1**
   - [ ] 发送前按 R2/R3 预路由（代码/后台/转格式 → proot）

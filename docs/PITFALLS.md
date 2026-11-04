@@ -64,6 +64,16 @@
 - 处理：包一层 `async function main()` 再调用。
 - 验证：脚本正常退出。
 
+### A9. Windows 上 Metro 不跟文件改动，真机吃旧 bundle（2026-11-04）
+
+- 现象：改了 JS、重启 App 后界面/逻辑还是旧的（例如新加的分享逻辑完全没日志）；日志里能看到
+  `Running "main"`，但新代码的 `console.warn` 不出现。
+- 原因：Metro 的文件监听在 Windows 上偶尔漏事件（没有 watchman），`expo start` 的服务端缓存了旧 transform。
+- 处理：改完 JS 先重启 Metro：`cd app; $env:CI="1"; npx expo start --port 8081 --clear`，
+  再 `adb shell am force-stop cool.cnb.dshpalm && am start -n …`；验证新逻辑时加一条临时 `console.warn`
+  看 `adb logcat -s ReactNativeJS`，确认后再删。
+- 验证：`[share-debug] intake -> {"text":…}` 出现、界面同步变化。
+
 ## B. rootfs / proot
 
 ### B1. 全新安装选中了 smoke 引擎命令
@@ -194,12 +204,14 @@
 - 处理：原生 `requestNotificationPermission` 在连上宿主时申请；进度同时画在 App 内。
 - 验证：`dumpsys package` 里 `POST_NOTIFICATIONS: granted=true`；后台完成能收到通知。
 
-### E2. 分享只处理冷启动
+### E2. 分享只处理冷启动（2026-11-04 已修）
 
-- 现象：App 在后台时分享进来没反应。
-- 原因：只读了 `getInitialShare()`，没处理 `onNewIntent`。
-- 处理：当前先接受冷启动；后台分享待做。
-- 验证：冷启动分享文字能进输入框。
+- 现象：App 在后台时分享进来没反应；冷启动的分享有时也丢。
+- 原因：旧实现只读 `getInitialShare()`（Activity.intent），`onNewIntent` 回来后没通知 JS；
+  而且 `intakeShare` 没 catch，权限异常会变成未捕获 rejection。
+- 处理：新增 `ShareInbox`（onCreate/onNewIntent 都 offer，`take()` 只消费一次）；JS 在冷启动与
+  `AppState=active` 时 `consumeShare()`；文字进输入框，文件走原生收件；失败 catch 成人话。
+- 验证：冷启动分享 `最终分享验证 2026` 进输入框；文件选择器选图落 `uploads/`；见 AI-TASKS 1.3。
 
 ### E3. `dshpalm://` 深链是死的
 
@@ -322,6 +334,16 @@
   真机已验证 `python3 -c "import docx, openpyxl, pptx; print(...)"` 返回 `1.1.0 3.1.2 1.0.2`。
   默认 `workspace-write` 下需要 UI/能力门提示用户切权限（P0 1.4）；不要改 `DSH_PERMISSION_MODE` 全局默认。
 - 验证：`permissions.list` 默认 `workspace-write`；`sessions.setPermission` 切 full 后同一提示词工具返回 `state=done`。
+
+### F9. Kotlin 注释里的 `/*` 会嵌套，编译报 Unclosed comment（2026-11-04）
+
+- 现象：`Intake.kt:236:1 Syntax error: Unclosed comment`，同时 `HostModule.kt` 一堆
+  `Unresolved reference 'Intake'`（真正原因在 Intake 自己）。
+- 原因：Kotlin 支持**嵌套块注释**；KDoc 里写了 `` `uploads/*.part` ``，这个 `/*` 又开了一层，
+  后面只有一个 `*/`，注释一直到文件尾都没闭合。
+- 处理：注释里别出现 `/*`（改成 `uploads/<name>.part`）；新建 Kotlin 文件先
+  `gradlew :app:compileDebugKotlin` 单独过一遍，别等整包。
+- 验证：`assembleDebug` 通过；`grep -c '/\*'` 与 `*/` 数量可粗略自检。
 
 ## H. UI / RN
 

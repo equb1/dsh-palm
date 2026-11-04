@@ -223,9 +223,16 @@ Handoff 字段：`conversationId`、`presetId`、`permission`、模型/渠道、
 
 ### 6.4 附件
 
-**收件永远原生**：复制到 `workspace/uploads/<hash>-<name>`，生路径引用（不走 base64）。
-判定顺序：原生预处理（OCR/ASR）→ 按剩余操作选引擎 → 有任一 proot-only 文件就在 proot 汇合。
-PDF/未支持格式：只保存 + 提示，不解析。
+**收件永远原生**：`Intake.kt` 用 64KB 流式复制 + 流式 SHA-256，落到
+`<filesDir>/workspace/uploads/<hash16>-<sanitized name>`；200MB 上限，先写 `.part` 再原子改名，
+同 hash+大小直接复用。JS 只拿 `FileRef {path, relPath, name, mime, bytes, hash}`，**不碰 base64**。
+入口：系统分享（`ShareInbox`，SEND/SEND_MULTIPLE + text/plain、image/*、*/*）、相册（`expo-image-picker`
+`base64:false` 拿 URI）、文件选择器（`ACTION_OPEN_DOCUMENT`，原生内部直接收件）。
+文字分享进输入框；文件/图片按 MIME 分类：text/md/json/csv/docx/xlsx 标「轻」，pdf/pptx/doc/视频/音频/
+其他标「完整」且 `saveOnly` + 提示；>20MB 只按路径引用。
+路径映射：轻引擎 `/workspace/uploads/<x>`、完整引擎 `/root/work/uploads/<x>`，同一物理目录，零传输。
+`protocol` 的 `sessions.send/steer` 增加 `files?: FileRef[]`；桥只拼 `[附件]` 路径清单，不再走
+`fileUploads/upload`；`attachments.upload` 仅留旧客户端兼容。
 
 ### 6.5 Office
 
