@@ -358,6 +358,25 @@
 - 验证：`test/capability-gate.test.ts`（无审批/无文件/下一轮可发）、`test/handoff-orchestration.test.ts`
   （切换失败不 create、create 失败不 send、并发只一次、种子丢失按标记恢复）。
 
+### F11. 生图 url 不能直接信（2026-11-04）
+
+- 现象：`url` 返回 200 但内容是 HTML 网关页；旧代码照样存成 `.png`；下载没有超时，挂住会一直转。
+- 原因：只看了 HTTP 200，没校验 `content-type`/魔数；没有超时/大小上限；扩展名默认 `.png`。
+- 处理：30s 超时 + 20MB 上限；`content-type: image/*` 与魔数双重校验；相对/`data:` URL 单独解析；
+  跨域不转发 API Key；按真实 MIME 定扩展名；`response_format` 被 400/422 拒时去掉重试一次（auto）。
+- 验证：`test/image.test.ts`（b64/url/dataurl/html/401/429/slow/20MB）；mock `MOCK_IMAGE_MODE=url`。
+
+### F12. 输出文件名不能只靠 toSandboxPath（2026-11-04）
+
+- 现象：模型给 `会议 纪要 #1 100%` 时，`#`/`%` 在分享/`file://` 里被当片段/转义，Windows 同步也可能炸；
+  300 字符文件名会 `ENAMETOOLONG`，而审批卡已经显示了原名。
+- 原因：`toSandboxPath` 只防目录穿越，不做文件名可移植性。
+- 处理：`lib/filenames.ts` 统一 `sanitizeFileName/sanitizeSandboxPath`（NFC、CJK/空格/`._-` 保留，
+  `#%/\:*?"<>|`+控制字符→`_`，码点截断，冲突扩展名替换），生成工具与审批卡共用；
+  `toSandboxPath` 仍是唯一安全边界。
+- 验证：`test/filenames.test.ts` + `docs.test.ts` 集成；磁盘名 `docs/会议 纪要 _1 100_.docx`。
+
+
 ## H. UI / RN
 
 ### H1. `Rendered more hooks than during the previous render`

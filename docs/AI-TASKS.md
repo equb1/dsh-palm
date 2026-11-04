@@ -28,7 +28,9 @@
 - 附件收件已原生化（2026-11-04）：`Intake.kt` 流式复制 + SHA-256 → `workspace/uploads/`，
   分享/相册/文件选择器三入口，JS 只拿 `FileRef` 路径；`sessions.send/steer` 带 `files`（见 P0 1.3）。
 - 预路由/能力门/Handoff v1 已落地（2026-11-04）：`router.ts` 两因子路由、`capability.ts` 整段拒绝、
-  `handoff.ts` + `ConversationLink` 一条逻辑会话；`npm run verify` 166 pass（见 P0 1.4）。
+  `handoff.ts` + `ConversationLink` 一条逻辑会话（见 P0 1.4）。
+- M1 收尾（2026-11-04）：生图 b64/url 自动降级与 url 校验、45s 空闲超时 + `[light] ttft`/`[light] error`、
+  文件名统一清洗、生成文件面板（打开；分享延后）；`npm run verify` 206 pass（见 P0 1.5）。
 - 已知缺口：完整引擎默认 `workspace-write` 跑不了 bash（无 bwrap/Landlock，见 PITFALLS F8），
   跑 Python/Office 命令需把会话切「完全权限」；轻引擎渠道没配置时轻引擎显示未就绪。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
@@ -92,11 +94,18 @@
     真机冷启动 322ms、无 proot，抽屉「自动选择引擎」开关可见。未配轻引擎渠道，端到端模型触发的
     CapabilityCard → Handoff 未真机跑（逻辑由单测覆盖）。
 
-- [ ] **1.5 M1 收尾剩余**
-  - [ ] 真生图渠道（`b64_json`/`url` 两种返回）
-  - [ ] 真模型 ttft + 断网/401/429 异常路径
-  - [ ] 中文/空格/`#`/`%` 文件名边界
-  - [ ] 生成文件面板（打开/分享）
+- [x] **1.5 M1 收尾剩余**
+  - [x] 真生图渠道（`b64_json`/`url` 两种返回）
+  - [x] 真模型 ttft + 断网/401/429 异常路径
+  - [x] 中文/空格/`#`/`%` 文件名边界
+  - [x] 生成文件面板（打开/分享）
+  - 结果（2026-11-04）：生图支持 `responseFormat=auto|b64_json|url`（auto 不传字段，400/422 自动降级）；
+    b64 支持 data:/URL-safe + 20MB，url 30s/20MB + content-type/魔数校验、跨域不转发 Key、按 MIME 定扩展名；
+    模型调用 45s 空闲超时、错误分类（断网/401/429/超时/空响应），`[light] ttft=…` 与 `[light] error kind=…` 日志，
+    `run.finished` 错误写回 ChatScreen 横幅；`filenames.ts` 统一清洗文件名并接入生成工具与审批卡；
+    生成文件面板（顶栏入口 + 底部弹层 + 系统查看器打开）为 open-only，**分享延后**（RN Share 只支持文本）。
+    验证：`npm run verify` 206 pass / 0 fail（新增 40）；`npm run bench:light -- --n 3` 输出 P50/P90 JSON；
+    mock `MOCK_IMAGE_MODE=url` 手动 smoke 返回 image/png。真机仍缺轻引擎渠道，生图/错误横幅/面板未端到端跑。
 
 ### UI 工作流（与 P0 并行）
 
@@ -242,7 +251,7 @@ type AttachmentChipsProps = {
 - [ ] **E4** 沙箱只有 JS 层路径约束 → 文档别承诺安全边界
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
 - [ ] **E6** 文档过时 → 每次改动同步四篇文档
-- [ ] **E7** 无性能基准 → `scripts/bench-light.ts` 取 P50/P90
+- [x] **E7** 无性能基准 → `scripts/bench-light.ts` 取 P50/P90
 
 ## 4. 待决事项
 
