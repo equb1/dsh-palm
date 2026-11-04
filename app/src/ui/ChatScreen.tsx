@@ -20,6 +20,8 @@ import { isConversationReadOnly } from '../lib/handoff';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { ModelSheet } from './ModelSheet';
+import { GeneratedFilesSheet } from './GeneratedFilesSheet';
+import { collectGeneratedFiles } from '../lib/generatedFiles';
 import { TurnView, JumpButton } from './chat';
 import type { AttachmentKind } from '../lib/attachments/types';
 import { colors, space, topInset } from './theme';
@@ -36,6 +38,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const state = useStore();
   const [draft, setDraft] = React.useState('');
   const [showJump, setShowJump] = React.useState(false);
+  const [filesOpen, setFilesOpen] = React.useState(false);
   const listRef = React.useRef<FlatList<Turn>>(null);
   const following = React.useRef(true);
   const scrollScheduled = React.useRef(false);
@@ -63,6 +66,8 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       ? '完整引擎已停止，这个会话只读；点这里回首页，需要继续时在顶栏重新切到完整模式 ›'
       : '已切换引擎，这个会话只读；点这里回首页新建会话继续 ›';
   const turns = session.turns;
+  // 生成文件面板：只解析当前会话的工具结果，不额外请求宿主
+  const generatedFiles = React.useMemo(() => collectGeneratedFiles(session.turns), [session.turns]);
   let lastAssistantIndex = -1;
   for (let i = turns.length - 1; i >= 0; i--) {
     if (turns[i]?.role === 'assistant') {
@@ -246,6 +251,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
               : undefined
           }
         />
+        <IconButton glyph="▤" label="生成文件" onPress={() => setFilesOpen(true)} />
         <View style={{ flex: 1 }} />
       </View>
 
@@ -309,6 +315,11 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         ) : null}
 
         <ModelSheet />
+        <GeneratedFilesSheet
+          visible={filesOpen}
+          files={generatedFiles}
+          onClose={() => setFilesOpen(false)}
+        />
         <Composer
           draft={draft}
           onChangeDraft={setDraft}
