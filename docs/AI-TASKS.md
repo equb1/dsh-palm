@@ -2,7 +2,8 @@
 
 > 状态：2026-11-03。**本文件是任务状态、规则和命令的唯一来源**。
 > 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)。
-> 长会话流式专项方案与验证记录见 [STREAMING-FIX](STREAMING-FIX.md)。
+> 长会话流式专项方案与验证记录见 [STREAMING-FIX](STREAMING-FIX.md)；2026-11-04 完整交接见
+> [archive/29-handoff-2026-11-04](archive/29-handoff-2026-11-04.md)。
 > **每次做完任务，必须回来勾选/更新这里**；不要另开任务文档。
 
 ## 1. 当前基线
@@ -70,8 +71,11 @@
 > 先做下面「可并行 UI 项」。U2 可先做组件抽取（B3）。
 
 - [ ] **U1 聊天页重排**：浮动顶栏、Composer 28 圆角/40 键、错误横幅、回到底部键
+  - 部分完成：Composer、回到底部、模型顶栏；浮动玻璃顶栏/错误横幅未做。
 - [ ] **U2 消息层**：思考 3 行实时窗、工具行合并、整轮折叠、ChatCard 统一
-- [x] **U3 流式性能**：逐 token + 微任务 chunk 缓冲 + 局部不可变更新 + 稳定块 memo
+  - 部分完成：思考按 block、工具行、完成摘要/整轮折叠；ChatCard 统一卡片/完整过程分组未做。
+- [x] **U3 流式性能**：按帧合并 + 活跃 block 局部更新 + stable/tail Markdown + 空 block 修复；
+  90 分钟 soak 待补
 - [ ] **U4 设置 IA**：6 组、SettingsTile、右侧当前值、搜索
 - [ ] **U5 引擎页**：状态环、启动/停止/重启、失败卡（重试/安全模式/日志）
 - [ ] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
