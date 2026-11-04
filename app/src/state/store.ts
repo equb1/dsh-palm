@@ -210,6 +210,8 @@ export class Store {
   private runStartedAt: number | null = null;
   /** 退出会话时留住 detail，重进时把 live 回合并回去，避免 history + live 两份 */
   private detailCache = new Map<string, SessionDetail>();
+  /** 列表 preview 限流，避免每 token 都重建 sessions */
+  private lastSessionPreviewAt = 0;
 
   private state: AppState = {
     version: 0,
@@ -283,8 +285,9 @@ export class Store {
       this.deltaScheduled = false;
       this.flushDeltas();
     };
-    if (typeof queueMicrotask === 'function') queueMicrotask(run);
-    else Promise.resolve().then(run);
+    // 官方 DSH 的实时 delta/推理是按帧合并的；一帧内到达的 token 一次提交
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else setTimeout(run, 0);
   }
 
   /**
@@ -299,8 +302,26 @@ export class Store {
     if (!detail) return;
 
     let turns = detail.turns;
-    for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
-      const turn = turns[turnIndex]!;
+    let activeIndex = -1;
+    for (let i = turns.length - 1; i >= 0; i--) {
+      const t = turns[i]!;
+      if (t.role === 'assistant' && t.status === 'streaming') {
+        activeIndex = i;
+        break;
+      }
+    }
+    if (activeIndex < 0) {
+      for (let i = turns.length - 1; i >= 0; i--) {
+        if (turns[i]!.role === 'assistant') {
+          activeIndex = i;
+          break;
+        }
+      }
+    }
+
+    // 先只处理活跃回合：流式热路径不再扫全部历史 block
+    if (activeIndex >= 0) {
+      const turn = turns[activeIndex]!;
       let blocks = turn.blocks;
       for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
         const block = blocks[blockIndex]!;
@@ -313,18 +334,48 @@ export class Store {
         }
         if (blocks === turn.blocks) blocks = turn.blocks.slice();
         blocks[blockIndex] = { ...block, text };
+        pending.delete(block.id);
       }
       if (blocks !== turn.blocks) {
-        if (turns === detail.turns) turns = detail.turns.slice();
-        turns[turnIndex] = { ...turn, blocks };
+        turns = turns.slice();
+        turns[activeIndex] = { ...turn, blocks };
       }
     }
+
+    // 迟到/跨回合的 delta 才回退到全表扫描
+    if (pending.size > 0) {
+      for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
+        if (turnIndex === activeIndex) continue;
+        const turn = turns[turnIndex]!;
+        let blocks = turn.blocks;
+        for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+          const block = blocks[blockIndex]!;
+          const chunks = pending.get(block.id);
+          if (!chunks || chunks.length === 0) continue;
+          if (block.kind !== 'text' && block.kind !== 'thinking') continue;
+          let text = block.text + chunks.join('');
+          if (block.kind === 'thinking' && text.length > 24000) {
+            text = '…' + text.slice(-24000);
+          }
+          if (blocks === turn.blocks) blocks = turn.blocks.slice();
+          blocks[blockIndex] = { ...block, text };
+        }
+        if (blocks !== turn.blocks) {
+          if (turns === detail.turns) turns = detail.turns.slice();
+          turns[turnIndex] = { ...turn, blocks };
+        }
+      }
+      pending.clear();
+    }
+
     if (turns === detail.turns) return;
 
     const nextDetail = { ...detail, turns };
     const currentId = this.state.currentId;
-    let sessions = this.state.sessions;
-    if (currentId) {
+    const now = Date.now();
+    // 列表预览不需要每 token 更新，300ms 一次即可；详情仍每帧更新
+    if (currentId && now - this.lastSessionPreviewAt > 300) {
+      this.lastSessionPreviewAt = now;
       let preview = '';
       outer: for (let i = turns.length - 1; i >= 0; i--) {
         const blocks = turns[i]!.blocks;
@@ -336,13 +387,15 @@ export class Store {
           }
         }
       }
-      sessions = sessions.map((s) =>
+      const sessions = this.state.sessions.map((s) =>
         s.id === currentId
-          ? { ...s, status: 'running' as const, updatedAt: Date.now(), ...(preview ? { preview } : {}) }
+          ? { ...s, status: 'running' as const, updatedAt: now, ...(preview ? { preview } : {}) }
           : s
       );
+      this.patch({ detail: nextDetail, sessions });
+      return;
     }
-    this.patch({ detail: nextDetail, sessions });
+    this.patch({ detail: nextDetail });
   }
 
   private fail(err: unknown): void {

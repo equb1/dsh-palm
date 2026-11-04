@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clipboard, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Clipboard, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 import type { Approval, Block, Turn } from '../../protocol';
 import { MarkdownView } from '../MarkdownView';
@@ -16,20 +16,26 @@ const ThinkingRow = React.memo(function ThinkingRow({
   live?: boolean;
 }): React.ReactElement {
   const [open, setOpen] = React.useState(false);
-  // 长任务（20+ 分钟）的思考可能有几十万字，整段 Markdown 渲染会把 JS 线程卡死；
-  // 展开时只渲染最后一段，够看思路，又不会 OOM。
+  // 展开时冻结快照，避免流式每 token 重排 12k 字；收起后再展开拿最新
+  const snapshot = React.useRef<string | null>(null);
   const MAX_OPEN = 12000;
-  const shown = text.length > MAX_OPEN ? text.slice(-MAX_OPEN) : text;
-  const truncated = text.length > MAX_OPEN;
+  const shownRaw = open && snapshot.current !== null ? snapshot.current : text;
+  const shown = shownRaw.length > MAX_OPEN ? shownRaw.slice(-MAX_OPEN) : shownRaw;
+  const truncated = shownRaw.length > MAX_OPEN;
   const preview = text.trim().split('\n')[0]?.replace(/\*\*/g, '').slice(0, 120) ?? '';
 
   // dsh-go 的做法：一轮结束就把展开的全文收回去，过程收进一行摘要。
   React.useEffect(() => {
-    if (!live) setOpen(false);
+    if (!live) {
+      snapshot.current = null;
+      setOpen(false);
+    }
   }, [live]);
 
   const handleToggle = (): void => {
     onToggle?.();
+    if (!open) snapshot.current = text;
+    else snapshot.current = null;
     setOpen((v) => !v);
   };
 
@@ -63,15 +69,18 @@ const ThinkingRow = React.memo(function ThinkingRow({
   return (
     <View style={styles.thinkingOpenBox}>
       {header}
-      {/* 展开态直接进页面滚动，不做嵌套 ScrollView，避免手势被外层吃掉 */}
-      <View style={styles.thinkingBodyWrap}>
+      {/* 展开态限高 + 内部滚动，不改变外层列表高度 */}
+      <ScrollView style={styles.thinkingScroll} nestedScrollEnabled>
         <Text style={styles.thinkingBody} selectable>
           {shown}
         </Text>
         {truncated ? (
           <Text style={styles.thinkingMore}>思考太长，这里只显示最后 {MAX_OPEN} 字。</Text>
         ) : null}
-      </View>
+        {live ? (
+          <Text style={styles.thinkingMore}>思考仍在输出，收起后再展开可看最新内容。</Text>
+        ) : null}
+      </ScrollView>
     </View>
   );
 });
@@ -367,6 +376,14 @@ const styles = StyleSheet.create({
   thinkingActive: { color: colors.blue },
   liveDot: { color: colors.blue, fontSize: 8, paddingHorizontal: 2 },
   thinkingBodyWrap: {
+    marginLeft: 18,
+    paddingLeft: 12,
+    paddingBottom: 6,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.border,
+  },
+  thinkingScroll: {
+    maxHeight: 320,
     marginLeft: 18,
     paddingLeft: 12,
     paddingBottom: 6,

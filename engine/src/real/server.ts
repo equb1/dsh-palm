@@ -805,7 +805,10 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       if (ev.type === 'tool/call' && String(ev.data.name ?? '') === 'ask_user_question') {
         asked.set(String(ev.data.callId ?? ''), String(ev.data.arguments ?? ''));
       }
-      if (ev.type === 'tool/result') answered.add(String(ev.data.toolCallId ?? ''));
+      if (ev.type === 'tool/result') {
+        const msg = (ev.data.message ?? {}) as Record<string, unknown>;
+        answered.add(String(msg.toolCallId ?? ev.data.toolCallId ?? ''));
+      }
     }
     for (const [callId, argsJson] of asked) {
       if (answered.has(callId) || pendingQuestions.has(callId)) continue;
@@ -861,8 +864,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         };
       }
 
-      // 重新打开会话时，把还没回答的提问找回来（客户端会调 approvals.list）
-      seedPendingQuestions(sessionId, records);
+      // 不再从历史日志重建 pending：pending 只认 live pendingEvents / Host open projection
+      // seedPendingQuestions(sessionId, records);
 
       // 有未决审批/提问时，detail 也要是等待态，并把卡片块补进回合
       const pending = [
@@ -1235,7 +1238,9 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         callId,
         answer: { answers },
       });
+      pendingEvents.delete(eventId);
       broadcast('approval.resolved', { sessionId, approvalId: callId });
+      if (eventId !== callId) broadcast('approval.resolved', { sessionId, approvalId: eventId });
       return { accepted: true as const };
     },
 
