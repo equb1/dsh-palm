@@ -33,14 +33,12 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const state = useStore();
   const [draft, setDraft] = React.useState('');
   const [showJump, setShowJump] = React.useState(false);
-  const [footerHeight, setFooterHeight] = React.useState(0);
   const listRef = React.useRef<FlatList<Turn>>(null);
   const following = React.useRef(true);
   const scrollScheduled = React.useRef(false);
   const scrollFrame = React.useRef<number | null>(null);
   const viewportHeight = React.useRef(0);
   const contentHeight = React.useRef(0);
-  const footerHeightRef = React.useRef(0);
   const distanceFromAnswers = React.useRef(0);
   const touchActive = React.useRef(false);
   const userDragging = React.useRef(false);
@@ -84,19 +82,10 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       scrollScheduled.current = false;
       scrollFrame.current = null;
       if (!force && !following.current) return;
-      const offset = Math.max(
-        0,
-        contentHeight.current - viewportHeight.current - footerHeightRef.current,
-      );
+      const offset = Math.max(0, contentHeight.current - viewportHeight.current);
       programmaticUntil.current = Date.now() + (animated ? 700 : 150);
       listRef.current?.scrollToOffset({ offset, animated });
     });
-  }, []);
-
-  const updateFooterHeight = React.useCallback((height: number): void => {
-    const next = height > 0 ? Math.max(96, Math.round(height * 0.35)) : 0;
-    footerHeightRef.current = next;
-    setFooterHeight((current) => (current === next ? current : next));
   }, []);
 
   React.useEffect(() => {
@@ -113,10 +102,9 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const handleListLayout = React.useCallback(
     (event: LayoutChangeEvent): void => {
       viewportHeight.current = event.nativeEvent.layout.height;
-      updateFooterHeight(event.nativeEvent.layout.height);
       scrollToLatest(false);
     },
-    [scrollToLatest, updateFooterHeight],
+    [scrollToLatest],
   );
 
   const handleContentSizeChange = React.useCallback(
@@ -132,10 +120,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       const distance = Math.max(
         0,
-        contentSize.height -
-          footerHeightRef.current -
-          contentOffset.y -
-          layoutMeasurement.height,
+        contentSize.height - contentOffset.y - layoutMeasurement.height,
       );
       distanceFromAnswers.current = distance;
       // 只有列表真实收到触摸后才认拖拽，避免测量修正/程序滚动误冻结追底。
@@ -214,11 +199,6 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     [preset?.name, preset?.tagline],
   );
 
-  const renderFooter = React.useCallback(
-    (): React.ReactElement => <View style={{ height: footerHeight }} />,
-    [footerHeight],
-  );
-
   return (
     <View style={styles.root}>
       <View style={styles.header}>
@@ -248,7 +228,6 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             extraData={state.approvals}
             ItemSeparatorComponent={TurnSeparator}
             ListEmptyComponent={renderEmpty}
-            ListFooterComponent={renderFooter}
             contentContainerStyle={styles.listContent}
             onLayout={handleListLayout}
             onContentSizeChange={handleContentSizeChange}

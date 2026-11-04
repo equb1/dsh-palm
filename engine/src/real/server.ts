@@ -120,6 +120,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     kind: 'approval' | 'question';
     /** 一次提问可能带多个问题，作答时必须每个都给一条 */
     questionIds?: string[];
+    /** 待决卡片本体，重进会话时原样返回给客户端 */
+    approval?: Approval;
   };
   /** 等待本客户端作答的 waterfall 事件，key 用 eventId（同时也是 Approval.id） */
   const pendingEvents = new Map<string, PendingEvent>();
@@ -156,13 +158,6 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
               }))
               .filter((o) => o.label.length > 0)
           : [];
-        pendingEvents.set(eventId, {
-          eventId,
-          agentId,
-          sessionId: agentId,
-          kind: 'question',
-          questionIds: list.map((item) => String(item.id ?? '')),
-        });
         const approval: Approval = {
           id: eventId,
           sessionId: agentId,
@@ -186,6 +181,14 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
             : {}),
           ...(typeof q.detail === 'string' ? { detail: q.detail } : {}),
         };
+        pendingEvents.set(eventId, {
+          eventId,
+          agentId,
+          sessionId: agentId,
+          kind: 'question',
+          questionIds: list.map((item) => String(item.id ?? '')),
+          approval,
+        });
         broadcast('approval.requested', { approval });
         return;
       }
@@ -200,7 +203,6 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
           (typeof display.en === 'string' && display.en) ||
           rawReason ||
           '这个操作需要你确认';
-        pendingEvents.set(eventId, { eventId, agentId, sessionId: agentId, kind: 'approval' });
         const approval: Approval = {
           id: eventId,
           sessionId: agentId,
@@ -213,6 +215,13 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
           summary,
           actions: ['approve', 'reject'],
         };
+        pendingEvents.set(eventId, {
+          eventId,
+          agentId,
+          sessionId: agentId,
+          kind: 'approval',
+          approval,
+        });
         broadcast('approval.requested', { approval });
       }
     });
@@ -545,7 +554,12 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   }
 
   function startFollow(sessionId: string): void {
-    if (followSessionId === sessionId) return;
+    // 每次进会话都重建 follow，避免旧 WS 断了但 followSessionId 还等于它
+    if (followSessionId === sessionId) {
+      followDispose?.();
+      followDispose = null;
+      followSessionId = null;
+    }
     followDispose?.();
     followDispose = null;
     followSessionId = sessionId;
@@ -584,6 +598,53 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
               }
             })
             .catch(() => undefined);
+        }
+        return;
+      }
+      if (ev?.type === 'tool/call') {
+        const d = (ev.data ?? {}) as Record<string, unknown>;
+        if (!liveTurn) {
+          liveRunId = canonicalRunId(d.turn, crypto.randomUUID())!;
+          liveTurn = {
+            id: canonicalTurnId(liveRunId),
+            runId: liveRunId,
+            role: 'assistant',
+            createdAt: Date.now(),
+            blocks: [],
+            status: 'streaming',
+          };
+          liveTurns.set(sessionId, liveTurn);
+        }
+        const name = String(d.name ?? 'tool');
+        const args = typeof d.arguments === 'string' ? d.arguments : '';
+        liveTurn.blocks.push({
+          kind: 'tool',
+          id: `${liveRunId}:tool:${String(d.callId ?? crypto.randomUUID())}`,
+          name,
+          summary: args.replace(/\s+/g, ' ').slice(0, 60),
+          state: 'running',
+        });
+        broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
+        return;
+      }
+      if (ev?.type === 'tool/result') {
+        const d = (ev.data ?? {}) as Record<string, unknown>;
+        const msg = (d.message ?? {}) as Record<string, unknown>;
+        const callId = String(msg.toolCallId ?? d.callId ?? '');
+        const block = liveTurn?.blocks.find(
+          (b): b is Extract<Block, { kind: 'tool' }> =>
+            b.kind === 'tool' && b.id.endsWith(String(callId))
+        );
+        if (block && liveTurn) {
+          block.state = msg.isError === true ? 'error' : 'done';
+          const detail = JSON.stringify(msg.content ?? '').replace(/\\n/g, '\n');
+          if (detail) block.detail = detail.slice(0, 200);
+          broadcast('block.updated', {
+            sessionId,
+            runId: liveRunId,
+            turnId: liveTurn.id,
+            block,
+          });
         }
         return;
       }
@@ -802,6 +863,42 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
       // 重新打开会话时，把还没回答的提问找回来（客户端会调 approvals.list）
       seedPendingQuestions(sessionId, records);
+
+      // 有未决审批/提问时，detail 也要是等待态，并把卡片块补进回合
+      const pending = [
+        ...pendingQuestions.values(),
+        ...[...pendingEvents.values()].map((p) => p.approval).filter((a): a is Approval => Boolean(a)),
+      ].filter((a) => a.sessionId === sessionId);
+      if (pending.length > 0) {
+        let turns = detail.turns.slice();
+        for (const a of pending) {
+          const block: Block = { kind: 'approval', id: 'ap-' + a.id, approvalId: a.id };
+          let placed = false;
+          for (let i = turns.length - 1; i >= 0; i--) {
+            const turn = turns[i]!;
+            if (turn.role !== 'assistant') continue;
+            if (turn.blocks.some((b) => b.kind === 'approval' && b.approvalId === a.id)) {
+              placed = true;
+              break;
+            }
+            turns[i] = { ...turn, blocks: [...turn.blocks, block] };
+            placed = true;
+            break;
+          }
+          if (!placed) {
+            turns.push({
+              id: canonicalTurnId('approval:' + a.id),
+              runId: 'approval:' + a.id,
+              role: 'assistant',
+              createdAt: Date.now(),
+              blocks: [block],
+              status: 'streaming',
+            });
+          }
+        }
+        detail.turns = turns;
+        detail.status = 'waiting_approval';
+      }
 
       // 打开（或切换）这个会话的实时流，之后的新回合会以事件形式推给客户端
       startFollow(sessionId);
@@ -1090,7 +1187,19 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       detail.model = { provider, model, ...(reasoningEffort ? { reasoningEffort } : {}) };
       return { session: detail };
     },
-    'approvals.list': async () => ({ approvals: [...pendingQuestions.values()] }),
+    'approvals.list': async ({ sessionId }: { sessionId?: string }) => {
+      const out: Approval[] = [];
+      const seen = new Set<string>();
+      const add = (a: Approval): void => {
+        if (sessionId && a.sessionId !== sessionId) return;
+        if (seen.has(a.id)) return;
+        seen.add(a.id);
+        out.push(a);
+      };
+      for (const a of pendingQuestions.values()) add(a);
+      for (const p of pendingEvents.values()) if (p.approval) add(p.approval);
+      return { approvals: out };
+    },
 
     // 回答 ask_user_question：回执会被 steer 进 agent，成为一条 user 消息。
     //
@@ -1102,10 +1211,23 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     'questions.answer': async ({ sessionId, callId, answers }) => {
       pendingQuestions.delete(callId);
       // 一次提问可能带多个问题：缺的那些补一个空回答，否则引擎会 BAD_ANSWER 拒掉整批
-      const pending = pendingEvents.get(callId);
+      let eventId = callId;
+      let pending = pendingEvents.get(callId);
+      if (!pending) {
+        // 恢复出来的卡片 id 可能是 callId，而 waterfall 池里是 eventId
+        const qid = answers[0]?.id;
+        for (const [id, p] of pendingEvents) {
+          if (p.sessionId !== sessionId) continue;
+          if (p.approval?.id === callId || (qid && p.approval?.questionId === qid)) {
+            eventId = id;
+            pending = p;
+            break;
+          }
+        }
+      }
       const allIds = pending?.questionIds ?? [];
       const complete = allIds.length > 1 ? allIds.map((id) => answers.find((a) => a.id === id) ?? { id, selected: [] as string[] }) : answers;
-      const viaEvent = await answerEvent(callId, { kind: 'result', value: { answers: complete } }).catch(() => false);
+      const viaEvent = await answerEvent(eventId, { kind: 'result', value: { answers: complete } }).catch(() => false);
       if (viaEvent) return { accepted: true as const };
 
       await client.rpc<boolean>('userQuestions/answer', {

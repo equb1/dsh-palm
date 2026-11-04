@@ -561,11 +561,16 @@ export class Store {
 
   async openSession(id: string): Promise<void> {
     if (!this.client) return;
-    this.patch({ busy: true, error: null });
+    const cached = this.detailCache.get(id);
+    this.detailCache.delete(id);
+    // 重进会话先把 currentId/detail 切过去，避免 sessions.get 期间到达的流式帧被丢
+    this.patch(
+      cached
+        ? { busy: true, error: null, currentId: id, detail: cached }
+        : { busy: true, error: null }
+    );
     try {
       const { session } = await this.client.request('sessions.get', { sessionId: id });
-      const cached = this.detailCache.get(id);
-      this.detailCache.delete(id);
       let turns = session.turns;
       const active = session.status === 'running' || session.status === 'waiting_approval';
       const live = active

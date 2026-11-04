@@ -220,6 +220,10 @@ const AssistantTurn = React.memo(function AssistantTurn({
     () => turn.blocks.filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text'),
     [turn.blocks],
   );
+  const approvalBlocks = React.useMemo(
+    () => visibleBlocks.filter((b) => b.kind === 'approval'),
+    [visibleBlocks],
+  );
   const answerText = React.useMemo(
     () => answerBlocks.map((b) => b.text).join('\n'),
     [answerBlocks],
@@ -249,7 +253,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
         </Pressable>
       ) : null}
 
-      {(!completed || open) &&
+      {completed && open &&
         processBlocks.map((b, i) => (
           <React.Fragment key={`${b.id}-${i}`}>
             {renderBlock(b, approvals, onToggleThinking, false)}
@@ -257,9 +261,18 @@ const AssistantTurn = React.memo(function AssistantTurn({
         ))}
 
       {completed
-        ? answerBlocks.map((b, i) => (
-            <React.Fragment key={`${b.id}-${i}`}>{renderBlock(b, approvals, onToggleThinking)}</React.Fragment>
-          ))
+        ? [
+            ...approvalBlocks.map((b, i) => (
+              <React.Fragment key={`ap-${b.id}-${i}`}>
+                {renderBlock(b, approvals, onToggleThinking)}
+              </React.Fragment>
+            )),
+            ...answerBlocks.map((b, i) => (
+              <React.Fragment key={`${b.id}-${i}`}>
+                {renderBlock(b, approvals, onToggleThinking)}
+              </React.Fragment>
+            )),
+          ]
         : visibleBlocks.map((b, i) => (
             <React.Fragment key={`${b.id}-${i}`}>
               {renderBlock(
