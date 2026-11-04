@@ -6,9 +6,11 @@
  * 包装成和 `EngineClient` 一样的接口）。
  *
  * 不实现的东西要显式拒绝（带 hint），不要假装成功：
- * 账号登录、插件、附件上传、多工作区 —— 这些是 M2/M3 的事。
+ * 账号登录、插件、回执式附件上传、多工作区 —— 这些是 M2/M3 的事。
+ * （1.3 起附件由 App 原生收件落进 /workspace/uploads，只用 files 传路径。）
  */
 import { EngineProtocolError } from '../../lib/client';
+import { AttachmentPathError, promptWithFiles } from '../../lib/attachments/prompt';
 import {
   PROTOCOL_VERSION,
   type Approval,
@@ -18,6 +20,8 @@ import {
   type EngineEvent,
   type EventName,
   type EventPayloads,
+  type FileRef,
+  type HandoffBlockedCall,
   type Method,
   type PermissionOption,
   type Preset,
@@ -30,6 +34,7 @@ import {
 } from '../../protocol';
 import { Agent, userTurnFromText, type RunOutcome, type RunSink } from './agent';
 import { SessionRepo, newRunId, newSessionId } from './sessionRepo';
+import { buildHandoff } from '../../lib/handoff';
 import { toolsForPermission } from './tools';
 import type {
   AskAnswer,
@@ -179,6 +184,7 @@ export class LightHost {
         'run.finished',
         'approval.requested',
         'approval.resolved',
+        'capability.missing',
       ],
       actions: ['approve', 'reject', 'steer', 'stop', 'switch_preset', 'create_session'],
       presets: PRESETS,
@@ -300,13 +306,23 @@ export class LightHost {
         this.emit('session.created', { session: this.summary(session) });
         return { session: this.summary(session) };
       },
-      'sessions.send': async ({ sessionId, text, attachments }: { sessionId: string; text: string; attachments?: string[] }) => {
+      'sessions.send': async ({
+        sessionId,
+        text,
+        attachments,
+        files,
+      }: {
+        sessionId: string;
+        text: string;
+        attachments?: string[];
+        files?: FileRef[];
+      }) => {
         const session = this.requireSession(sessionId);
         if (attachments && attachments.length > 0) {
           throw new EngineProtocolError({
             code: 'unsupported',
-            message: '轻引擎暂不支持附件',
-            hint: '先把内容保存到工作区，再让模型读文件；附件上传在 M2 接',
+            message: '轻引擎不收回执式附件',
+            hint: '附件已由 App 收件到 /workspace/uploads，请用 files 传路径引用',
           });
         }
         if (this.runs.has(sessionId)) {
@@ -316,18 +332,35 @@ export class LightHost {
             hint: '想中途补充要求，直接发消息（会走插话）',
           });
         }
-        const trimmed = text.trim();
-        if (!trimmed) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
-        this.appendUserMessage(session, trimmed);
+        const body = this.textWithFiles(text, files);
+        if (!body) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
+        this.appendUserMessage(session, body);
         await this.save(session);
         const runId = this.startRun(session);
         return { accepted: true as const, runId };
       },
-      'sessions.steer': async ({ sessionId, text }: { sessionId: string; text: string }) => {
+      'sessions.steer': async ({
+        sessionId,
+        text,
+        attachments,
+        files,
+      }: {
+        sessionId: string;
+        text: string;
+        attachments?: string[];
+        files?: FileRef[];
+      }) => {
         const session = this.requireSession(sessionId);
-        const trimmed = text.trim();
-        if (!trimmed) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
-        this.appendUserMessage(session, trimmed);
+        if (attachments && attachments.length > 0) {
+          throw new EngineProtocolError({
+            code: 'unsupported',
+            message: '轻引擎不收回执式附件',
+            hint: '附件已由 App 收件到 /workspace/uploads，请用 files 传路径引用',
+          });
+        }
+        const body = this.textWithFiles(text, files);
+        if (!body) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
+        this.appendUserMessage(session, body);
         await this.save(session);
         const run = this.runs.get(sessionId);
         if (run) {
@@ -337,6 +370,72 @@ export class LightHost {
           this.startRun(session);
         }
         return { accepted: true as const };
+      },
+      /**
+       * 轻引擎专用交接包：只从 StoredSession.history 里抽，
+       * 保证工具参数/结果原样带走（不重新跑一遍）。
+       */
+      'sessions.handoff': async ({
+        sessionId,
+        reason,
+        userText,
+        assistantText,
+        missing,
+        blockedCallIds,
+        files,
+        recentTurns,
+      }: {
+        sessionId: string;
+        reason?: string;
+        userText?: string;
+        assistantText?: string;
+        missing?: string[];
+        blockedCallIds?: string[];
+        files?: FileRef[];
+        recentTurns?: number;
+      }) => {
+        const session = this.requireSession(sessionId);
+        const wanted = new Set(blockedCallIds ?? []);
+        const blocked: HandoffBlockedCall[] = [];
+        if (wanted.size > 0) {
+          for (const message of session.history) {
+            for (const call of message.tool_calls ?? []) {
+              if (!wanted.has(call.id)) continue;
+              let args: Record<string, unknown> = {};
+              try {
+                const parsed = JSON.parse(call.function.arguments || '{}') as unknown;
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                  args = parsed as Record<string, unknown>;
+                }
+              } catch {
+                /* 参数损坏就带空对象，至少保留调用 id/name */
+              }
+              blocked.push({ callId: call.id, name: call.function.name, args });
+            }
+          }
+        }
+        return buildHandoff({
+          conversationId: session.id,
+          reason: reason?.trim() || 'capability_missing',
+          from: { engine: 'light', sessionId: session.id, hostId: LIGHT_HOST_ID },
+          presetId: session.presetId,
+          presetForTarget: session.presetId,
+          permission: { source: session.permission, target: session.permission, escalated: false },
+          model: { source: session.model ?? this.modelChoice(), matched: true },
+          channel: {
+            baseURL: this.options.model.baseURL,
+            model: this.options.model.model,
+            apiKeyRef: 'light-engine',
+          },
+          history: session.history,
+          turns: session.turns,
+          ...(userText ? { userText } : {}),
+          ...(assistantText ? { assistantText } : {}),
+          ...(files && files.length > 0 ? { files } : {}),
+          ...(blocked.length > 0 ? { blocked } : {}),
+          ...(missing && missing.length > 0 ? { missing } : {}),
+          ...(recentTurns ? { limit: recentTurns } : {}),
+        });
       },
       'sessions.stop': async ({ sessionId }: { sessionId: string }) => {
         const run = this.runs.get(sessionId);
@@ -466,8 +565,8 @@ export class LightHost {
       'attachments.upload': async () => {
         throw new EngineProtocolError({
           code: 'unsupported',
-          message: '轻引擎暂不支持附件',
-          hint: 'M2 接上 WebView / 完整引擎后再做',
+          message: '附件已落在 /workspace/uploads，直接给路径',
+          hint: '轻引擎不再接收 base64 附件；用 sessions.send 的 files 字段传路径引用',
         });
       },
       'credentials.describe': async ({ refs }: { refs: string[] }) => ({
@@ -710,6 +809,25 @@ export class LightHost {
 
   private modelChoice(): { provider: string; model: string } {
     return { provider: this.providerId(), model: this.options.model.model };
+  }
+
+  /**
+   * 附件只给路径：`/workspace/<relPath>`。
+   * 路径不合法（不在 uploads、带 `..`）统一转成 bad_request，绝不拼进工作区外。
+   */
+  private textWithFiles(text: string, files?: FileRef[]): string {
+    try {
+      return promptWithFiles(text, files, WORKSPACE_MOUNT).trim();
+    } catch (error) {
+      if (error instanceof AttachmentPathError) {
+        throw new EngineProtocolError({
+          code: 'bad_request',
+          message: error.message,
+          hint: '附件应由 App 收件管线放进 /workspace/uploads，不能带 ../ 之类的路径',
+        });
+      }
+      throw error;
+    }
   }
 
   private appendUserMessage(session: StoredSession, text: string): void {

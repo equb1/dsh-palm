@@ -1,10 +1,10 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import type { AttachmentEngine, AttachmentKind } from '../lib/attachments/types';
 import { radius, semantic, space, typography } from './theme';
 
-export type AttachmentKind = 'image' | 'file';
-export type AttachmentEngine = 'light' | 'full';
+export type { AttachmentEngine, AttachmentKind };
 
 export interface AttachmentChip {
   id: string;
@@ -19,12 +19,18 @@ export interface AttachmentChipsProps {
   onPress?: (id: string) => void;
 }
 
-const KIND_GLYPH: Record<AttachmentKind, string> = { image: '🖼', file: '📄' };
+const KIND_GLYPH: Record<AttachmentKind, string> = {
+  image: '🖼',
+  document: '📄',
+  file: '📄',
+  video: '🎬',
+  audio: '🎵',
+};
 const ENGINE_LABEL: Record<AttachmentEngine, string> = { light: '轻', full: '完整' };
 
 /**
- * 附件 chip 条：横向滚动，图片/文件一个样式；
- * engine 标记走轻/完整两套引擎时再接，1.3 之前只做展示。
+ * 附件 chip 条：横向滚动，图片/文档一个样式；
+ * engine 是收件分类算出来的「轻 / 完整」，1.3 起由 Composer 接 pendingAttachments。
  */
 export function AttachmentChips({
   items,

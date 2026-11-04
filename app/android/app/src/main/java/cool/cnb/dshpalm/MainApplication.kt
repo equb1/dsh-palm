@@ -42,4 +42,13 @@ class MainApplication : Application(), ReactApplication {
     super.onConfigurationChanged(newConfig)
     ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
   }
+
+  /**
+   * 系统内存紧张：优先停 proot（完整引擎），别让轻引擎和 UI 先被回收。
+   * 具体停不停由 HostRuntime 按级别 + 是否有活跃回合决定，并且在工作线程里停。
+   */
+  override fun onTrimMemory(level: Int) {
+    super.onTrimMemory(level)
+    cool.cnb.dshpalm.host.HostRuntime.onTrimMemory(level)
+  }
 }

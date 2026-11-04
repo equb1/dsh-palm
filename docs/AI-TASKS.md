@@ -21,6 +21,16 @@
 - 流式主链路已修（2026-11-04）：canonical run/block id、chunk 缓冲、稳定块 memo、FlatList 和 follow
   状态机已落地；真机工具密集长流、上滑冻结、回到底部、重进通过。20 分钟 soak 待补，见
   `PITFALLS.md` H7 和 [STREAMING-FIX](STREAMING-FIX.md)。
+- 完整引擎（proot）自带 Python/Office 层（2026-11-04）：`assets/python.bin` 首次启动解压到 rootfs，
+  `python3` + docx/openpyxl/pptx；三格式创建/读回/编辑在真机通过（见 P0 1.1）。
+- 默认引擎已改轻（2026-11-04）：冷启动只连轻引擎、不预热 proot；切完整走角标两阶段，
+  `onTrimMemory` 优先停 proot，`HostService` 改 `START_NOT_STICKY`（见 P0 1.2）。
+- 附件收件已原生化（2026-11-04）：`Intake.kt` 流式复制 + SHA-256 → `workspace/uploads/`，
+  分享/相册/文件选择器三入口，JS 只拿 `FileRef` 路径；`sessions.send/steer` 带 `files`（见 P0 1.3）。
+- 预路由/能力门/Handoff v1 已落地（2026-11-04）：`router.ts` 两因子路由、`capability.ts` 整段拒绝、
+  `handoff.ts` + `ConversationLink` 一条逻辑会话；`npm run verify` 166 pass（见 P0 1.4）。
+- 已知缺口：完整引擎默认 `workspace-write` 跑不了 bash（无 bwrap/Landlock，见 PITFALLS F8），
+  跑 Python/Office 命令需把会话切「完全权限」；轻引擎渠道没配置时轻引擎显示未就绪。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
 
@@ -30,34 +40,57 @@
 
 ### P0 · 当前优先
 
-- [ ] **1.1 Office 三件套（proot + Python）**
-  - [ ] proot 里装 `python3` + `python-docx` + `openpyxl` + `python-pptx`
-  - [ ] 跑通 docx / xlsx / pptx 的创建、读取、编辑
-  - [ ] 决定打包方式（进 payload / 首次下载）并记录体积
+- [x] **1.1 Office 三件套（proot + Python）**
+  - [x] proot 里装 `python3` + `python-docx` + `openpyxl` + `python-pptx`
+  - [x] 跑通 docx / xlsx / pptx 的创建、读取、编辑
+  - [x] 决定打包方式（进 payload / 首次下载）并记录体积
   - 验收：三格式各一份创建+读回+编辑；真机耗时与体积有记录
+  - 结果（2026-11-04）：APK 独立层 `assets/python.bin`（36.8MB，解压 1s，安装后约 114MB）；
+    Python 3.12.3 / python-docx 1.1.0 / openpyxl 3.1.2 / python-pptx 1.0.2 / Pillow 10.2.0 / lxml 5.2.1；
+    真机耗时（创建/读回/编辑 ms）：docx 33/12/13，xlsx 7/3/4，pptx 16/5/6。
+    不用 dpkg（app 私有目录禁 `link()`），用 `dpkg-deb --fsys-tarfile | tar --hard-dereference` 解包；
+    构建脚本 `scripts/build-python-layer.sh`，验证 `scratch/office-smoke.py`。
 
-- [ ] **1.2 EngineManager + 轻引擎默认**
-  - [ ] 状态机：`light` 默认、`proot` 触发式
-  - [ ] `warmLocalHost()`：只 `startHost()` 不 `connect`
-  - [ ] 顶栏「轻/完整」角标 + 空闲时手动切换
-  - [ ] 预热档位（触发式默认 / 智能预热可选 / 常备高级）
-  - [ ] idle 10min 回收、`onTrimMemory` 优先停 proot
+- [x] **1.2 EngineManager + 轻引擎默认**
+  - [x] 状态机：`light` 默认、`proot` 触发式
+  - [x] `warmLocalHost()`：只 `startHost()` 不 `connect`
+  - [x] 顶栏「轻/完整」角标 + 空闲时手动切换
+  - [x] 预热档位（触发式默认 / 智能预热可选 / 常备高级）
+  - [x] idle 10min 回收、`onTrimMemory` 优先停 proot
   - 验收：冷启动到可输入 <1s；proot 不自动连接；切换有进度；失败回退不丢回合
+  - 结果（2026-11-04）：`app/src/state/engineManager.ts` 纯 reducer + `store` 执行 effects；
+    冷启动 `am start -W` 296–385ms，`ps` 无 proot/HostService；角标点按切完整 14s 内 ready 并显示「完整」；
+    `am send-trim-memory … RUNNING_LOW` 停 proot、撤通知、回「轻」；force-stop 后重开不再拉起 HostService。
+    已知缺口：本机还没配轻引擎渠道时，回退轻引擎会停在「重连中」，首页有「配置模型渠道」入口。
 
-- [ ] **1.3 附件收件管线（原生）**
-  - [ ] 分享/相册/文件选择器 → `workspace/uploads/<hash>-<name>`
-  - [ ] 生成路径引用（不走 base64），两种引擎都能读
-  - [ ] 附件 chip 标注「轻/完整」
-  - [ ] PDF/未支持格式只保存 + 提示
-  - [ ] 大文件只走路径
+- [x] **1.3 附件收件管线（原生）**
+  - [x] 分享/相册/文件选择器 → `workspace/uploads/<hash>-<name>`
+  - [x] 生成路径引用（不走 base64），两种引擎都能读
+  - [x] 附件 chip 标注「轻/完整」
+  - [x] PDF/未支持格式只保存 + 提示
+  - [x] 大文件只走路径
   - 验收：分享图片/文档进 `uploads/`；不出现 base64 大包
+  - 结果（2026-11-04）：`Intake.kt` 流式复制 + SHA-256 + 200MB 上限 + `.part` 原子改名；
+    `ShareInbox` 接冷启动/onNewIntent；Manifest 补 SEND/SEND_MULTIPLE（text/image/*）。
+    真机：文件选择器选图落到 `uploads/910fd81f6ca0de0e-dsh-trim.png`，chip 显示文件名；
+    文字分享冷启动直接进输入框（`最终分享验证 2026`）；`HostModule` 里 base64 路径已删。
+    分享 `content://` 时若对方没给读权限，错误条给人话（不再未捕获 rejection）。
 
-- [ ] **1.4 预路由 + 能力门 + Handoff v1**
-  - [ ] 发送前按 R2/R3 预路由（代码/后台/转格式 → proot）
-  - [ ] 轻引擎工具执行前检查能力 → `capability_missing`（无副作用）
-  - [ ] Handoff：摘要 + 最近 8 轮 + 工具结果 + 文件引用 + 待执行步骤
-  - [ ] 一条逻辑会话（`ConversationLink`）；只重发未执行步骤；失败回退
+- [x] **1.4 预路由 + 能力门 + Handoff v1**
+  - [x] 发送前按 R2/R3 预路由（代码/后台/转格式 → proot）
+  - [x] 轻引擎工具执行前检查能力 → `capability_missing`（无副作用）
+  - [x] Handoff：摘要 + 最近 8 轮 + 工具结果 + 文件引用 + 待执行步骤
+  - [x] 一条逻辑会话（`ConversationLink`）；只重发未执行步骤；失败回退
   - 验收：手动/能力门切换都能续跑；重复副作用 0；用户看不到两个会话
+  - 结果（2026-11-04）：`router.ts` 两因子预路由（动作词 + 解释器，裸代码块/提问不误判）；
+    `capability.ts` 整段拒绝 bash（不执行前缀）、`read_file` >10MB、未知工具；
+    `agent.ts` 先落 `[CAPABILITY_MISSING]` 合成结果再停，不产生审批/文件副作用；
+    `handoff.ts` 摘要+8 轮+已完成步骤+文件引用+待执行调用，`[dsh-handoff:<id>]` 幂等种子；
+    `store.beginHandoff` 两阶段 + `models.list` 预检 + create 后立即落 fullSessionId + 失败回滚；
+    `ConversationLink` 隐藏完整会话、事件 sessionId 重写、列表合并；桥补 `job.done`。
+    验证：`npm run verify` 166 pass / 0 fail（新增 router/capability/handoff/orchestration 36 条）；
+    真机冷启动 322ms、无 proot，抽屉「自动选择引擎」开关可见。未配轻引擎渠道，端到端模型触发的
+    CapabilityCard → Handoff 未真机跑（逻辑由单测覆盖）。
 
 - [ ] **1.5 M1 收尾剩余**
   - [ ] 真生图渠道（`b64_json`/`url` 两种返回）
@@ -215,7 +248,6 @@ type AttachmentChipsProps = {
 
 | 项 | 选项 | 建议 |
 |---|---|---|
-| Python 打包 | 进 payload（离线可靠，+50–60MB）/ 首次下载 | spike 后定 |
 | ASR/OCR 时机 | ASR 先进 P1 / OCR 后置 | 先 ASR，音频路由才闭环 |
 | iOS 范围（D2） | 只遥控器 / 也要轻引擎 | 先遥控器 |
 | 插件市场（D3） | 只启用/配置 / 下载执行 | 前者（2.5.2） |

@@ -114,6 +114,7 @@ UI 侧统一经 `app/src/lib/errors.ts` 翻成人话。
 |---|---|---|
 | `rootfs.bin` | APK assets | Ubuntu 24.04 rootfs（解压约 125MB） |
 | `payload.bin` | APK assets | Node 24 + dsh + 桥 + patch（约 158MB） |
+| `python.bin` | APK assets | Python/Office 层（36.8MB，解压约 114MB）：python3 + docx/openpyxl/pptx/pip |
 | `RuntimeInstaller` | Kotlin | 解压、迁移、DNS、补丁、权限、进度 |
 | `HostService` | Kotlin FGS | 前台服务，起 proot/Node/桥，通知进度 |
 | `HostRuntime` | Kotlin | 进程管理、看门狗、日志、状态 |
@@ -125,12 +126,18 @@ UI 侧统一经 `app/src/lib/errors.ts` 翻成人话。
 App → startHost() → HostService.onStartCommand
   → RuntimeInstaller.ensureLayout（工作区/密钥/.dsh 外置 + 迁移 + DNS）
   → ensurePatch（fs-link-fallback + 桥）
+  → ensurePython（assets/python.bin → rootfs；marker 版本一致就跳过）
   → proot -b workspace:/root/work -b bridge:/bridge -b .dsh:/root/.dsh
        → node .../dsh/lib/bin.js web --port 8787
   → node bridge.cjs（读 8787 token，开 8788）
   → 日志出现 token/配对码 → 状态 ready
 App 轮询 host.status() → maybeAutoConnect() → 连 ws://127.0.0.1:8788/ws
 ```
+
+Python 层单独成 assets：改它不用重打 158MB 的 payload；release 裁掉也不影响启动（`ensurePython` 打日志跳过）。
+层里的路径从根开始（`usr/bin/python3`、`usr/lib/python3.12/...`），由 `TarExtractor` 解到 rootfs；
+解压后补一次 `/usr/bin`、`/usr/local/bin` 的执行位。构建与验证见 `scripts/build-python-layer.sh`、
+`scratch/office-smoke.py`（耗时/体积记录见 AI-TASKS 1.1）。
 
 ### 4.3 关键约束
 
@@ -183,27 +190,51 @@ OpenAI 兼容 `/chat/completions`，SSE 流；记录 ttft/stream 耗时（`[ligh
 
 ### 6.1 默认
 
-- 有轻引擎配置 → **默认轻引擎**；proot 触发式（不自动连接）。
+- 有轻引擎配置 → **默认轻引擎**；proot 触发式（不自动连接）。没配置时首页给「配置模型渠道」入口。
+- 状态机在 `app/src/state/engineManager.ts`（纯 reducer，`light|starting-proot|full` + effects），
+  `store.ts` 只执行 effects；切完整是两阶段：目标 WS 握手成功后才关轻引擎，失败回退不丢回合。
 - `warmLocalHost()`：只 `startHost()` 不 `connect`，UI 继续用 light。
-- 顶栏「轻/完整」角标；手动切换仅在空闲时可用。
-- 预热档位：触发式（默认）/ 智能预热（充电+WiFi，可选）/ 常备（高级）。
-- 回收：无运行回合且 idle 10min 停 proot；`onTrimMemory` 优先停 proot。
+- 顶栏「轻/完整 42%」角标；手动切换仅在空闲（无回合、无审批）时可用。
+- 预热档位：触发式（默认）/ 智能预热（充电+WiFi，可选）/ 常备（高级）；存 ui-cache。
+- 回收：无运行回合且 idle 10min 停 proot；宿主状态看门狗发现 proot 死亡回退 light；
+  `onTrimMemory`（`MainApplication` → `HostRuntime`）在无活跃回合时停 proot + 撤通知，
+  `RUNNING_CRITICAL`/`COMPLETE` 必停；`HostService` 返回 `START_NOT_STICKY`，系统不会把 proot 拉回来。
 
 ### 6.2 预路由
 
+实现在 `app/src/state/router.ts`（纯函数，`routeTurn()`），发消息前调用。规则按优先级：
+
 | 命中 | 引擎 |
 |---|---|
-| 跑代码/脚本、python/node/npm/git/ffmpeg、编译、测试、装依赖 | proot |
-| 转 PDF/渲染/旧格式 | **默认不做**；需要时电脑端或 proot 可选 LibreOffice |
-| 后台/锁屏长任务 | proot（light 后台会冻结） |
-| 其余 | light，失败走能力门 |
+| 用户前缀 `完整/全/用完整引擎`、`轻/留在轻引擎` 或会话 pin | 按用户 |
+| PDF 转换/render/recalc/旧 .doc/.ppt（含旧格式附件） | `blocked-unsupported`，不启动 proot |
+| pptx/zip/视频/>10MB 附件 | proot |
+| 后台/锁屏/“继续跑/别停” | proot |
+| **动作词 + 解释器/编译器**（python/node/npm/pip/git/ffmpeg/apt/make/gcc…） | proot |
+| 编辑已有 docx/xlsx、pptx 操作 | proot |
+| 其余（含裸代码块、只问“python 是什么”） | light |
+| 忙/待审批/`starting-proot`/远程宿主 | 不自动切，按当前引擎 |
+
+proot 的代码/后台/Office 预路由会要求 `danger-full-access`（见 PITFALLS F8）；能力门卡片路径要二次确认。
 
 ### 6.3 能力门与 Handoff
 
-1. light 工具执行前检查能力；缺能力返回 `capability_missing`，**无副作用**；
-2. 用户确认 → 启/连 proot → Handoff → 只重发未执行步骤；
-3. 已执行工具结果原样带走，**绝不重放**；
-4. 失败回退 light，保留当前回合。
+1. light 工具执行前 `capability.ts` 检查：bash 命令按 shell 段拆分，任一段调用 proot-only 二进制就**整段拒绝**
+   （不执行 `touch x && python y.py` 的前半段）；`read_file` >10MB、未知/只有完整引擎有的工具也拒绝。
+2. 拒绝时先给每个未执行调用写 `[CAPABILITY_MISSING] not executed` 合成工具结果（避免 OpenAI 协议里
+   dangling tool_calls），再落 `capability` block、发 `capability.missing` 事件、以 `capability_missing` 结束回合；
+   **无审批、无文件副作用**。UI 的 `CapabilityCard` 给「用完整模式继续 / 留在轻引擎」。
+3. Handoff v1（`app/src/lib/handoff.ts` + light `sessions.handoff`）：摘要（最后一条用户请求 + 已完成工具名 + 文件）、
+   最近 8 轮（含工具结果）、已完成步骤、文件引用 `/workspace/...`、待执行调用（callId/name/args）。
+   `handoffId` 由 light session + 末回合 + 被拦 callId 哈希得到，种子文本带 `[dsh-handoff:<id>]`。
+4. `store.beginHandoff`：guard `canSwitch` → 保存源 `currentId/detail` → 两阶段切 proot → `models.list` 非空
+   → `sessions.create` 后立即持久化 `fullSessionId` → rename → setPermission（bash 需 `danger-full-access`）
+   → setModel（同渠道模型优先，否则宿主默认并记录 notice）→ 只发一次种子。任何 send 前失败回滚 light；
+   send 后不确定时先 `sessions.get` 找种子标记，绝不重放已完成步骤。
+5. `ConversationLink`：`currentId` 保持逻辑 id，物理 id 由 `physicalIdFor()` 映射；入站事件重写 sessionId；
+   会话列表隐藏 `fullSessionId`，只显示一条逻辑会话（角标 轻/完整）；打开时合并 light 缓存 + proot 回合，
+   丢掉种子 user 回合；proot 死后会话只读，不在 light 重放。链接/pin/autoRoute 存 ui-cache；
+   active-full 时 idle 回收不 stop proot。
 
 Handoff 字段：`conversationId`、`presetId`、`permission`、模型/渠道、摘要、
 最近 8 轮原文（含工具结果）、文件引用、`pendingIntent`。
@@ -212,9 +243,16 @@ Handoff 字段：`conversationId`、`presetId`、`permission`、模型/渠道、
 
 ### 6.4 附件
 
-**收件永远原生**：复制到 `workspace/uploads/<hash>-<name>`，生路径引用（不走 base64）。
-判定顺序：原生预处理（OCR/ASR）→ 按剩余操作选引擎 → 有任一 proot-only 文件就在 proot 汇合。
-PDF/未支持格式：只保存 + 提示，不解析。
+**收件永远原生**：`Intake.kt` 用 64KB 流式复制 + 流式 SHA-256，落到
+`<filesDir>/workspace/uploads/<hash16>-<sanitized name>`；200MB 上限，先写 `.part` 再原子改名，
+同 hash+大小直接复用。JS 只拿 `FileRef {path, relPath, name, mime, bytes, hash}`，**不碰 base64**。
+入口：系统分享（`ShareInbox`，SEND/SEND_MULTIPLE + text/plain、image/*、*/*）、相册（`expo-image-picker`
+`base64:false` 拿 URI）、文件选择器（`ACTION_OPEN_DOCUMENT`，原生内部直接收件）。
+文字分享进输入框；文件/图片按 MIME 分类：text/md/json/csv/docx/xlsx 标「轻」，pdf/pptx/doc/视频/音频/
+其他标「完整」且 `saveOnly` + 提示；>20MB 只按路径引用。
+路径映射：轻引擎 `/workspace/uploads/<x>`、完整引擎 `/root/work/uploads/<x>`，同一物理目录，零传输。
+`protocol` 的 `sessions.send/steer` 增加 `files?: FileRef[]`；桥只拼 `[附件]` 路径清单，不再走
+`fileUploads/upload`；`attachments.upload` 仅留旧客户端兼容。
 
 ### 6.5 Office
 
@@ -225,15 +263,23 @@ PDF/未支持格式：只保存 + 提示，不解析。
 | pptx 全部 | proot + Python 三件套 |
 | 旧 .doc/.ppt、render、recalc、PDF | LibreOffice（默认不做） |
 
-Python 三件套：`python3 + python-docx + openpyxl + python-pptx`（约 50–60MB）。
-`dsh-skill-office` 已在 rootfs；缺 Python 和 linux-arm64 LibreOfficeKit。
+Python 三件套（2026-11-04 已落地）：`python3 3.12.3 + python-docx 1.1.0 + openpyxl 3.1.2 +
+python-pptx 1.0.2 + Pillow 10.2.0 + lxml 5.2.1 + XlsxWriter 3.3.1 + pip 24.0`，
+作为 APK 独立层 `assets/python.bin`（36.8MB gzip / 解压约 114MB），首次启动解压约 1s；
+不依赖首次下载。`dsh-skill-office` 已在 rootfs；仍缺 linux-arm64 LibreOfficeKit（render/recalc/PDF 不做）。
+
+**为什么不用 apt/dpkg 装**：app 私有目录里 SELinux 禁 `link()`，dpkg 做 `status-old`/备份硬链接直接失败；
+改用 `dpkg-deb --fsys-tarfile <deb> | tar -x --hard-dereference` 解包（硬链接退化为复制）。
+基础 rootfs 里还混着 bsdtar 的 `PaxHeaders/` 目录，`dpkg` 会把它当配置文件读而报错，
+`TarExtractor` 现在直接丢弃这类条目。
 
 ### 6.6 已确认决策
 
 C1 默认 light；C2 预热默认关；C3 会话统一 + badge；C4 配置共享；
 C5 摘要+8 轮迁移；C6 原生收件 + 路径引用；C7 Office 三件套；
 C8 render/recalc/旧格式/PDF 暂不做；C9 light 不补 pptx；C10 后台必须 proot；
-C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期。
+C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期；
+C15 Python 走 APK 独立层（`python.bin`），不做首次下载（离线可靠、可裁剪）。
 
 ## 7. 登录与配对
 
@@ -365,12 +411,16 @@ npm --prefix app install
 npm run verify                    # tsc + 全部测试（数量以输出为准）
 npm --prefix app run typecheck
 node scripts/build-bridge.mjs     # 生成 dist + APK asset
+# Python/Office 层（在手机 rootfs 里跑，产物放 APK assets；日常不用重打）
+# adb shell run-as cool.cnb.dshpalm sh files/run-in-rootfs.sh <nativeLibraryDir> \
+#     '/bin/sh /root/work/build-python-layer.sh'
 cd app/android && sh gradlew :app:assembleDebug
 ```
 
 ### 9.3 打包要点
 
 - `rootfs.bin` / `payload.bin` 走 release（`scripts/setup-android.sh` 校验 sha256）；
+- `python.bin` 也是制品（gitignore；36.8MB）；改 `scripts/build-python-layer.sh` 后重打，`RuntimeInstaller.PYTHON_LAYER_VERSION` 同步 +1；
 - `jniLibs/arm64-v8a/{libproot.so,libprootloader.so}` 来自 Termux（`scripts/fetch-proot.sh`）；
 - `debug.keystore` 需生成一次（gitignore）；
 - 桥/补丁打进 APK assets，运行时同步进 rootfs（`ensurePatch`），改桥不用重打 payload。

@@ -14,11 +14,14 @@ import {
 import type { SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
 import { IconButton, Pill } from './parts';
+import { EngineBadge } from './EngineBadge';
+import { badgeFor, canSwitch } from '../state/engineManager';
+import { isConversationReadOnly } from '../lib/handoff';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { ModelSheet } from './ModelSheet';
 import { TurnView, JumpButton } from './chat';
-import { pickAttachments } from '../lib/pickImage';
+import type { AttachmentKind } from '../lib/attachments/types';
 import { colors, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
@@ -45,6 +48,20 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const programmaticUntil = React.useRef(0);
   const preset = state.caps?.presets.find((p) => p.id === session.presetId);
   const running = session.status === 'running' || session.status === 'waiting_approval';
+  const engineBadge = badgeFor(state.engine);
+  const engineSwitch = canSwitch(state.engine);
+  // 逻辑会话按 activeSide 判断只读：完整侧链路断了就只读，绝不在轻引擎里重放
+  const link = state.links.find(
+    (item) =>
+      item.id === session.id ||
+      item.lightSessionId === session.id ||
+      item.fullSessionId === session.id,
+  );
+  const readOnly = link ? isConversationReadOnly(link, state.engine.mode) : !state.currentId;
+  const readOnlyText =
+    link?.activeSide === 'full' && state.engine.mode !== 'full'
+      ? '完整引擎已停止，这个会话只读；点这里回首页，需要继续时在顶栏重新切到完整模式 ›'
+      : '已切换引擎，这个会话只读；点这里回首页新建会话继续 ›';
   const turns = session.turns;
   let lastAssistantIndex = -1;
   for (let i = turns.length - 1; i >= 0; i--) {
@@ -54,10 +71,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     }
   }
 
-  // 从分享菜单带进来的图片：进到会话里就传上去
-  React.useEffect(() => {
-    if (state.pendingShare?.imagePath) void store.attachSharedImage();
-  }, [session.id, state.pendingShare?.imagePath]);
+  // 系统分享进来的文件已由 store 收进待发列表，这里不用再单独处理
   const hasText = draft.trim().length > 0;
 
   // 头部模型徽标：优先会话自己选的，其次宿主默认；名字太长就把 DeepSeek- 前缀砍掉
@@ -168,9 +182,16 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       return;
     }
     if (!hasText && !hasAttachments) return;
+    if (readOnly) {
+      store.setError('已切换引擎，这个会话只读；回首页新建会话继续。');
+      return;
+    }
     const text = draft.trim();
-    setDraft('');
-    void store.send(text);
+    // 发送成功才清空草稿；失败时把用户这句话放回去
+    void store.send(text).then((ok) => {
+      if (ok) setDraft((current) => (current === draft ? '' : current));
+      else setDraft((current) => (current.trim().length > 0 ? current : text));
+    });
   };
 
   const renderTurn = React.useCallback(
@@ -214,8 +235,25 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             {effortName ? ` · ${effortName}` : ''}
           </Text>
         </Pill>
+        <EngineBadge
+          kind={engineBadge.kind}
+          label={engineBadge.label}
+          onPress={
+            engineSwitch.ok
+              ? () => {
+                  void store.switchEngine(state.engine.mode === 'light' ? 'full' : 'light');
+                }
+              : undefined
+          }
+        />
         <View style={{ flex: 1 }} />
       </View>
+
+      {readOnly ? (
+        <Pressable onPress={() => store.closeSession()}>
+          <Text style={styles.readOnly}>{readOnlyText}</Text>
+        </Pressable>
+      ) : null}
 
       <SmoothKeyboardAvoid style={styles.bodyWrap}>
         <View style={styles.listWrap}>
@@ -296,18 +334,10 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           activePermission={session.permission ?? state.defaultPermission}
           onPickPermission={(value) => void store.setPermission(value)}
           attachments={state.pendingAttachments}
+          attaching={state.attaching}
           onRemoveAttachment={(id) => store.removeAttachment(id)}
-          onPickAttachment={(kind) => {
-            void (async () => {
-              try {
-                const list = await pickAttachments(kind);
-                for (const item of list) {
-                  await store.uploadAttachment(item.base64, item.name, item.kind ?? kind);
-                }
-              } catch (err) {
-                store.setError(err instanceof Error ? err.message : String(err));
-              }
-            })();
+          onPickAttachment={(kind: AttachmentKind) => {
+            void store.attachFromPicker(kind);
           }}
         />
       </SmoothKeyboardAvoid>
@@ -330,6 +360,13 @@ const styles = StyleSheet.create({
   titleText: { color: colors.text, fontSize: 14, fontWeight: '600' },
   presetPill: { flexShrink: 1 },
   presetText: { color: colors.textDim, fontSize: 12 },
+  readOnly: {
+    color: colors.warn,
+    fontSize: 11.5,
+    lineHeight: 17,
+    paddingHorizontal: space.lg,
+    paddingBottom: 4,
+  },
 
   listWrap: { flex: 1 },
   list: { flex: 1 },

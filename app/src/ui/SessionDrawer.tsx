@@ -6,6 +6,7 @@ import { store, useStore } from './useStore';
 import { IconButton } from './parts';
 import { EmptyState } from './components';
 import { loadAccountPhone } from '../lib/accountPhone';
+import type { ConversationLink } from '../lib/handoff';
 import { colors, motion, radius, semantic, space, topInset } from './theme';
 
 const PANEL_WIDTH = 302;
@@ -34,6 +35,24 @@ function maskPhone(raw: string): string {
   const digits = raw.replace(/[\s-]/g, '');
   if (/^\d{11}$/.test(digits)) return `${digits.slice(0, 3)}****${digits.slice(-4)}`;
   return raw;
+}
+
+/** 逻辑会话当前在哪一侧：轻 / 完整。第二个物理会话在列表里不出现。 */
+function SideTag({ link }: { link?: ConversationLink }): React.ReactElement | null {
+  if (!link) return null;
+  const full = link.activeSide === 'full';
+  return (
+    <View
+      style={[
+        styles.tag,
+        { backgroundColor: full ? colors.blueSoft : colors.glassStrong },
+      ]}
+    >
+      <Text style={[styles.tagText, { color: full ? colors.blue : colors.textFaint }]}>
+        {full ? '完整' : '轻'}
+      </Text>
+    </View>
+  );
 }
 
 function StatusTag({ s }: { s: SessionSummary }): React.ReactElement | null {
@@ -125,6 +144,7 @@ export function SessionDrawer({
 
   const renderRow = (s: SessionSummary): React.ReactElement => {
     const preset = presets.find((p) => p.id === s.presetId);
+    const link = state.links.find((item) => item.id === s.id);
     return (
       <React.Fragment key={s.id}>
       <Pressable
@@ -152,6 +172,7 @@ export function SessionDrawer({
             <Text style={styles.rowPreview} numberOfLines={1}>
               {s.preview || preset?.name || ''}
             </Text>
+            <SideTag link={link} />
             <StatusTag s={s} />
           </View>
         </View>
@@ -248,6 +269,24 @@ export function SessionDrawer({
           )}
           <Text style={styles.workspaceHint}>工作区限制可访问目录与可用锦囊</Text>
         </View>
+
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityLabel="自动选择引擎"
+          accessibilityState={{ checked: state.autoRoute }}
+          onPress={() => store.setAutoRoute(!state.autoRoute)}
+          style={({ pressed }) => [styles.autoRouteRow, pressed && styles.accountPressed]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.autoRouteLabel}>自动选择引擎</Text>
+            <Text style={styles.autoRouteHint}>代码 / 后台 / pptx 自动走完整引擎</Text>
+          </View>
+          <View style={[styles.autoRoutePill, state.autoRoute && styles.autoRoutePillOn]}>
+            <Text style={[styles.autoRouteValue, state.autoRoute && styles.autoRouteValueOn]}>
+              {state.autoRoute ? '开' : '关'}
+            </Text>
+          </View>
+        </Pressable>
 
         <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
           {groups.length === 0 ? (
@@ -362,6 +401,31 @@ const styles = StyleSheet.create({
   workspacePath: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
   workspaceHint: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
   workspaceEmpty: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
+  autoRouteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: space.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.sm,
+    backgroundColor: colors.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  autoRouteLabel: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  autoRouteHint: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
+  autoRoutePill: {
+    minWidth: 34,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glassStrong,
+  },
+  autoRoutePillOn: { backgroundColor: colors.blueSoft },
+  autoRouteValue: { color: colors.textFaint, fontSize: 11, fontWeight: '600' },
+  autoRouteValueOn: { color: colors.blue },
   groupTitle: {
     color: semantic.textSecondary,
     fontSize: 12,

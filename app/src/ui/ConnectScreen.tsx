@@ -9,18 +9,14 @@ import { colors, font, radius, space, topInset } from './theme';
 
 export function ConnectScreen(): React.ReactElement {
   const state = useStore();
-  /** 本机模式下默认不展示地址/配对码，想连电脑再展开 */
-  const [advanced, setAdvanced] = React.useState(false);
   const host = state.host;
-  // 本机模式下这一页只做"启动中"的门面：机器自己会起来、自己会连，
-  // 地址/配对码是给"连另一台电脑"用的，默认收起来
-  const booting = hostAvailable && !advanced;
-  const failed = hostAvailable && host?.engine === 'failed';
-  const pct = host?.progress ?? 0;
+  const engine = state.engine;
+  // 本机模式：完整引擎启动中才挡一下；平时直接显示"连另一台电脑"的表单
+  const booting = hostAvailable && engine.mode === 'starting-proot';
+  const pct = engine.progress;
   const bootText =
-    host?.engine === 'failed'
-      ? host.error ?? '本机引擎启动失败'
-      : (host?.phase || '本机引擎启动中') + (pct > 0 && pct < 100 ? ` · ${pct}%` : '');
+    engine.error ||
+    ((engine.host ?? host)?.phase || '完整引擎启动中') + (pct > 0 && pct < 100 ? ` · ${pct}%` : '');
 
   return (
     <View style={styles.root}>
@@ -35,19 +31,10 @@ export function ConnectScreen(): React.ReactElement {
 
             {booting ? (
               <View style={styles.bootBox}>
-                <Text style={[styles.bootText, failed && { color: colors.danger }]}>{bootText}</Text>
+                <Text style={styles.bootText}>{bootText}</Text>
                 <Text style={styles.bootHint}>
-                  {failed
-                    ? '引擎没起来。可以先重试，或者去设置里看日志。'
-                    : '第一次启动要解压运行时（约 10 秒），之后是秒开。装好后会自动连上，不用点。'}
+                  完整引擎第一次启动要解压运行时（约 10 秒），之后是秒开。启动完成后可回到首页点顶栏「完整」接入。
                 </Text>
-                {failed ? (
-                  <Btn
-                    label="重试"
-                    onPress={() => void store.startLocalHost()}
-                    style={{ marginTop: 6 }}
-                  />
-                ) : null}
               </View>
             ) : null}
 
@@ -112,11 +99,11 @@ export function ConnectScreen(): React.ReactElement {
             {hostAvailable ? (
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setAdvanced((v) => !v)}
+                onPress={() => void store.switchEngine(engine.mode === 'full' ? 'light' : 'full')}
                 style={styles.settingsRow}
               >
                 <Text style={styles.settingsText}>
-                  {advanced ? '返回本机模式' : '连接另一台电脑'}
+                  {engine.mode === 'full' ? '切回轻引擎（省电）' : '切换到完整引擎'}
                 </Text>
               </Pressable>
             ) : null}

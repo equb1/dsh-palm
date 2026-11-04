@@ -33,12 +33,19 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="dshpalm"/>
       </intent-filter>
-      <!-- 分享菜单：文字直接进输入框，图片先收着，下一条消息带上 -->
-      <intent-filter>
+      <!-- 分享菜单：文字进输入框，图片/文档由原生收件复制进 workspace/uploads -->
+      <intent-filter android:label="锦囊">
         <action android:name="android.intent.action.SEND"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <data android:mimeType="text/plain"/>
         <data android:mimeType="image/*"/>
+        <data android:mimeType="*/*"/>
+      </intent-filter>
+      <intent-filter android:label="锦囊">
+        <action android:name="android.intent.action.SEND_MULTIPLE"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <data android:mimeType="image/*"/>
+        <data android:mimeType="*/*"/>
       </intent-filter>
     </activity>
     <service

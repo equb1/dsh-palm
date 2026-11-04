@@ -50,6 +50,15 @@ object TarExtractor {
                     longName = null
                 }
 
+                // 基础镜像里混进了 bsdtar 的 PaxHeaders.<pid>/ 元数据目录。
+                // 解成真实目录后，dpkg/apt 会把它当配置文件读（/etc/dpkg/dpkg.cfg.d/PaxHeaders 是目录）而报错，
+                // 对运行没有用处，直接丢弃。
+                if (name.split('/').any { it == "PaxHeaders" || it.startsWith("PaxHeaders.") }) {
+                    if (size > 0L) skip(stream, size)
+                    skipPadding(stream, size)
+                    continue
+                }
+
                 val target = File(dest, name)
                 // 防目录穿越
                 if (!target.canonicalPath.startsWith(dest.canonicalPath)) {

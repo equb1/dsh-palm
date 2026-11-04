@@ -64,6 +64,16 @@
 - 处理：包一层 `async function main()` 再调用。
 - 验证：脚本正常退出。
 
+### A9. Windows 上 Metro 不跟文件改动，真机吃旧 bundle（2026-11-04）
+
+- 现象：改了 JS、重启 App 后界面/逻辑还是旧的（例如新加的分享逻辑完全没日志）；日志里能看到
+  `Running "main"`，但新代码的 `console.warn` 不出现。
+- 原因：Metro 的文件监听在 Windows 上偶尔漏事件（没有 watchman），`expo start` 的服务端缓存了旧 transform。
+- 处理：改完 JS 先重启 Metro：`cd app; $env:CI="1"; npx expo start --port 8081 --clear`，
+  再 `adb shell am force-stop cool.cnb.dshpalm && am start -n …`；验证新逻辑时加一条临时 `console.warn`
+  看 `adb logcat -s ReactNativeJS`，确认后再删。
+- 验证：`[share-debug] intake -> {"text":…}` 出现、界面同步变化。
+
 ## B. rootfs / proot
 
 ### B1. 全新安装选中了 smoke 引擎命令
@@ -108,6 +118,14 @@
 - 现象：新系统要求 16KB 对齐，老 `.so` 可能不兼容。
 - 处理：发版前在 16KB 设备/模拟器验证 proot 的 `.so`。
 - 状态：**未验证**。
+
+### B7. 基础 rootfs 里混着 `PaxHeaders/` 垃圾目录（2026-11-04）
+
+- 现象：解压后的 rootfs 里有 492 个 `PaxHeaders/` 目录（`/etc/dpkg/dpkg.cfg.d/PaxHeaders` 等），
+  平时不影响运行，但 `dpkg`/`apt` 会把它当配置文件读而报错。
+- 原因：`rootfs.bin` 打包时 bsdtar 把 PAX 元数据目录当成真实目录写进了 tar；`TarExtractor` 之前照单全收。
+- 处理：`TarExtractor` 跳过路径段为 `PaxHeaders` / `PaxHeaders.*` 的条目；已经装过的设备可一次性 `find … -prune -exec rm -rf`。
+- 验证：新版本 APK 首装解压后 `find / -xdev -type d -name 'PaxHeaders*' | wc -l` 为 0。
 
 ## C. 引擎与桥
 
@@ -186,12 +204,14 @@
 - 处理：原生 `requestNotificationPermission` 在连上宿主时申请；进度同时画在 App 内。
 - 验证：`dumpsys package` 里 `POST_NOTIFICATIONS: granted=true`；后台完成能收到通知。
 
-### E2. 分享只处理冷启动
+### E2. 分享只处理冷启动（2026-11-04 已修）
 
-- 现象：App 在后台时分享进来没反应。
-- 原因：只读了 `getInitialShare()`，没处理 `onNewIntent`。
-- 处理：当前先接受冷启动；后台分享待做。
-- 验证：冷启动分享文字能进输入框。
+- 现象：App 在后台时分享进来没反应；冷启动的分享有时也丢。
+- 原因：旧实现只读 `getInitialShare()`（Activity.intent），`onNewIntent` 回来后没通知 JS；
+  而且 `intakeShare` 没 catch，权限异常会变成未捕获 rejection。
+- 处理：新增 `ShareInbox`（onCreate/onNewIntent 都 offer，`take()` 只消费一次）；JS 在冷启动与
+  `AppState=active` 时 `consumeShare()`；文字进输入框，文件走原生收件；失败 catch 成人话。
+- 验证：冷启动分享 `最终分享验证 2026` 进输入框；文件选择器选图落 `uploads/`；见 AI-TASKS 1.3。
 
 ### E3. `dshpalm://` 深链是死的
 
@@ -235,6 +255,14 @@
 - 处理：不要卸载重装（会丢登录和会话）；用 Metro 热载验证：`adb reverse tcp:8081 tcp:8081` + `npx expo start --port 8081`，再重启 App 从 8081 拉 bundle。
 - 验证：`adb logcat -s ReactNativeJNI` 不再报 `Failed to connect to localhost:8081`，改动在真机生效。
 
+### E9. trim 停 proot 时出现 InterruptedIOException（2026-11-04）
+
+- 现象：`am send-trim-memory … RUNNING_LOW` 后日志有
+  `[engine] 异常: java.io.InterruptedIOException: read interrupted by close() on another thread`。
+- 原因：`HostRuntime.stop()` 主动关掉引擎 stdout，读线程被中断；属预期，不是崩溃。
+- 处理：保留日志便于排查；看门狗只在“非主动停止”时计失败。停止后 `ps` 无 proot、通知消失即为成功。
+- 验证：trim 后 `ps -A | grep proot` 为空，UI 回「轻」。
+
 ## F. 轻引擎 / Office
 
 ### F1. Hermes 缺 Buffer/crypto/fetch/WebAssembly
@@ -272,6 +300,63 @@
 - 现象：只支持结构化 blocks / 值，没有样式、公式、编辑。
 - 处理：复杂/编辑/pptx 路由到 proot。
 - 验证：真机对比生成结果。
+
+### F6. dpkg/apt 在 app 私有目录里跑不了（2026-11-04）
+
+- 现象：`dpkg: error processing archive ... unable to make backup link of './usr/lib/...' before installing new version: Permission denied`；
+  随后 `dpkg: error: error creating new backup file '/var/lib/dpkg/status-old': Permission denied`；
+  更早还会先报 `read error in configuration file '/etc/dpkg/dpkg.cfg.d/PaxHeaders': Is a directory`。
+- 原因：① Android SELinux 不允许 app 私有目录 `link()`，dpkg 备份/`status-old` 依赖硬链接；
+  ② 基础 `rootfs.bin` 里混进了 bsdtar 的 `PaxHeaders/` 元数据目录（492 个），dpkg 把目录当配置文件读。
+- 处理：完整引擎的 Python 三层不走 apt/dpkg 入库，直接
+  `dpkg-deb --fsys-tarfile <deb> | tar -x --hard-dereference --no-same-owner -C /`
+  （硬链接退化成复制）；`TarExtractor` 丢弃路径里带 `PaxHeaders` 的条目；
+  产物打成 APK 层 `assets/python.bin`。脚本：`scripts/build-python-layer.sh`。
+- 验证：`TarExtractor` 重解 rootfs 后 `find / -name 'PaxHeaders*'` 为 0；层删除-重解后三格式 smoke 通过。
+
+### F7. 后台时 App 的网络被 ROM 掐断（2026-11-04）
+
+- 现象：apt/pip 在后台跑时报 `Temporary failure in name resolution`；`run-as` 里 `getent hosts` 全失败，
+  连 `127.0.0.1:8787` 也超时；把 App 拉到前台（`am start`）后同一命令立刻成功。
+  DNS 走 Clash 的 172.19.0.2 时更明显。
+- 原因：PLR110 / HarmonyOS 对后台 UID 断网（有前台服务也不放行），不是 DNS 配置问题。
+- 处理：所有需要网络的长任务必须在 App 前台时跑；Python 层因此随 APK 发布，不做首次下载。
+  调试时先 `adb shell am start -n cool.cnb.dshpalm/.MainActivity`，再跑 `apt/pip`。
+- 验证：前台 `python3 -m pip install` 20s 成功；后台同一命令 DNS 失败。
+
+### F8. 完整引擎默认 `workspace-write` 跑不了 bash（2026-11-04）
+
+- 现象：模型调 bash 直接失败：`Error: sandbox mode "workspace-write" is requested but no sandbox backend is usable on this host;
+  refusing to run the command unconfined. Install bubblewrap or run a Landlock-enforcing kernel (Linux)…`。
+- 原因：`dsh-bash-sandbox` 在 Linux 上要 bwrap 或 Landlock；proot 里 bwrap 起不来，Android 内核的 Landlock 探测也失败，
+  executor 是 fail-closed，绝不在受限模式下降级为无约束执行。
+- 处理：会话权限切「完全权限」（`danger-full-access`）后 provider 不参与，bash 正常；
+  真机已验证 `python3 -c "import docx, openpyxl, pptx; print(...)"` 返回 `1.1.0 3.1.2 1.0.2`。
+  默认 `workspace-write` 下需要 UI/能力门提示用户切权限（P0 1.4）；不要改 `DSH_PERMISSION_MODE` 全局默认。
+- 验证：`permissions.list` 默认 `workspace-write`；`sessions.setPermission` 切 full 后同一提示词工具返回 `state=done`。
+
+### F9. Kotlin 注释里的 `/*` 会嵌套，编译报 Unclosed comment（2026-11-04）
+
+- 现象：`Intake.kt:236:1 Syntax error: Unclosed comment`，同时 `HostModule.kt` 一堆
+  `Unresolved reference 'Intake'`（真正原因在 Intake 自己）。
+- 原因：Kotlin 支持**嵌套块注释**；KDoc 里写了 `` `uploads/*.part` ``，这个 `/*` 又开了一层，
+  后面只有一个 `*/`，注释一直到文件尾都没闭合。
+- 处理：注释里别出现 `/*`（改成 `uploads/<name>.part`）；新建 Kotlin 文件先
+  `gradlew :app:compileDebugKotlin` 单独过一遍，别等整包。
+- 验证：`assembleDebug` 通过；`grep -c '/\*'` 与 `*/` 数量可粗略自检。
+
+### F10. 能力门 / Handoff 的四个边界（2026-11-04）
+
+- **bash 要整段拒绝**：只拦“包含 python”不够，`touch x && python y.py` 不能先执行前半段；
+  `capability.ts` 按引号拆 shell 段、递归 `bash -c`/`xargs`，任一段命中 proot-only 就整段拒绝。
+- **合成工具结果**：拒绝后必须给每个未执行调用写 `[CAPABILITY_MISSING] not executed` 的 tool 消息，
+  否则 `history` 以 assistant `tool_calls` 结尾，下一次 light 请求会被 OpenAI 兼容接口拒。
+- **Handoff 幂等**：种子带 `[dsh-handoff:<id>]`；`sessions.create` 后先落 `fullSessionId` 再 send；
+  send 失败先 `sessions.get` 找标记，找到就算成功，找不到才重试；已完成步骤只在摘要里，绝不重放。
+- **完整权限**：bash 卡片要二次确认并把目标会话设 `danger-full-access`（F8）；预路由命中代码/后台/Office
+  时目前**直接**用 full-access（没有第二次确认），属已知取舍，后续可在设置里加“预路由也确认”。
+- 验证：`test/capability-gate.test.ts`（无审批/无文件/下一轮可发）、`test/handoff-orchestration.test.ts`
+  （切换失败不 create、create 失败不 send、并发只一次、种子丢失按标记恢复）。
 
 ## H. UI / RN
 
@@ -318,7 +403,6 @@
 - 验证：1–6 行输入、中文候选都不遮。
 
 ### H7. 长会话流式仍抖 / 思考重复（2026-11-04 主体已修，20 分钟 soak 待补）
-
 **现象**
 
 - 20+ 分钟的长任务，思考或正文输出时界面一跳一跳，不是连续流；
@@ -376,6 +460,16 @@
 - 观察 `adb logcat -s ReactNativeJS` 是否有 duplicate key / 长任务 OOM。
 
 本轮真机已验证：工具密集回合无重复思考；流式中上滑 6 秒内容不动；回到底部按钮可见且可点击；退出重进无重复。
+
+### H8. 切到轻引擎默认后“未连接”（2026-11-04）
+
+- 现象：旧设备只配过 proot 账号/凭据，没有轻引擎渠道；冷启动首页显示「轻引擎未就绪」，
+  `onTrimMemory`/空闲回收掉 proot 后界面停在「重连中」。
+- 原因：轻引擎是独立的 OpenAI 兼容渠道（SecureStore 里的 baseURL/apiKey/model），
+  旧版本默认直连 proot，从来没配过；不是 1.2 的回归。
+- 处理：首页横幅「轻引擎未就绪 · 点这里配置模型渠道」进 `LightEngineScreen`；配置后轻引擎 connected。
+  不要为了这个把 proot 改回自动连接（违反 1.2 验收）；首次引导放到后续打磨。
+- 验证：未配置时仍可手动切「完整」并正常对话；配置轻渠道后角标回「轻」、可发消息。
 
 ## G. 调试
 

@@ -8,14 +8,16 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.provider.OpenableColumns
-import android.webkit.MimeTypeMap
+import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.ReadableMap
+import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 
 /**
@@ -36,31 +38,21 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
                     promise.resolve(Arguments.createArray())
                     return
                 }
-                val uris = mutableListOf<Uri>()
-                val clip = data.clipData
-                if (clip != null) {
-                    for (i in 0 until clip.itemCount) {
-                        clip.getItemAt(i)?.uri?.let { uris.add(it) }
-                    }
-                } else {
-                    data.data?.let { uris.add(it) }
-                }
+                val uris = collectStreamUris(data)
                 if (uris.isEmpty()) {
                     promise.resolve(Arguments.createArray())
                     return
                 }
+                // 复制 + 算 hash 在后台线程做，主线程不碰文件内容
                 Thread({
                     try {
-                        val arr = Arguments.createArray()
-                        for (uri in uris) {
-                            val item = readUriAsAttachment(uri)
-                            if (item != null) arr.pushMap(item)
-                        }
-                        promise.resolve(arr)
+                        val sources = uris.map { IntakeSource(uri = it.toString()) }
+                        val (files, errors) = intakeSources(sources)
+                        settleIntake(promise, files, errors)
                     } catch (t: Throwable) {
-                        promise.reject("pick_failed", t.message ?: "读取文件失败", t)
+                        promise.reject("intake_failed", t.message ?: "读取文件失败", t)
                     }
-                }, "dsh-pick-file").start()
+                }, "dsh-intake-pick").start()
             }
         })
     }
@@ -99,6 +91,48 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     fun status(promise: Promise) {
         val s = HostRuntime.status()
         promise.resolve(toMap(s))
+    }
+
+    /**
+     * JS 同步「有没有回合在跑」。
+     * HostRuntime.onTrimMemory 在 moderate 档只会在没有活跃回合时停 proot，
+     * 避免把正在生成的回复一起杀掉。
+     */
+    @ReactMethod
+    fun setRunActive(active: Boolean, promise: Promise) {
+        try {
+            HostRuntime.setActiveRun(active)
+            promise.resolve(true)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    /** 智能预热用：当前是否在充电 + 是否连的是 WiFi */
+    @ReactMethod
+    fun deviceConditions(promise: Promise) {
+        try {
+            val battery = ctx.getSystemService(android.os.BatteryManager::class.java)
+            val charging = battery?.isCharging == true
+            val connectivity = ctx.getSystemService(android.net.ConnectivityManager::class.java)
+            var wifi = false
+            if (connectivity != null) {
+                val network = connectivity.activeNetwork
+                if (network != null) {
+                    val capabilities = connectivity.getNetworkCapabilities(network)
+                    wifi = capabilities?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true
+                }
+            }
+            promise.resolve(
+                Arguments.createMap().apply {
+                    putBoolean("charging", charging)
+                    putBoolean("wifi", wifi)
+                },
+            )
+        } catch (_: Throwable) {
+            // 问不到就让 JS 当成"不满足智能预热条件"
+            promise.resolve(null)
+        }
     }
 
     /**
@@ -250,63 +284,90 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     }
 
     /**
-     * 冷启动时读「分享到锦囊」的内容。
-     * 文本直接给 JS；图片先复制到缓存，返回路径，由 JS 在下一条消息里上传。
-     * 读完清掉 intent，避免回到 App 时又处理一次。
+     * 收件一批附件：每项 `{uri?, path?, name?, mime?}`。
+     * 只返回 `FileRef[]`（路径引用），文件已经落在 workspace/uploads。
+     * 单个失败不拖垮整批；一个都没成功时 reject 中文原因。
      */
     @ReactMethod
-    fun getInitialShare(promise: Promise) {
-        try {
-            val intent = ctx.currentActivity?.intent
-            if (intent == null || intent.action != Intent.ACTION_SEND) {
-                promise.resolve(null)
-                return
-            }
-            val map = Arguments.createMap()
-            val text = intent.getStringExtra(Intent.EXTRA_TEXT)
-            if (!text.isNullOrBlank()) map.putString("text", text)
-
-            @Suppress("DEPRECATION")
-            val uri = intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)
-            if (uri != null) {
-                val name = "share-${System.currentTimeMillis()}"
-                val file = java.io.File(ctx.cacheDir, name)
-                ctx.contentResolver.openInputStream(uri)?.use { input ->
-                    file.outputStream().use { output -> input.copyTo(output) }
-                }
-                if (file.exists() && file.length() > 0) {
-                    map.putString("path", file.absolutePath)
-                    map.putString("name", name)
-                    map.putString("mime", intent.type ?: "application/octet-stream")
-                }
-            }
-            intent.action = null
-            intent.removeExtra(Intent.EXTRA_STREAM)
-            intent.removeExtra(Intent.EXTRA_TEXT)
-            promise.resolve(map)
-        } catch (t: Throwable) {
-            promise.reject("share_failed", t)
+    fun intakeFiles(sources: ReadableArray, promise: Promise) {
+        val list = mutableListOf<IntakeSource>()
+        for (i in 0 until sources.size()) {
+            val map = runCatching { sources.getMap(i) }.getOrNull() ?: continue
+            list.add(
+                IntakeSource(
+                    uri = readString(map, "uri"),
+                    path = readString(map, "path"),
+                    name = readString(map, "name"),
+                    mime = readString(map, "mime"),
+                ),
+            )
         }
-    }
-
-    /** 把本地文件读成 base64（分享进来的图片上传用） */
-    @ReactMethod
-    fun readFileBase64(path: String, promise: Promise) {
-        try {
-            val file = java.io.File(path)
-            if (!file.exists()) {
-                promise.reject("no_file", "文件不存在")
-                return
-            }
-            promise.resolve(android.util.Base64.encodeToString(file.readBytes(), android.util.Base64.NO_WRAP))
-        } catch (t: Throwable) {
-            promise.reject("read_failed", t)
+        if (list.isEmpty()) {
+            promise.resolve(Arguments.createArray())
+            return
         }
+        Thread({
+            try {
+                val (files, errors) = intakeSources(list)
+                settleIntake(promise, files, errors)
+            } catch (t: Throwable) {
+                promise.reject("intake_failed", t.message ?: "读取附件失败", t)
+            }
+        }, "dsh-intake-files").start()
     }
 
     /**
-     * 打开系统文件选择器（支持图片、视频、音频及任意类型文件，支持多选）。
-     * 返回 [{ name, mime, size, base64 }]。
+     * 取走系统分享进来的内容：`{text?, files: FileRef[]}`；
+     * 没有待处理的分享时返回 null。支持 ACTION_SEND 与 ACTION_SEND_MULTIPLE。
+     */
+    @ReactMethod
+    fun intakeShare(promise: Promise) {
+        val intent = ShareInbox.take()
+        if (intent == null) {
+            promise.resolve(null)
+            return
+        }
+        // 先把轻量信息取出来，再把 Intent 标记成已消费：
+        // Activity 因配置变化重建时，同一个 share Intent 不会再被收一次。
+        val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+        val uris = collectStreamUris(intent)
+        intent.action = null
+        intent.removeExtra(Intent.EXTRA_STREAM)
+        intent.removeExtra(Intent.EXTRA_TEXT)
+        Thread({
+            try {
+                val sources = uris.map { IntakeSource(uri = it.toString()) }
+                val (files, errors) = intakeSources(sources)
+                val hasText = !text.isNullOrBlank()
+                if (files.size() == 0 && !hasText) {
+                    if (errors.isNotEmpty()) promise.reject("intake_failed", errors.first())
+                    else promise.resolve(null)
+                } else {
+                    if (errors.isNotEmpty()) Log.w(TAG, "部分分享附件失败：" + errors.joinToString("；"))
+                    val map = Arguments.createMap()
+                    if (hasText && text != null) map.putString("text", text)
+                    map.putArray("files", files)
+                    if (errors.isNotEmpty()) {
+                        map.putArray("errors", Arguments.createArray().apply { errors.forEach { pushString(it) } })
+                    }
+                    promise.resolve(map)
+                }
+            } catch (t: Throwable) {
+                promise.reject("intake_failed", t.message ?: "读取分享内容失败", t)
+            }
+        }, "dsh-intake-share").start()
+    }
+
+    /** 丢掉还没消费的分享 Intent（例如用户清空了待发附件） */
+    @ReactMethod
+    fun clearShare(promise: Promise) {
+        ShareInbox.clear()
+        promise.resolve(true)
+    }
+
+    /**
+     * 打开系统文件选择器（ACTION_OPEN_DOCUMENT，多选）。
+     * 选中的文件直接由原生收件进 uploads，返回 `FileRef[]`。
      */
     @ReactMethod
     fun pickAttachments(mimeType: String?, promise: Promise) {
@@ -341,44 +402,93 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         }
     }
 
-    private fun readUriAsAttachment(uri: Uri): WritableMap? {
-        val cr = ctx.contentResolver
-        val mime = cr.getType(uri) ?: "application/octet-stream"
-        var displayName: String? = null
-        var size: Long = -1L
-        runCatching {
-            cr.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (nameIdx >= 0 && !cursor.isNull(nameIdx)) {
-                        displayName = cursor.getString(nameIdx)
+    /* --------------------------- 收件内部实现 --------------------------- */
+
+    private data class IntakeSource(
+        val uri: String? = null,
+        val path: String? = null,
+        val name: String? = null,
+        val mime: String? = null,
+    )
+
+    /**
+     * content:// 走 ContentResolver，file:// 或无 scheme 的路径直接读文件。
+     * 每个文件独立结算，返回（成功数组, 失败原因列表）。
+     */
+    private fun intakeSources(sources: List<IntakeSource>): Pair<WritableArray, List<String>> {
+        val files = Arguments.createArray()
+        val errors = mutableListOf<String>()
+        for (source in sources) {
+            val uri = source.uri
+            val path = source.path
+            val result = try {
+                if (!uri.isNullOrBlank()) {
+                    val parsed = Uri.parse(uri)
+                    val scheme = parsed.scheme
+                    if (scheme == null || scheme == "file") {
+                        Intake.intakePath(ctx, java.io.File(parsed.path ?: uri), source.name, source.mime)
+                    } else {
+                        Intake.intake(ctx, parsed, source.name, source.mime)
                     }
-                    val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) {
-                        size = cursor.getLong(sizeIdx)
-                    }
+                } else if (!path.isNullOrBlank()) {
+                    Intake.intakePath(ctx, java.io.File(path), source.name, source.mime)
+                } else {
+                    IntakeResult.fail("附件来源为空")
                 }
+            } catch (t: SecurityException) {
+                IntakeResult.fail("没有读取这个文件的权限；请重新分享或重新选择")
+            } catch (t: Throwable) {
+                IntakeResult.fail("读取附件失败：${t.message ?: "未知错误"}")
+            }
+            val ref = result.ref
+            if (ref != null) files.pushMap(fileRefMap(ref)) else errors.add(result.error ?: "读取附件失败")
+        }
+        return files to errors
+    }
+
+    /** 全失败才 reject；部分成功时把失败写日志，不打断用户 */
+    private fun settleIntake(promise: Promise, files: WritableArray, errors: List<String>) {
+        if (files.size() == 0 && errors.isNotEmpty()) {
+            promise.reject("intake_failed", errors.first())
+            return
+        }
+        if (errors.isNotEmpty()) Log.w(TAG, "部分附件失败：" + errors.joinToString("；"))
+        promise.resolve(files)
+    }
+
+    private fun fileRefMap(ref: FileRef): WritableMap = Arguments.createMap().apply {
+        putString("path", ref.path)
+        putString("relPath", ref.relPath)
+        putString("name", ref.name)
+        putString("displayName", ref.displayName)
+        putString("mime", ref.mime)
+        putDouble("bytes", ref.bytes.toDouble())
+        putString("hash", ref.hash)
+    }
+
+    private fun readString(map: ReadableMap, key: String): String? {
+        if (!map.hasKey(key) || map.isNull(key)) return null
+        return runCatching { map.getString(key) }.getOrNull()
+    }
+
+    /** 分享 Intent 的单/多附件都在这里：clipData 优先，其次 EXTRA_STREAM */
+    private fun collectStreamUris(intent: Intent): List<Uri> {
+        val uris = mutableListOf<Uri>()
+        val clip = intent.clipData
+        if (clip != null) {
+            for (i in 0 until clip.itemCount) {
+                clip.getItemAt(i)?.uri?.let { uris.add(it) }
             }
         }
-        if (size > MAX_ATTACHMENT_BYTES) {
-            throw IllegalArgumentException("文件「${displayName ?: "附件"}」超过 20MB 上限")
+        if (uris.isEmpty()) {
+            when (val extra = intent.extras?.get(Intent.EXTRA_STREAM)) {
+                is Uri -> uris.add(extra)
+                is ArrayList<*> -> extra.forEach { item -> (item as? Uri)?.let { uris.add(it) } }
+                is Array<*> -> extra.forEach { item -> (item as? Uri)?.let { uris.add(it) } }
+            }
         }
-        val bytes = cr.openInputStream(uri)?.use { it.readBytes() } ?: return null
-        if (bytes.isEmpty()) return null
-        if (bytes.size > MAX_ATTACHMENT_BYTES) {
-            throw IllegalArgumentException("文件「${displayName ?: "附件"}」超过 20MB 上限")
-        }
-        val finalName = displayName?.takeIf { it.isNotBlank() } ?: run {
-            val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "bin"
-            "attachment-${System.currentTimeMillis()}.$ext"
-        }
-        val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-        return Arguments.createMap().apply {
-            putString("name", finalName)
-            putString("mime", mime)
-            putDouble("size", bytes.size.toDouble())
-            putString("base64", base64)
-        }
+        intent.data?.let { if (uris.isEmpty()) uris.add(it) }
+        return uris
     }
 
     /** 读取本地 UI 缓存（首屏秒开会话列表） */
@@ -414,10 +524,10 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     }
 
     companion object {
+        private const val TAG = "DshPalmHost"
         private const val EVENT_CHANNEL = "dsh-palm-events"
         private const val EXTRA_NOTIFY_SESSION_ID = "dsh_session_id"
         private const val PICK_FILE_REQ = 4712
-        private const val MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
         private const val UI_CACHE_FILE = "ui-cache.json"
     }
 
