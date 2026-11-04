@@ -182,13 +182,14 @@ function resolveDownloadUrl(raw: string, requestUrl: string): string {
   }
 }
 
-/** 带总超时 + 外部取消的 fetch；错误统一翻成中文 */
-async function fetchWithTimeout(
+/** 带总超时 + 外部取消的 fetch；超时覆盖到 body 读完，错误统一翻成中文 */
+async function withFetch<T>(
   url: string,
   init: RequestInit,
   timeoutMs: number,
-  external?: AbortSignal,
-): Promise<Response> {
+  external: AbortSignal | undefined,
+  consume: (response: Response) => Promise<T>,
+): Promise<T> {
   if (external?.aborted) throw imageError('canceled', LIGHT_ERROR_HINTS.canceled);
   const controller = new AbortController();
   let timedOut = false;
@@ -199,8 +200,10 @@ async function fetchWithTimeout(
   const onAbort = (): void => controller.abort();
   external?.addEventListener('abort', onAbort, { once: true });
   try {
-    return await fetch(url, { ...init, signal: controller.signal } as RequestInit);
+    const response = await fetch(url, { ...init, signal: controller.signal } as RequestInit);
+    return await consume(response);
   } catch (error) {
+    if (error instanceof LightRequestError) throw error;
     if (external?.aborted) throw imageError('canceled', LIGHT_ERROR_HINTS.canceled);
     if (timedOut) throw imageError('timeout', lightTimeoutMessage(timeoutMs));
     if (isOffline()) throw imageError('offline', LIGHT_ERROR_HINTS.offline);
@@ -253,7 +256,7 @@ async function postGeneration(
   signal?: AbortSignal,
   timeoutMs: number = IMAGE_REQUEST_TIMEOUT_MS,
 ): Promise<GenerationResponse> {
-  const response = await fetchWithTimeout(
+  return withFetch(
     imagesUrl(config.baseURL),
     {
       method: 'POST',
@@ -265,9 +268,11 @@ async function postGeneration(
     },
     timeoutMs,
     signal,
+    async (response) => {
+      const text = await response.text().catch(() => '');
+      return { status: response.status, statusText: response.statusText, text };
+    },
   );
-  const text = await response.text().catch(() => '');
-  return { status: response.status, statusText: response.statusText, text };
 }
 
 /** url 模式落盘前校验：content-type 必须是 image/* 且魔数可识别 */
@@ -314,41 +319,33 @@ async function downloadImage(
   const headers: Record<string, string> = {};
   // 只有同源才带 Key；跳到 CDN/第三方域名时绝不转发
   if (config.apiKey && sameOrigin(config.baseURL, url)) headers.Authorization = `Bearer ${config.apiKey}`;
-  const response = await fetchWithTimeout(
+  return withFetch(
     url,
     { method: 'GET', headers, redirect: 'follow' },
     timeoutMs,
     signal,
+    async (response): Promise<GeneratedImage> => {
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw httpError(response.status, response.statusText, body);
+      }
+      const contentType = response.headers.get('content-type') ?? '';
+      const declared = normalizeMime(contentType);
+      if (!isImageMime(declared)) {
+        throw imageError(
+          'bad_request',
+          `下载地址返回的不是图片（content-type 是 ${declared || '空'}）：检查生图渠道返回的 url。`,
+        );
+      }
+      const length = Number(response.headers.get('content-length') ?? '0');
+      if (Number.isFinite(length) && length > IMAGE_MAX_BYTES) throw tooLargeError();
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length === 0) throw imageError('empty', '生成的图片是空文件，换一个生图模型或尺寸再试。');
+      if (bytes.length > IMAGE_MAX_BYTES) throw tooLargeError();
+      const { mime } = requireDownloadedImage(bytes, contentType);
+      return { bytes, mime };
+    },
   );
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw httpError(response.status, response.statusText, body);
-  }
-  const contentType = response.headers.get('content-type') ?? '';
-  const declared = normalizeMime(contentType);
-  if (!isImageMime(declared)) {
-    throw imageError(
-      'bad_request',
-      `下载地址返回的不是图片（content-type 是 ${declared || '空'}）：检查生图渠道返回的 url。`,
-    );
-  }
-  const length = Number(response.headers.get('content-length') ?? '0');
-  if (Number.isFinite(length) && length > IMAGE_MAX_BYTES) throw tooLargeError();
-  let bytes: Uint8Array;
-  try {
-    bytes = new Uint8Array(await response.arrayBuffer());
-  } catch (error) {
-    if (signal?.aborted) throw imageError('canceled', LIGHT_ERROR_HINTS.canceled);
-    if (isOffline()) throw imageError('offline', LIGHT_ERROR_HINTS.offline);
-    throw imageError(
-      'offline',
-      `下载生成的图片中断（${error instanceof Error ? error.message : String(error)}）：检查网络后重试。`,
-    );
-  }
-  if (bytes.length === 0) throw imageError('empty', '生成的图片是空文件，换一个生图模型或尺寸再试。');
-  if (bytes.length > IMAGE_MAX_BYTES) throw tooLargeError();
-  const { mime } = requireDownloadedImage(bytes, contentType);
-  return { bytes, mime };
 }
 
 export async function generateImage(
