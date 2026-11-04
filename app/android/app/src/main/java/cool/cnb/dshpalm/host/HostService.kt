@@ -123,7 +123,8 @@ class HostService : Service() {
                     RuntimeInstaller.ensureExecutable(applicationContext) &&
                     RuntimeInstaller.ensureLayout(applicationContext) { line -> HostRuntime.note(line) } &&
                     RuntimeInstaller.ensurePatch(applicationContext) { line -> HostRuntime.note(line) } &&
-                    RuntimeInstaller.ensureShims(applicationContext) { line -> HostRuntime.note(line) }
+                    RuntimeInstaller.ensureShims(applicationContext) { line -> HostRuntime.note(line) } &&
+                    RuntimeInstaller.ensurePython(applicationContext) { line -> HostRuntime.note(line) }
             },
             env = mapOf(
                 "PROOT_LOADER" to runtimePaths.loader,

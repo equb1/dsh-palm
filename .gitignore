@@ -84,3 +84,7 @@ scratch/*.xml
 # æœ¬åœ°å·¥å…·ä¸éªŒè¯äº§ç‰©
 tools/
 artifacts/
+
+# Python/Office ÔËĞĞÊ±²ã£¨36MB£¬ºÍ rootfs/payload Ò»Ñù×ßÖÆÆ·£¬²»½ø²Ö¿â£©
+app/android/app/src/main/assets/python.bin
+

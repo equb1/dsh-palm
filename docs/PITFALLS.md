@@ -109,6 +109,14 @@
 - 处理：发版前在 16KB 设备/模拟器验证 proot 的 `.so`。
 - 状态：**未验证**。
 
+### B7. 基础 rootfs 里混着 `PaxHeaders/` 垃圾目录（2026-11-04）
+
+- 现象：解压后的 rootfs 里有 492 个 `PaxHeaders/` 目录（`/etc/dpkg/dpkg.cfg.d/PaxHeaders` 等），
+  平时不影响运行，但 `dpkg`/`apt` 会把它当配置文件读而报错。
+- 原因：`rootfs.bin` 打包时 bsdtar 把 PAX 元数据目录当成真实目录写进了 tar；`TarExtractor` 之前照单全收。
+- 处理：`TarExtractor` 跳过路径段为 `PaxHeaders` / `PaxHeaders.*` 的条目；已经装过的设备可一次性 `find … -prune -exec rm -rf`。
+- 验证：新版本 APK 首装解压后 `find / -xdev -type d -name 'PaxHeaders*' | wc -l` 为 0。
+
 ## C. 引擎与桥
 
 ### C1. 桥 `EADDRINUSE` / 假 ready
@@ -272,6 +280,29 @@
 - 现象：只支持结构化 blocks / 值，没有样式、公式、编辑。
 - 处理：复杂/编辑/pptx 路由到 proot。
 - 验证：真机对比生成结果。
+
+### F6. dpkg/apt 在 app 私有目录里跑不了（2026-11-04）
+
+- 现象：`dpkg: error processing archive ... unable to make backup link of './usr/lib/...' before installing new version: Permission denied`；
+  随后 `dpkg: error: error creating new backup file '/var/lib/dpkg/status-old': Permission denied`；
+  更早还会先报 `read error in configuration file '/etc/dpkg/dpkg.cfg.d/PaxHeaders': Is a directory`。
+- 原因：① Android SELinux 不允许 app 私有目录 `link()`，dpkg 备份/`status-old` 依赖硬链接；
+  ② 基础 `rootfs.bin` 里混进了 bsdtar 的 `PaxHeaders/` 元数据目录（492 个），dpkg 把目录当配置文件读。
+- 处理：完整引擎的 Python 三层不走 apt/dpkg 入库，直接
+  `dpkg-deb --fsys-tarfile <deb> | tar -x --hard-dereference --no-same-owner -C /`
+  （硬链接退化成复制）；`TarExtractor` 丢弃路径里带 `PaxHeaders` 的条目；
+  产物打成 APK 层 `assets/python.bin`。脚本：`scripts/build-python-layer.sh`。
+- 验证：`TarExtractor` 重解 rootfs 后 `find / -name 'PaxHeaders*'` 为 0；层删除-重解后三格式 smoke 通过。
+
+### F7. 后台时 App 的网络被 ROM 掐断（2026-11-04）
+
+- 现象：apt/pip 在后台跑时报 `Temporary failure in name resolution`；`run-as` 里 `getent hosts` 全失败，
+  连 `127.0.0.1:8787` 也超时；把 App 拉到前台（`am start`）后同一命令立刻成功。
+  DNS 走 Clash 的 172.19.0.2 时更明显。
+- 原因：PLR110 / HarmonyOS 对后台 UID 断网（有前台服务也不放行），不是 DNS 配置问题。
+- 处理：所有需要网络的长任务必须在 App 前台时跑；Python 层因此随 APK 发布，不做首次下载。
+  调试时先 `adb shell am start -n cool.cnb.dshpalm/.MainActivity`，再跑 `apt/pip`。
+- 验证：前台 `python3 -m pip install` 20s 成功；后台同一命令 DNS 失败。
 
 ## H. UI / RN
 

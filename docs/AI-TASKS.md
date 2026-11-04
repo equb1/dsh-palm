@@ -21,6 +21,8 @@
 - 流式主链路已修（2026-11-04）：canonical run/block id、chunk 缓冲、稳定块 memo、FlatList 和 follow
   状态机已落地；真机工具密集长流、上滑冻结、回到底部、重进通过。20 分钟 soak 待补，见
   `PITFALLS.md` H7 和 [STREAMING-FIX](STREAMING-FIX.md)。
+- 完整引擎（proot）自带 Python/Office 层（2026-11-04）：`assets/python.bin` 首次启动解压到 rootfs，
+  `python3` + docx/openpyxl/pptx；三格式创建/读回/编辑在真机通过（见 P0 1.1）。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
 
@@ -30,11 +32,16 @@
 
 ### P0 · 当前优先
 
-- [ ] **1.1 Office 三件套（proot + Python）**
-  - [ ] proot 里装 `python3` + `python-docx` + `openpyxl` + `python-pptx`
-  - [ ] 跑通 docx / xlsx / pptx 的创建、读取、编辑
-  - [ ] 决定打包方式（进 payload / 首次下载）并记录体积
+- [x] **1.1 Office 三件套（proot + Python）**
+  - [x] proot 里装 `python3` + `python-docx` + `openpyxl` + `python-pptx`
+  - [x] 跑通 docx / xlsx / pptx 的创建、读取、编辑
+  - [x] 决定打包方式（进 payload / 首次下载）并记录体积
   - 验收：三格式各一份创建+读回+编辑；真机耗时与体积有记录
+  - 结果（2026-11-04）：APK 独立层 `assets/python.bin`（36.8MB，解压 1s，安装后约 114MB）；
+    Python 3.12.3 / python-docx 1.1.0 / openpyxl 3.1.2 / python-pptx 1.0.2 / Pillow 10.2.0 / lxml 5.2.1；
+    真机耗时（创建/读回/编辑 ms）：docx 33/12/13，xlsx 7/3/4，pptx 16/5/6。
+    不用 dpkg（app 私有目录禁 `link()`），用 `dpkg-deb --fsys-tarfile | tar --hard-dereference` 解包；
+    构建脚本 `scripts/build-python-layer.sh`，验证 `scratch/office-smoke.py`。
 
 - [ ] **1.2 EngineManager + 轻引擎默认**
   - [ ] 状态机：`light` 默认、`proot` 触发式
@@ -215,7 +222,6 @@ type AttachmentChipsProps = {
 
 | 项 | 选项 | 建议 |
 |---|---|---|
-| Python 打包 | 进 payload（离线可靠，+50–60MB）/ 首次下载 | spike 后定 |
 | ASR/OCR 时机 | ASR 先进 P1 / OCR 后置 | 先 ASR，音频路由才闭环 |
 | iOS 范围（D2） | 只遥控器 / 也要轻引擎 | 先遥控器 |
 | 插件市场（D3） | 只启用/配置 / 下载执行 | 前者（2.5.2） |

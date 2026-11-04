@@ -114,6 +114,7 @@ UI 侧统一经 `app/src/lib/errors.ts` 翻成人话。
 |---|---|---|
 | `rootfs.bin` | APK assets | Ubuntu 24.04 rootfs（解压约 125MB） |
 | `payload.bin` | APK assets | Node 24 + dsh + 桥 + patch（约 158MB） |
+| `python.bin` | APK assets | Python/Office 层（36.8MB，解压约 114MB）：python3 + docx/openpyxl/pptx/pip |
 | `RuntimeInstaller` | Kotlin | 解压、迁移、DNS、补丁、权限、进度 |
 | `HostService` | Kotlin FGS | 前台服务，起 proot/Node/桥，通知进度 |
 | `HostRuntime` | Kotlin | 进程管理、看门狗、日志、状态 |
@@ -125,12 +126,18 @@ UI 侧统一经 `app/src/lib/errors.ts` 翻成人话。
 App → startHost() → HostService.onStartCommand
   → RuntimeInstaller.ensureLayout（工作区/密钥/.dsh 外置 + 迁移 + DNS）
   → ensurePatch（fs-link-fallback + 桥）
+  → ensurePython（assets/python.bin → rootfs；marker 版本一致就跳过）
   → proot -b workspace:/root/work -b bridge:/bridge -b .dsh:/root/.dsh
        → node .../dsh/lib/bin.js web --port 8787
   → node bridge.cjs（读 8787 token，开 8788）
   → 日志出现 token/配对码 → 状态 ready
 App 轮询 host.status() → maybeAutoConnect() → 连 ws://127.0.0.1:8788/ws
 ```
+
+Python 层单独成 assets：改它不用重打 158MB 的 payload；release 裁掉也不影响启动（`ensurePython` 打日志跳过）。
+层里的路径从根开始（`usr/bin/python3`、`usr/lib/python3.12/...`），由 `TarExtractor` 解到 rootfs；
+解压后补一次 `/usr/bin`、`/usr/local/bin` 的执行位。构建与验证见 `scripts/build-python-layer.sh`、
+`scratch/office-smoke.py`（耗时/体积记录见 AI-TASKS 1.1）。
 
 ### 4.3 关键约束
 
@@ -225,15 +232,23 @@ PDF/未支持格式：只保存 + 提示，不解析。
 | pptx 全部 | proot + Python 三件套 |
 | 旧 .doc/.ppt、render、recalc、PDF | LibreOffice（默认不做） |
 
-Python 三件套：`python3 + python-docx + openpyxl + python-pptx`（约 50–60MB）。
-`dsh-skill-office` 已在 rootfs；缺 Python 和 linux-arm64 LibreOfficeKit。
+Python 三件套（2026-11-04 已落地）：`python3 3.12.3 + python-docx 1.1.0 + openpyxl 3.1.2 +
+python-pptx 1.0.2 + Pillow 10.2.0 + lxml 5.2.1 + XlsxWriter 3.3.1 + pip 24.0`，
+作为 APK 独立层 `assets/python.bin`（36.8MB gzip / 解压约 114MB），首次启动解压约 1s；
+不依赖首次下载。`dsh-skill-office` 已在 rootfs；仍缺 linux-arm64 LibreOfficeKit（render/recalc/PDF 不做）。
+
+**为什么不用 apt/dpkg 装**：app 私有目录里 SELinux 禁 `link()`，dpkg 做 `status-old`/备份硬链接直接失败；
+改用 `dpkg-deb --fsys-tarfile <deb> | tar -x --hard-dereference` 解包（硬链接退化为复制）。
+基础 rootfs 里还混着 bsdtar 的 `PaxHeaders/` 目录，`dpkg` 会把它当配置文件读而报错，
+`TarExtractor` 现在直接丢弃这类条目。
 
 ### 6.6 已确认决策
 
 C1 默认 light；C2 预热默认关；C3 会话统一 + badge；C4 配置共享；
 C5 摘要+8 轮迁移；C6 原生收件 + 路径引用；C7 Office 三件套；
 C8 render/recalc/旧格式/PDF 暂不做；C9 light 不补 pptx；C10 后台必须 proot；
-C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期。
+C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期；
+C15 Python 走 APK 独立层（`python.bin`），不做首次下载（离线可靠、可裁剪）。
 
 ## 7. 登录与配对
 
@@ -365,12 +380,16 @@ npm --prefix app install
 npm run verify                    # tsc + 全部测试（数量以输出为准）
 npm --prefix app run typecheck
 node scripts/build-bridge.mjs     # 生成 dist + APK asset
+# Python/Office 层（在手机 rootfs 里跑，产物放 APK assets；日常不用重打）
+# adb shell run-as cool.cnb.dshpalm sh files/run-in-rootfs.sh <nativeLibraryDir> \
+#     '/bin/sh /root/work/build-python-layer.sh'
 cd app/android && sh gradlew :app:assembleDebug
 ```
 
 ### 9.3 打包要点
 
 - `rootfs.bin` / `payload.bin` 走 release（`scripts/setup-android.sh` 校验 sha256）；
+- `python.bin` 也是制品（gitignore；36.8MB）；改 `scripts/build-python-layer.sh` 后重打，`RuntimeInstaller.PYTHON_LAYER_VERSION` 同步 +1；
 - `jniLibs/arm64-v8a/{libproot.so,libprootloader.so}` 来自 Termux（`scripts/fetch-proot.sh`）；
 - `debug.keystore` 需生成一次（gitignore）；
 - 桥/补丁打进 APK assets，运行时同步进 rootfs（`ensurePatch`），改桥不用重打 payload。

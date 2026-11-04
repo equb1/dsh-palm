@@ -22,9 +22,20 @@ object RuntimeInstaller {
 
     /** node + dsh 的载荷，叠加在基础 rootfs 之上 */
     const val PAYLOAD_ASSET = "payload.bin"
+
+    /**
+     * Python + Office 三件套（python3 / python-docx / openpyxl / python-pptx）。
+     *
+     * 单独一层：不改 158MB 的 payload，APK 里有就解压，没有就跳过（release 可以按需裁掉）。
+     * 层内是绝对根开始的相对路径（usr/bin/python3…），由 TarExtractor 解到 rootfs。
+     */
+    const val PYTHON_ASSET = "python.bin"
+    private const val PYTHON_MARKER = "usr/lib/python3.12/.dshpalm-layer"
+    private const val PYTHON_LAYER_VERSION = "py312-office-2026-11-04"
+
     private const val MARKER = ".installed"
-    // 改过 payload（补 dsh-web-frontend、塞桥）就换版本号，手机上的旧镜像会自动重装
-    private const val VERSION = "ubuntu-24.04.5-node24.22.1-dsh0.2.1rc5+frontend+bridge"
+    // 改过 payload / 基础层就换版本号，手机上的旧镜像会自动重装
+    private const val VERSION = "ubuntu-24.04.5-node24.22.1-dsh0.2.1rc5+frontend+bridge+py1"
 
     data class Paths(
         val proot: String,
@@ -484,6 +495,48 @@ object RuntimeInstaller {
             true
         }.getOrElse {
             log("[runtime] 补丁写入失败 $rel: ${it.message}")
+            false
+        }
+    }
+
+    /** APK 里有没有 Python 层（release 可以裁掉；裁掉就只影响完整引擎的 python3） */
+    fun hasPythonAsset(context: Context): Boolean =
+        runCatching { context.assets.list("")?.contains(PYTHON_ASSET) == true }.getOrDefault(false)
+
+    /**
+     * 解压 Python + Office 层。
+     *
+     * 和 rootfs/payload 分开：改这一层不用重打 158MB 的 payload；已解过（marker 版本一致）直接返回。
+     * 层是设备上 Ubuntu 24.04 arm64 的 deb + pip wheel 装好后打的，条目从根开始（usr/bin/python3…）。
+     */
+    fun ensurePython(context: Context, log: (String) -> Unit = {}): Boolean {
+        val rootfs = paths(context).rootfs
+        val marker = File(rootfs, PYTHON_MARKER)
+        if (marker.isFile &&
+            runCatching { marker.readText().trim() }.getOrDefault("") == PYTHON_LAYER_VERSION
+        ) {
+            return true
+        }
+        if (!hasPythonAsset(context)) {
+            log("[runtime] 没有 $PYTHON_ASSET，跳过 Python/Office 层（完整引擎无 python3）")
+            return false
+        }
+        return runCatching {
+            val started = System.currentTimeMillis()
+            log("[runtime] 解压 Python/Office 层…")
+            val count = extractAsset(context, PYTHON_ASSET, rootfs, "解压 Office 运行时", 96, 99, log) { _, _ -> }
+            // Windows 打的包 mode 可能是 0644：解释器 / pip 入口要可执行
+            for (rel in listOf("usr/bin", "usr/local/bin")) {
+                File(rootfs, rel).listFiles()?.forEach { f ->
+                    if (f.isFile) runCatching { f.setExecutable(true, false) }
+                }
+            }
+            marker.parentFile?.mkdirs()
+            marker.writeText(PYTHON_LAYER_VERSION)
+            log("[runtime] Python/Office 层就绪：$count 个条目，耗时 ${(System.currentTimeMillis() - started) / 1000}s")
+            true
+        }.getOrElse {
+            log("[runtime] Python 层解压失败: ${it.message}")
             false
         }
     }
