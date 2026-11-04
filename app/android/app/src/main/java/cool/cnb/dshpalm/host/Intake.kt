@@ -14,7 +14,7 @@ import java.security.MessageDigest
  *
  * 约束（见 docs/TECHNICAL.md 6.4）：
  *  - 绝不把整个文件读进内存，也不产生 base64；
- *  - 边拷边算 SHA-256，先写 `uploads/*.part` 再改名，避免留下半个文件；
+ *  - 边拷边算 SHA-256，先写 `uploads/<name>.part` 再改名，避免留下半个文件；
  *  - 同一个文件重复收件（hash + 大小相同）直接复用已有文件。
  */
 data class FileRef(
