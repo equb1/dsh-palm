@@ -346,6 +346,37 @@ test('run.finished 按 runId 收尾目标回合，列表与详情一起回到 id
   );
 });
 
+test('run.finished 的模型错误进 ChatScreen 横幅，而不是只剩回合“出错”', async () => {
+  const active = assistant({
+    id: 'active',
+    runId: 'run:active',
+    status: 'streaming',
+    blocks: [{ kind: 'text', id: 'active-b', text: '' }],
+  });
+  const { store, feed } = setupStore([active]);
+  feed('run.finished', {
+    sessionId: 'session-1',
+    runId: 'run:active',
+    reason: 'error',
+    error: 'API Key 无效或没有权限（401）：检查 Key、Base URL 和模型权限。',
+  });
+  await flushMicrotasks();
+  assert.equal(
+    store.getSnapshot().error,
+    'API Key 无效或没有权限（401）：检查 Key、Base URL 和模型权限。',
+  );
+
+  // 英文 429 也要翻成中文横幅，而不是原始的 HTTP 报文
+  feed('run.finished', {
+    sessionId: 'session-1',
+    runId: 'run:active',
+    reason: 'error',
+    error: 'HTTP 429 Too Many Requests',
+  });
+  await flushMicrotasks();
+  assert.match(store.getSnapshot().error ?? '', /限流/);
+});
+
 test('block.updated 不修改旧 detail 数组，并标记文本 block done', () => {
   const active = assistant({
     id: 'active',

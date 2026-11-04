@@ -12,10 +12,13 @@
  */
 import type { AgentTool, ChatMessage, LightModelConfig, ToolCall } from './types';
 import { postSse } from './transport';
+import { LIGHT_ERROR_HINTS, LightRequestError, classifyStatus } from '../../lib/errors';
 
 export interface StreamHandlers {
   onText?(delta: string): void;
   onThinking?(delta: string): void;
+  /** 收到第一个非空工具调用分片时回调（TTFT 用；不参与拼装） */
+  onToolCallDelta?(): void;
 }
 
 export interface StreamOptions {
@@ -26,6 +29,8 @@ export interface StreamOptions {
   maxTokens?: number;
   /** 是否要 stream_options.include_usage，默认要 */
   includeUsage?: boolean;
+  /** 空闲超时毫秒；默认 45s */
+  idleTimeoutMs?: number;
 }
 
 export interface StreamResult {
@@ -102,6 +107,7 @@ export async function streamChat(
   let finishReason: string | undefined;
   let usage: StreamResult['usage'];
   const partials = new Map<number, PartialToolCall>();
+  let toolCallSeen = false;
 
   let buffer = '';
 
@@ -160,6 +166,15 @@ export async function streamChat(
           if (typeof fn.arguments === 'string' && fn.arguments) current.args += fn.arguments;
         }
         partials.set(index, current);
+        // 第一个非空工具分片也算首包，ttft 不能只统计正文
+        const nonEmpty =
+          (typeof raw.id === 'string' && raw.id.length > 0) ||
+          (typeof fn?.name === 'string' && fn.name.length > 0) ||
+          (typeof fn?.arguments === 'string' && fn.arguments.length > 0);
+        if (nonEmpty && !toolCallSeen) {
+          toolCallSeen = true;
+          handlers.onToolCallDelta?.();
+        }
       }
     }
   };
@@ -184,19 +199,26 @@ export async function streamChat(
     body: JSON.stringify(body),
     onData,
     ...(options.signal ? { signal: options.signal } : {}),
+    ...(options.idleTimeoutMs ? { idleTimeoutMs: options.idleTimeoutMs } : {}),
   });
 
   if (http.status < 200 || http.status >= 300) {
-    if (http.status === 0 && options.signal?.aborted) throw new Error('已取消');
-    throw new Error(describeHttpError(http.status, http.statusText, http.errorText));
+    if (http.status === 0 && options.signal?.aborted) {
+      throw new LightRequestError('canceled', LIGHT_ERROR_HINTS.canceled);
+    }
+    const kind = classifyStatus(http.status);
+    if (kind) {
+      throw new LightRequestError(kind, describeHttpError(http.status, http.statusText, http.errorText), http.status);
+    }
+    throw new LightRequestError('offline', LIGHT_ERROR_HINTS.offline);
   }
 
   // 收尾：最后一行可能没有换行
   if (buffer.trim().length > 0) handleLine(buffer);
-  if (options.signal?.aborted) throw new Error('已取消');
+  if (options.signal?.aborted) throw new LightRequestError('canceled', LIGHT_ERROR_HINTS.canceled);
   if (!text && !thinking && partials.size === 0) {
     // 常见于 Base URL 指错（返回了 200 但内容是 HTML/空）、或服务端没实现 stream
-    throw new Error('模型没有返回任何内容（检查 Base URL / 模型名，或该服务是否支持 stream）');
+    throw new LightRequestError('empty', LIGHT_ERROR_HINTS.empty);
   }
 
   const toolCalls: ToolCall[] = [...partials.entries()]

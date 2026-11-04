@@ -22,6 +22,7 @@ import { streamChat } from './provider';
 import { newBlockId } from './sessionRepo';
 import { checkToolCapability } from './capability';
 import { permissionNote, TOOL_CONTEXT_HELP, toolsForPermission, toDisplayPath, toSandboxPath } from './tools';
+import { errorKindOf, errorStatusOf } from '../../lib/errors';
 import type {
   AgentTool,
   AskAnswer,
@@ -227,13 +228,20 @@ export class Agent {
         let result;
         const streamStartedAt = this.now();
         let firstDeltaAt: number | null = null;
+        let firstKind: 'content' | 'tool' = 'content';
+        const markFirst = (kind: 'content' | 'tool'): void => {
+          if (firstDeltaAt !== null) return;
+          firstDeltaAt = this.now();
+          firstKind = kind;
+        };
         try {
           result = await this.stream(
             modelConfig,
-            { messages, tools, signal },
+            // 空闲超时：45s 没有新分片就当超时（transport 里重置）
+            { messages, tools, signal, idleTimeoutMs: 45_000 },
             {
               onText: (delta) => {
-                if (firstDeltaAt === null) firstDeltaAt = this.now();
+                markFirst('content');
                 const block = ensureTextBlock('text');
                 block.text += delta;
                 block.block.text += delta;
@@ -247,7 +255,7 @@ export class Agent {
                 });
               },
               onThinking: (delta) => {
-                if (firstDeltaAt === null) firstDeltaAt = this.now();
+                markFirst('content');
                 const block = ensureTextBlock('thinking');
                 block.text += delta;
                 block.block.text += delta;
@@ -260,6 +268,8 @@ export class Agent {
                   text: delta,
                 });
               },
+              // 只出工具调用、没有正文的回合也要有 ttft
+              onToolCallDelta: () => markFirst('tool'),
             },
           );
         } catch (error) {
@@ -281,9 +291,14 @@ export class Agent {
             outputTokens: (usage?.outputTokens ?? 0) + (result.usage.outputTokens ?? 0),
           };
         }
+        // 一次模型调用只打一行：TTFT（首个非空分片，含 tool_calls）+ 总流时长 + 用量
+        const streamMs = this.now() - streamStartedAt;
+        const ttftMs = firstDeltaAt === null ? -1 : firstDeltaAt - streamStartedAt;
         this.log?.(
-          `ttft=${firstDeltaAt === null ? -1 : firstDeltaAt - streamStartedAt}ms ` +
-            `stream=${this.now() - streamStartedAt}ms tools=${result.toolCalls.length}`,
+          `ttft=${ttftMs}ms stream=${streamMs}ms model=${modelConfig.model} step=${step + 1} ` +
+            `first=${firstKind} tools=${result.toolCalls.length} ` +
+            `usage=in:${result.usage?.inputTokens ?? 0},out:${result.usage?.outputTokens ?? 0} ` +
+            `run=${run.runId}`,
         );
 
         const toolCalls = result.toolCalls;
@@ -455,8 +470,21 @@ export class Agent {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (run.step.signal.aborted) return this.finish(run, { reason: 'stopped' });
+      this.logError(run, error);
       return this.finish(run, { reason: 'error', error: message });
     }
+  }
+
+  /** 失败只打一行，带上分类/状态码，真机上能直接 grep */
+  private logError(run: LightRun, error: unknown): void {
+    if (!this.log) return;
+    const kind = errorKindOf(error) ?? 'server';
+    const status = errorStatusOf(error) ?? 0;
+    const message = (error instanceof Error ? error.message : String(error))
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 300);
+    this.log(`error kind=${kind} status=${status} run=${run.runId} message=${message}`);
   }
 
   private async executeTool(

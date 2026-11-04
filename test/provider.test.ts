@@ -4,6 +4,7 @@ import { after, describe, it } from 'node:test';
 
 import { completionsUrl, streamChat } from '../app/src/engine/light/provider';
 import type { LightModelConfig } from '../app/src/engine/light/types';
+import { LightRequestError, humanizeError } from '../app/src/lib/errors';
 
 type Handler = (req: IncomingMessage, res: ServerResponse, body: string) => void;
 
@@ -158,6 +159,79 @@ describe('provider · OpenAI 兼容 SSE', () => {
     await assert.rejects(
       streamChat({ ...MODEL, baseURL: base }, { messages: [{ role: 'user', content: 'x' }] }),
       /没有返回任何内容/,
+    );
+  });
+
+  it('空闲超时：没有新分片就报 timeout，而不是一直挂着', async () => {
+    const base = await startServer((_req, res) => {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.flushHeaders?.();
+      // 故意不回任何数据，也不 end
+    });
+    const started = Date.now();
+    await assert.rejects(
+      streamChat(
+        { ...MODEL, baseURL: base },
+        { messages: [{ role: 'user', content: 'x' }], idleTimeoutMs: 120 },
+      ),
+      (error: unknown) =>
+        error instanceof LightRequestError &&
+        error.kind === 'timeout' &&
+        /没有新响应/.test(error.message),
+    );
+    assert.ok(Date.now() - started < 3_000, '应当远早于 45s 的默认值');
+  });
+
+  it('只有 tool_calls 的流也会触发首包回调（ttft 不能只统计正文）', async () => {
+    const base = await startServer((_req, res) => {
+      writeChunked(res, [
+        sse({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  { index: 0, id: 'call_1', type: 'function', function: { name: 'bash', arguments: '{}' } },
+                ],
+              },
+            },
+          ],
+        }),
+        sse({ choices: [{ finish_reason: 'tool_calls' }] }),
+        'data: [DONE]\n\n',
+      ]);
+    });
+    let firstToolCall = 0;
+    let text = 0;
+    const result = await streamChat(
+      { ...MODEL, baseURL: base },
+      { messages: [{ role: 'user', content: 'x' }] },
+      { onToolCallDelta: () => (firstToolCall += 1), onText: () => (text += 1) },
+    );
+    assert.equal(firstToolCall, 1);
+    assert.equal(text, 0);
+    assert.equal(result.text, '');
+    assert.equal(result.toolCalls.length, 1);
+  });
+
+  it('429 / 401 带分类和状态码，humanizeError 能给出中文建议', async () => {
+    const base429 = await startServer((_req, res) => {
+      res.statusCode = 429;
+      res.end(JSON.stringify({ error: { message: 'rate limited' } }));
+    });
+    await assert.rejects(
+      streamChat({ ...MODEL, baseURL: base429 }, { messages: [{ role: 'user', content: 'x' }] }),
+      (error: unknown) =>
+        error instanceof LightRequestError &&
+        error.kind === 'rate_limited' &&
+        error.status === 429 &&
+        /额度不足|太频繁/.test(humanizeError(error)),
+    );
+
+    // 已经是中文的错误原样透传，不再按英文关键字二次翻译
+    assert.equal(humanizeError(new Error('请求太频繁（429），稍后再试')), '请求太频繁（429），稍后再试');
+    assert.equal(
+      humanizeError(new LightRequestError('timeout', '模型服务 45 秒没有新响应')),
+      '模型服务 45 秒没有新响应',
     );
   });
 

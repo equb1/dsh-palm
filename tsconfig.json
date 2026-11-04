@@ -20,6 +20,7 @@
     "app/src/lib/**/*.ts",
     "app/src/engine/**/*.ts",
     "scripts/mock-model-server.ts",
+    "scripts/bench-light.ts",
     "scripts/device-ui.ts",
     "scripts/device-m1-check.ts",
     "scripts/device-real-check.ts"
