@@ -15,7 +15,7 @@ import {
   isOffline,
   lightTimeoutMessage,
 } from '../../lib/errors';
-import { SSE_IDLE_TIMEOUT_MS, type SseHttpResult, type SseRequest } from './transport';
+import { SSE_IDLE_TIMEOUT_MS, type SseHttpResult, type SseRequest } from './transport.shared';
 
 function offlineError(): LightRequestError {
   return isOffline()
