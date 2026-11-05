@@ -157,15 +157,16 @@
     「N 个工具 · a · b」一行，可再展开逐条详情（`TurnView.tsx` 的 `groupProcessBlocks`）。
     真机 weekly.docx 会话验证：折叠行显示「2 个工具 create_docx · read_docx」，展开后两条工具行都在。
 - [x] **U3 流式性能**：按帧合并 + 活跃 block 局部更新 + stable/tail Markdown + 空 block 修复；
-  20 分钟 soak 已过（0 duplicate、1 次 VirtualizedList 警告），40 分钟复核 PSS 430–501MB 稳定，
-  90 分钟待补
+  20 分钟 soak 已过（0 duplicate、1 次 VirtualizedList 警告），40/42.5 分钟复核内存 430–546MB，
+  **90 分钟 soak 已完成**（2026-11-06 00:11–01:42，109 轮，PSS 349→615MB，无 OOM，见 I10）
 - [ ] **U4 设置 IA**：6 组、SettingsTile、右侧当前值、搜索
 - [ ] **U5 引擎页**：状态环、启动/停止/重启、失败卡（重试/安全模式/日志）
 - [ ] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
 - [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
-  20 分钟 soak 已完成（2026-11-05，33 回合），40 分钟复核内存稳定（PITFALLS I10）；90 分钟待补
+  20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
+  无 OOM/崩溃，PITFALLS I10）
 
 #### 可并行 UI 项（2026-11-03，给 agent）
 
