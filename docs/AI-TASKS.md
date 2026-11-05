@@ -148,22 +148,24 @@
   - 2026-11-05：顶栏改浮动（`position:absolute` + `top:topInset`，滚动后 0.97 白底 + 底部描边 +
     轻投影，未滚动 0.86 半透明）；正文用 `headerH` marginTop 留位，键盘/长会话滚动下不遮挡。
     真机验证：顶部/滚动后两张截图，标题、模型、引擎角标、生成文件入口均可见可点。
-  - 2026-11-05：错误横幅改成圆角 dangerSoft 卡片（图标 + 3 行文本 + 重新登录 + ×关闭），
-    typecheck 通过；真机触发错误待验（不想为造错打断 soak）。
+  - 2026-11-05：错误横幅改成圆角 dangerSoft 卡片（图标 + 3 行文本 + 重新登录 + ×关闭）。
+    真机验证：轻引擎打开完整侧只读会话后发消息，卡片显示「已切换引擎，这个会话只读…」，
+    不挡 Composer，× 能关；截图 `scratch/shots/97-error-banner.png`。
 - [ ] **U2 消息层**：思考 3 行实时窗、工具行合并、整轮折叠、ChatCard 统一
   - 部分完成：思考按 block、工具行、完成摘要/整轮折叠；ChatCard 统一卡片未做。
   - 2026-11-05：思考实时窗改 3 行（只跟最后 240 字）；完整过程展开后相邻 ≥2 个工具合并成
     「N 个工具 · a · b」一行，可再展开逐条详情（`TurnView.tsx` 的 `groupProcessBlocks`）。
     真机 weekly.docx 会话验证：折叠行显示「2 个工具 create_docx · read_docx」，展开后两条工具行都在。
 - [x] **U3 流式性能**：按帧合并 + 活跃 block 局部更新 + stable/tail Markdown + 空 block 修复；
-  20 分钟 soak 已过（0 duplicate、1 次 VirtualizedList 警告），90 分钟待补
+  20 分钟 soak 已过（0 duplicate、1 次 VirtualizedList 警告），40 分钟复核 PSS 430–501MB 稳定，
+  90 分钟待补
 - [ ] **U4 设置 IA**：6 组、SettingsTile、右侧当前值、搜索
 - [ ] **U5 引擎页**：状态环、启动/停止/重启、失败卡（重试/安全模式/日志）
 - [ ] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
 - [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
-  20 分钟 soak 已完成（2026-11-05，33 回合，见 PITFALLS I10）；90 分钟待补
+  20 分钟 soak 已完成（2026-11-05，33 回合），40 分钟复核内存稳定（PITFALLS I10）；90 分钟待补
 
 #### 可并行 UI 项（2026-11-03，给 agent）
 
@@ -284,7 +286,10 @@ type AttachmentChipsProps = {
     抽屉用 `sessionRows()`，另一个引擎的行标「轻/完整」，点击 `openSessionRow` 先 `switchEngine`
     再按原 id 打开；长按菜单只对当前引擎行开放。
     单测 `test/session-list.test.ts` 3 条；typecheck + `npm run verify` 216 pass。
-    **真机待验**（写这段时设备正在跑 90 分钟 soak，不能重启 Metro）；Handoff 继续版仍未做。
+    真机（2026-11-05）：完整引擎抽屉里能看到轻会话并标「轻」，点「Read the attached…」自动切回轻引擎
+    并打开原会话；轻引擎抽屉里能看到完整会话并标「完整」，点「检查 python 文档库版本」切到完整引擎
+    （proot）并打开。截图 `scratch/shots/85-drawer-full.png`、`86-light-opened.png`、`90-full-opened2.png`。
+    Handoff 继续版仍未做。
 - [ ] **2.7 账号 token 生命周期**
   - 轻引擎 401 时明确提示“账号登录已过期，切完整模式重新登录”；
   - 提供重登入口；不要静默失败。
