@@ -151,11 +151,17 @@
   - 2026-11-05：错误横幅改成圆角 dangerSoft 卡片（图标 + 3 行文本 + 重新登录 + ×关闭）。
     真机验证：轻引擎打开完整侧只读会话后发消息，卡片显示「已切换引擎，这个会话只读…」，
     不挡 Composer，× 能关；截图 `scratch/shots/97-error-banner.png`。
-- [ ] **U2 消息层**：思考 3 行实时窗、工具行合并、整轮折叠、ChatCard 统一
-  - 部分完成：思考按 block、工具行、完成摘要/整轮折叠；ChatCard 统一卡片未做。
+- [x] **U2 消息层**：思考 3 行实时窗、工具行合并、整轮折叠、ChatCard 统一
   - 2026-11-05：思考实时窗改 3 行（只跟最后 240 字）；完整过程展开后相邻 ≥2 个工具合并成
     「N 个工具 · a · b」一行，可再展开逐条详情（`TurnView.tsx` 的 `groupProcessBlocks`）。
     真机 weekly.docx 会话验证：折叠行显示「2 个工具 create_docx · read_docx」，展开后两条工具行都在。
+  - 2026-11-06：审批/提问/能力门统一到 `ui/chat/ChatCard.tsx`（20 圆角、16 内边距、tonal hairline；
+    主色只给主按钮）。`ApprovalCard`/`CapabilityCard` 只保留各自内容，外框不再各写一套；
+    低风险审批/提问用中性描边，中风险 warn、高风险 danger；代码/命令块统一 `ChatCardCodeBox`。
+    真机三类卡片通过：提问卡（`120-chatcard-question.png`）、审批卡（`121-chatcard-approval.png`、
+    `122-chatcard-approval-bash.png`）、能力门卡（`123-chatcard-capability.png`）；
+    流式时工具行仍逐条外露（跑/等审批必须可见），整轮结束后按上面的规则合并。
+    `typecheck` + `npm run verify` 全绿。
 - [x] **U3 流式性能**：按帧合并 + 活跃 block 局部更新 + stable/tail Markdown + 空 block 修复；
   20 分钟 soak 已过（0 duplicate、1 次 VirtualizedList 警告），40/42.5 分钟复核内存 430–546MB，
   **90 分钟 soak 已完成**（2026-11-06 00:11–01:42，109 轮，PSS 349→615MB，无 OOM，见 I10）
