@@ -444,7 +444,11 @@ type AttachmentChipsProps = {
 ## 3. 工程债
 
 - [ ] **E1** JS bundle 4.2MB，Metro 不拆包 → 按需资源包
-- [ ] **E2** 一会话一 run，无队列 → 并发上限 + 排队
+- [x] **E2** 一会话一 run，无队列 → 并发上限 + 排队
+  - 2026-11-06：轻宿主 `sessions.send` 在会话运行中不再报 busy，而是把消息写入历史并进
+    `session.queued`，当前 run 结束（含手动停止）后自动 `startRun` 下一条，返回 `{queued:true}`。
+    单测：第一条 `waitForAbort`，第二条排队，stop 后收到两次 `run.finished` 且第二轮有回复。
+    局限：App 界面仍用「停止 / 插话」，没有主动「排队发送」按钮；协议层已支持。
 - [ ] **E3** 宿主缺会话删除/正文搜索 → 等上游或自建索引
   - 2026-11-06：轻引擎实现 `sessions.delete`（运行中的会话拒绝删除），抽屉长按菜单加「删除」
     + 二次确认；store 删除后关闭当前会话、清理 ConversationLink、刷新列表。mock 宿主同样支持，

@@ -532,6 +532,34 @@ describe('LocalEngineClient', () => {
     );
   });
 
+  it('运行中再发消息排队，当前 run 结束后自动开始下一轮（E2）', async () => {
+    const harness = await makeHost([{ waitForAbort: true }, { text: '排队回复' }]);
+    const sessionId = await createSession(harness);
+    await harness.client.request('sessions.send', { sessionId, text: '第一轮' });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    const queued = await harness.client.request('sessions.send', { sessionId, text: '第二轮' });
+    assert.equal(queued.queued, true);
+
+    const finished: string[] = [];
+    const off = harness.host.onEvent((event) => {
+      if (event.event === 'run.finished') finished.push(event.event);
+    });
+    await harness.client.request('sessions.stop', { sessionId });
+    const deadline = Date.now() + 10_000;
+    while (finished.length < 2 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    off();
+    assert.equal(finished.length, 2, '排队消息没有自动开始下一轮');
+
+    const detail = await harness.client.request('sessions.get', { sessionId });
+    const replied = detail.session.turns.some((turn) =>
+      turn.blocks.some((block) => block.kind === 'text' && block.text.includes('排队回复')),
+    );
+    assert.equal(replied, true, '第二轮没有生成回复');
+  });
+
   it('sessions.pin 后 summary 带 pinned（U6 置顶分组）', async () => {
     const harness = await makeHost([{ text: 'ok' }]);
     const sessionId = await createSession(harness);

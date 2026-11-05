@@ -183,6 +183,8 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
   文件页会提示不支持。
 - 只读终端（U8）：`shell.run` 由轻宿主用独立只读挂载（Workspace SandboxFs `readOnly` + MountableFs）
   跑 ShellRunner，写操作返回 EACCES；15s 超时、20k 输出；完整引擎 unsupported。
+- 会话运行（E2）：同一会话同时最多一个 run；运行中再 `sessions.send` 会写历史并进
+  `session.queued`（返回 `queued:true`），当前 run 结束后自动开下一条；UI 仍以插话/停止为主。
 - 会话管理（E3）：轻宿主实现 `sessions.delete`（运行中拒绝）和 `sessions.search`（标题/历史/思考
   正文，返回片段与命中数）；`sessions.pin` 的状态进 `SessionSummary.pinned`，抽屉据此分「置顶」组；
   完整引擎对 delete/search 显式 unsupported。

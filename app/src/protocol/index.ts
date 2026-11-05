@@ -622,7 +622,7 @@ export interface RequestResults {
   'sessions.get': { session: SessionDetail };
   'sessions.create': { session: SessionSummary };
   'sessions.import': { session: SessionSummary };
-  'sessions.send': { accepted: true; runId: string };
+  'sessions.send': { accepted: true; runId: string; queued?: boolean };
   'sessions.steer': { accepted: true };
   'sessions.handoff': HandoffV1;
   'sessions.stop': { accepted: true };

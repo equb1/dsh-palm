@@ -364,15 +364,19 @@ export class LightHost {
             hint: '附件已由 App 收件到 /workspace/uploads，请用 files 传路径引用',
           });
         }
-        if (this.runs.has(sessionId)) {
-          throw new EngineProtocolError({
-            code: 'busy',
-            message: '这个会话正在运行',
-            hint: '想中途补充要求，直接发消息（会走插话）',
-          });
-        }
         const body = this.textWithFiles(text, files);
         if (!body) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
+        if (this.runs.has(sessionId)) {
+          // E2：同一会话同时只跑一个 run，后来的消息排队，当前 run 结束自动开始
+          this.appendUserMessage(session, body);
+          session.queued = [...(session.queued ?? []), body];
+          await this.save(session);
+          return {
+            accepted: true as const,
+            runId: this.runs.get(sessionId)?.runId ?? '',
+            queued: true,
+          };
+        }
         this.appendUserMessage(session, body);
         await this.save(session);
         const runId = this.startRun(session);
@@ -915,6 +919,13 @@ export class LightHost {
       ...(outcome.usage ? { usage: outcome.usage } : {}),
       ...(outcome.error ? { error: outcome.error } : {}),
     });
+
+    // E2：上一轮结束后自动开始排队的消息
+    if (session.queued && session.queued.length > 0) {
+      session.queued.shift();
+      if (session.queued.length === 0) delete session.queued;
+      this.startRun(session);
+    }
   }
 
   private requestApproval(

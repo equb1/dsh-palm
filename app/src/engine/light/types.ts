@@ -133,6 +133,8 @@ export interface StoredSession {
   model?: ModelChoice;
   turns: Turn[];
   history: ChatMessage[];
+  /** E2：运行中收到的下一条消息，等当前 run 结束自动开始 */
+  queued?: string[];
 }
 
 export interface LightPendingApproval {
