@@ -13,7 +13,7 @@ import {
 
 import type { SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
-import { IconButton, Pill, Btn } from './parts';
+import { IconButton, Pill } from './parts';
 import { EngineBadge } from './EngineBadge';
 import { badgeFor, canSwitch } from '../state/engineManager';
 import { isConversationReadOnly } from '../lib/handoff';
@@ -24,7 +24,7 @@ import { GeneratedFilesSheet } from './GeneratedFilesSheet';
 import { collectGeneratedFiles } from '../lib/generatedFiles';
 import { TurnView, JumpButton } from './chat';
 import type { AttachmentKind } from '../lib/attachments/types';
-import { colors, space, topInset } from './theme';
+import { colors, radius, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
  * 会话页
@@ -324,18 +324,32 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         </View>
 
         {Boolean(state.error) ? (
-          <View style={styles.errorRow}>
-            <Pressable style={styles.errorTextWrap} onPress={() => store.clearError()}>
-              <Text style={styles.error}>{state.error}</Text>
-            </Pressable>
+          <View style={styles.errorCard}>
+            <View style={styles.errorGlyphWrap}>
+              <Text style={styles.errorGlyph}>!</Text>
+            </View>
+            <Text style={styles.errorText} numberOfLines={3}>
+              {state.error}
+            </Text>
             {needsAuthRecovery ? (
-              <Btn
-                label="重新登录"
-                kind="ghost"
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="重新登录"
                 onPress={() => void store.recoverLightAuth()}
-                style={styles.errorBtn}
-              />
+                style={({ pressed }) => [styles.errorAction, pressed && { opacity: 0.6 }]}
+              >
+                <Text style={styles.errorActionText}>重新登录</Text>
+              </Pressable>
             ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="关闭错误提示"
+              onPress={() => store.clearError()}
+              hitSlop={8}
+              style={({ pressed }) => [styles.errorClose, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.errorCloseText}>×</Text>
+            </Pressable>
           </View>
         ) : null}
 
@@ -432,8 +446,36 @@ const styles = StyleSheet.create({
   emptyChatTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   emptyChatText: { color: colors.textFaint, fontSize: 12.5 },
 
-  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.lg, paddingBottom: 6 },
-  errorRow: { flexDirection: 'row', alignItems: 'center', paddingRight: space.md },
-  errorTextWrap: { flex: 1, paddingVertical: 2 },
-  errorBtn: { height: 32, paddingHorizontal: 10 },
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: space.lg,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(236,19,19,0.18)',
+    backgroundColor: colors.dangerSoft,
+  },
+  errorGlyphWrap: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorGlyph: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', lineHeight: 13 },
+  errorText: { flex: 1, color: colors.danger, fontSize: 12, lineHeight: 17 },
+  errorAction: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: '#FFFFFF',
+  },
+  errorActionText: { color: colors.danger, fontSize: 12, fontWeight: '600' },
+  errorClose: { paddingHorizontal: 2, paddingVertical: 2 },
+  errorCloseText: { color: colors.danger, fontSize: 16, lineHeight: 18 },
 });
