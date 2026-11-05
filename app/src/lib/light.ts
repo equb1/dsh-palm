@@ -41,3 +41,12 @@ export async function saveLightConfig(_setup: LightEngineSetup): Promise<void> {
 export async function runWorkspaceSelfCheck(): Promise<WorkspaceSelfCheck> {
   throw new Error('工作区自检需要 Android / iOS 原生构建');
 }
+
+/** 用户是否选择过「先用完整模式」（跳过轻引擎配置） */
+export async function loadLightSetupSkipped(): Promise<boolean> {
+  return false;
+}
+
+export async function saveLightSetupSkipped(_skipped: boolean): Promise<void> {
+  /* 非原生端没有持久化，返回默认值即可 */
+}

@@ -135,6 +135,29 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
 
       <SmoothKeyboardAvoid style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {!connected ? (
+            <Card>
+              <View style={styles.rowTop}>
+                <Text style={styles.cardTitle}>先配一个模型渠道</Text>
+                <Pill>
+                  <Text style={styles.badge}>必填</Text>
+                </Pill>
+              </View>
+              <Text style={styles.hint}>
+                轻引擎不依赖 dsh 账号，需要一个 OpenAI 兼容渠道：Base URL、模型、API Key。
+                没有 Key 也可以先用完整模式（用 dsh 账号登录，不需要另配渠道）。
+              </Text>
+              <View style={styles.actions}>
+                <Btn
+                  label="先用完整模式"
+                  kind="ghost"
+                  onPress={() => void store.skipLightSetup()}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </Card>
+          ) : null}
+
           <Card>
             <View style={styles.rowTop}>
               <Text style={styles.cardTitle}>1 · 工作区自检</Text>

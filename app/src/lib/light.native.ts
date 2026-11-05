@@ -65,6 +65,23 @@ export async function createLightHost(setup: LightEngineSetup): Promise<LightHos
   });
 }
 
+/** 用户选择「先用完整模式」后记住，下次启动直接起完整引擎 */
+export async function loadLightSetupSkipped(): Promise<boolean> {
+  try {
+    return (await SecureStore.getItemAsync('dsh-palm.light.setup.skipped')) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export async function saveLightSetupSkipped(skipped: boolean): Promise<void> {
+  try {
+    await SecureStore.setItemAsync('dsh-palm.light.setup.skipped', skipped ? '1' : '0');
+  } catch {
+    /* 写失败不影响主流程 */
+  }
+}
+
 export async function loadLightConfig(): Promise<LightEngineSetup | null> {
   try {
     const raw = await SecureStore.getItemAsync(LIGHT_CONFIG_KEY);
