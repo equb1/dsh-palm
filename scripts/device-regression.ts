@@ -9,7 +9,7 @@
  */
 import assert from 'node:assert/strict';
 
-import { adb, dumpNodes, keyevent, screenshot, tryTap, waitFor } from './device-ui';
+import { adb, dumpNodes, hideKeyboard, keyevent, screenshot, tryTap, typeText, waitFor } from './device-ui';
 
 const PKG = 'cool.cnb.dshpalm';
 
@@ -80,6 +80,22 @@ async function main(): Promise<void> {
     assert.ok(hasText('外观'), '外观组缺失');
     assert.ok(hasText('通用'), '通用组缺失');
     screenshot('ui-regression-settings');
+  });
+
+  await step('全文搜索', async () => {
+    keyevent('BACK');
+    assert.ok(await waitFor('需要我做点什么？', 10), '设置返回后没回首页');
+    assert.ok(tryTap('打开会话列表'), '抽屉按钮没找到');
+    assert.ok(await waitFor('全文', 10), '抽屉里没有全文入口');
+    assert.ok(tryTap('全文'), '点不到全文搜索');
+    assert.ok(await waitFor('搜索会话', 10), '搜索页没出现');
+    typeText('python');
+    assert.ok(await waitFor('处匹配', 15), '正文搜索没有结果');
+    screenshot('ui-regression-search');
+    hideKeyboard();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    keyevent('BACK');
+    assert.ok(await waitFor('需要我做点什么？', 10), '搜索返回后没回首页');
   });
 
   console.log('\n真机 UI 回归通过（E5 第一步）');

@@ -382,7 +382,7 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 | 首页 `HomeScreen` | 品牌、时段问候、最近会话、Composer（权限/锦囊在输入框上方） |
 | 抽屉 `SessionDrawer` | 工作区、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
 | 全部功能 `FeaturesScreen` | 卡片网格：对话/设置/引擎/实验室 + 文件/终端/工作区/插件/社区（未接入标灰） |
-| 文件 `FilesScreen` | `fs.list` 列 `/workspace`、面包屑、目录/文件行、`fs.rename`/`fs.delete`、分享（轻引擎） |
+| 文件 `FilesScreen` | `fs.list` 列 `/workspace`、面包屑、文件名过滤、目录/文件行、`fs.rename`/`fs.delete`、分享（轻引擎） |
 | 搜索 `SearchScreen` | `sessions.search` 全文搜索（标题/历史/思考），命中片段，点开进会话 |
 | 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区 |
 | 设置 `SettingsScreen` | 6 组首页（搜索 / SettingsTile / 右侧当前值），只做导航 |

@@ -216,7 +216,10 @@
     真机：weekly.docx → weekly.docx-renamed → 改回；新建 tmp-del.txt 后删除，宿主文件同步消失
     （`150-files-actions.png`、`151-files-rename.png`、`152-files-renamed.png`）；
     单测覆盖 rename/delete/根目录拒绝。
-  - 未做：文件搜索、终端、工作区管理；完整引擎（proot）未实现 fs 系列，连完整引擎时会提示不支持。
+  - 2026-11-06 第三步：文件搜索——FilesScreen 头部加 ⌕，按文件名过滤当前目录，
+    无匹配显示「没有匹配的文件」，清空恢复。真机 docs 目录输 `zz` 空结果、清空输 `week`
+    只剩 weekly.docx（`156-files-search-empty.png`、`157-files-search-match.png`）。
+  - 未做：终端、工作区管理；完整引擎（proot）未实现 fs 系列，连完整引擎时会提示不支持。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）
@@ -425,7 +428,8 @@ type AttachmentChipsProps = {
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
   - 2026-11-06 第一步：新增 `scripts/device-regression.ts` + `npm run device:regression`：
     adb 冷启动 → 会话抽屉（筛选/全部功能入口）→ 全部功能网格 → 文件浏览根目录 → 返回首页 →
-    设置首页 6 组；用 uiautomator 文本断言，失败自动截图。真机一次通过。
+    设置首页 6 组 → 全文搜索（输入 python 等结果）；用 uiautomator 文本断言，失败自动截图。
+    真机一次通过 7 步；键盘弹起时先 `hideKeyboard()` 再按返回，否则第一次返回只收键盘。
   - 仍只有一条主路径；登录/审批/流式长会话/引擎启停/文件操作等还没进脚本。
 - [ ] **E6** 文档过时 → 每次改动同步四篇文档
 - [x] **E7** 无性能基准 → `scripts/bench-light.ts` 取 P50/P90

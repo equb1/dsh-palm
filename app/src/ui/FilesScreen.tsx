@@ -27,6 +27,9 @@ export function FilesScreen(): React.ReactElement {
   /** 每行的操作菜单 / 重命名草稿（U8 文件操作） */
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [renaming, setRenaming] = React.useState<{ entry: WorkspaceEntry; name: string } | null>(null);
+  /** U8：按文件名过滤当前目录 */
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [filter, setFilter] = React.useState('');
 
   const load = React.useCallback(async (target: string): Promise<void> => {
     setLoading(true);
@@ -117,12 +120,25 @@ export function FilesScreen(): React.ReactElement {
     accumulated += `/${segment}`;
     crumbs.push({ label: segment, path: accumulated });
   }
+  const keyword = filter.trim().toLowerCase();
+  const visibleEntries = keyword
+    ? entries.filter((entry) => entry.name.toLowerCase().includes(keyword))
+    : entries;
 
   return (
     <View style={styles.root}>
       <View style={styles.header}>
         <IconButton glyph="‹" label="返回" onPress={() => store.closeFiles()} />
         <Text style={styles.title}>文件</Text>
+        <IconButton
+          glyph="⌕"
+          label={searchOpen ? '关闭文件搜索' : '搜索文件'}
+          onPress={() => {
+            setSearchOpen((open) => !open);
+            setFilter('');
+          }}
+          size={32}
+        />
         <IconButton glyph="↻" label="刷新" onPress={() => void load(path)} size={32} />
       </View>
 
@@ -146,11 +162,35 @@ export function FilesScreen(): React.ReactElement {
           })}
         </ScrollView>
 
+        {searchOpen ? (
+          <View style={styles.searchBox}>
+            <Text style={styles.searchGlyph}>⌕</Text>
+            <TextInput
+              style={styles.searchInput}
+              value={filter}
+              onChangeText={setFilter}
+              placeholder="按文件名过滤"
+              placeholderTextColor={colors.textFaint}
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="按文件名过滤"
+            />
+            {filter.length > 0 ? (
+              <Pressable accessibilityRole="button" onPress={() => setFilter('')} hitSlop={8}>
+                <Text style={styles.searchClear}>×</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         {loading ? <Text style={styles.hint}>正在读目录…</Text> : null}
 
-        {!loading && entries.length === 0 && !notice ? (
-          <Text style={styles.hint}>这个目录是空的。</Text>
+        {!loading && visibleEntries.length === 0 && !notice ? (
+          <Text style={styles.hint}>
+            {keyword ? '没有匹配的文件。' : '这个目录是空的。'}
+          </Text>
         ) : null}
 
         {renaming ? (
@@ -173,7 +213,7 @@ export function FilesScreen(): React.ReactElement {
         ) : null}
 
         <View style={styles.list}>
-          {entries.map((entry) => {
+          {visibleEntries.map((entry) => {
             const isDir = entry.kind === 'dir';
             const menuOpen = menuFor === entry.name;
             return (
@@ -258,6 +298,18 @@ const styles = StyleSheet.create({
   crumb: { color: colors.blue, fontSize: 12.5, paddingHorizontal: 2 },
   crumbActive: { color: colors.textFaint },
   crumbSep: { color: colors.textFaint, fontSize: 12.5 },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glassStrong,
+  },
+  searchGlyph: { color: colors.textFaint, fontSize: 15 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 0 },
+  searchClear: { color: colors.textFaint, fontSize: 16, paddingHorizontal: 2 },
   notice: { color: colors.warn, fontSize: 12, lineHeight: 17 },
   hint: { color: colors.textFaint, fontSize: 12.5, lineHeight: 18 },
   renameCard: {
