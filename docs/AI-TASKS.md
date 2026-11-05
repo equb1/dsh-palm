@@ -262,7 +262,9 @@ type AttachmentChipsProps = {
     2026-11-05 新证据：**同一账号 token 在完整引擎可用**（bash python 三库返回版本），
     根因是旧保存配置缺 `authMode/authToken`，轻引擎以 `auth=none` 请求（PITFALLS I7）。
     已在 `resolveLightSetup` 自动补账号 token 并加 `[light] auth=…` 日志；真机日志已变
-    `auth=account(64) base=https://api.deepseek.com/v1`。**待做：真机发一条消息确认不再 401**；
+    `auth=account(64) base=https://api.deepseek.com/v1`。**已真机复验通过（2026-11-05 20:49）**：
+    发 “hi” 得到 `[light] ttft=982ms stream=1312ms model=deepseek-chat step=1 first=content tools=0
+    usage=in:2152,out:42 run=…` 且 `done`，不再 401。
     恢复入口/重登按钮保留，浏览器 OAuth 重登流程仍未走完。
 
 
