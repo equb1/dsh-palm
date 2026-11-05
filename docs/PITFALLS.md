@@ -577,10 +577,11 @@
 - 现象：轻引擎发消息 1 秒内失败，日志
   `[light] error kind=unauthorized status=401 … Authentication Fails (governor)`；
   ChatScreen 横幅显示「登录或 API Key 无效/已过期（401）」。
-- 原因：轻引擎复用 `files/home/.dsh/.credentials.yaml` 的账号 token，而 dsh 账号 token 无 refresh；
-  过期后轻引擎不会自动跳登录。
-- 处理：临时切完整模式重新登录 OAuth，或在 LightEngineScreen 配独立 API Key/兼容渠道；
-  2026-11-05 已加最小恢复入口：ChatScreen 401 横幅「重新登录」→ 切完整 + 打开设置，
-  账号卡也提供「重新登录」（退出后重走 OAuth）；重登后点「切回轻引擎」会用新 token 重建。
-- 验证：401 横幅与 logcat `[light] error kind=unauthorized` 均出现；恢复入口见 AI-TASKS 2.7。
+- 原因：轻引擎用账号 token 调模型时返回 401；**但 2026-11-05 复验发现同一账号 token 在完整引擎里是好的**
+  （完整引擎 bash `python3 -c "import docx, openpyxl, pptx"` 正常返回 `1.1.0 3.1.2 1.0.2`），
+  所以不是 token 过期，而是轻引擎账号模式的取 token/鉴权头（`x-dsh-auth-token`）与官方 API 不一致。
+- 处理：临时切完整模式重登或在 LightEngineScreen 配独立 API Key/兼容渠道；
+  2026-11-05 已加恢复入口：ChatScreen 401 横幅「重新登录」→ 切完整 + 打开设置。
+  **真正修复应在 `app/src/engine/light` 的账号 token 读取/请求头**，下一轮先查这里，不要只重登。
+- 验证：401 横幅与 logcat `[light] error kind=unauthorized` 均出现；完整引擎同 token 调用成功。
 
