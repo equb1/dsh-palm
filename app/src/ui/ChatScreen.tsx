@@ -39,6 +39,9 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const [draft, setDraft] = React.useState('');
   const [showJump, setShowJump] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
+  // 浮动顶栏：先量高度给正文留位，列表滚起来再加底色/描边（玻璃感用半透明近似，不引原生 blur）
+  const [headerH, setHeaderH] = React.useState(0);
+  const [scrolled, setScrolled] = React.useState(false);
   const listRef = React.useRef<FlatList<Turn>>(null);
   const following = React.useRef(true);
   const scrollScheduled = React.useRef(false);
@@ -151,6 +154,8 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       if (userDragging.current && distance > 24) following.current = false;
       const nextJump = distance > 220;
       setShowJump((current) => (current === nextJump ? current : nextJump));
+      const nextScrolled = contentOffset.y > 8;
+      setScrolled((current) => (current === nextScrolled ? current : nextScrolled));
     },
     [],
   );
@@ -232,7 +237,13 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
+      <View
+        style={[styles.header, scrolled && styles.headerScrolled]}
+        onLayout={(event) => {
+          const next = Math.round(event.nativeEvent.layout.height);
+          setHeaderH((current) => (current === next ? current : next));
+        }}
+      >
         <IconButton glyph="‹" label="返回会话列表" onPress={() => store.closeSession()} />
         <Pill style={styles.titlePill}>
           <Text style={styles.titleText} numberOfLines={1}>
@@ -260,13 +271,12 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         <View style={{ flex: 1 }} />
       </View>
 
-      {readOnly ? (
-        <Pressable onPress={() => store.closeSession()}>
-          <Text style={styles.readOnly}>{readOnlyText}</Text>
-        </Pressable>
-      ) : null}
-
-      <SmoothKeyboardAvoid style={styles.bodyWrap}>
+      <SmoothKeyboardAvoid style={[styles.bodyWrap, { marginTop: headerH }]}>
+        {readOnly ? (
+          <Pressable onPress={() => store.closeSession()}>
+            <Text style={styles.readOnly}>{readOnlyText}</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.listWrap}>
           <FlatList
             ref={listRef}
@@ -376,11 +386,29 @@ const styles = StyleSheet.create({
   bodyWrap: { flex: 1 },
 
   header: {
+    position: 'absolute',
+    // 绝对定位以 padding box 为基准，root 的 paddingTop 不会自动生效，这里显式加安全区
+    top: topInset,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
+    // 玻璃感近似：半透明白；列表滚到下面时再加深并补描边/投影
+    backgroundColor: 'rgba(255,255,255,0.86)',
+  },
+  headerScrolled: {
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   titlePill: { flexShrink: 1, paddingVertical: 3 },
   titleText: { color: colors.text, fontSize: 14, fontWeight: '600' },
