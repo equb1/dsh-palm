@@ -260,7 +260,10 @@ type AttachmentChipsProps = {
     账号卡「已登录」且有 重新登录/退出登录/查看用量，底部「当前引擎 完整引擎（本机）」。
     浏览器 OAuth 授权本身、以及重登后切回轻引擎自动用新 token 仍未走完。
     2026-11-05 新证据：**同一账号 token 在完整引擎可用**（bash python 三库返回版本），
-    所以 401 不是过期，优先查轻引擎账号 token 的读取/请求头（见 PITFALLS I7），不要只重登。
+    根因是旧保存配置缺 `authMode/authToken`，轻引擎以 `auth=none` 请求（PITFALLS I7）。
+    已在 `resolveLightSetup` 自动补账号 token 并加 `[light] auth=…` 日志；真机日志已变
+    `auth=account(64) base=https://api.deepseek.com/v1`。**待做：真机发一条消息确认不再 401**；
+    恢复入口/重登按钮保留，浏览器 OAuth 重登流程仍未走完。
 
 
 ### M3 · 未开始
