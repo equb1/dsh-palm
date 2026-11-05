@@ -613,5 +613,19 @@
   单测 `handoff.test.ts` 新增「过滤完整引擎的 approval policy 提示，不误删真实用户消息」。
 - 验证：`npm run verify` 210 pass / 0 fail；真机下次 handoff 时复看一眼（本轮只做了单测）。
 
+### I10. 20 分钟 soak 内存持续上涨（2026-11-05，观察）
+
+- 现象：light 会话 33 个回合 / 41 次流式调用、20 分钟后 `dumpsys meminfo` PSS 623 MB
+  （RSS 804 MB）；中途两次采样 485 MB（12 回合）→ 531 MB（21 回合）→ 623 MB（33 回合）。
+  Native heap 282→312 MB，Java heap 48→54 MB。无 OOM、无崩溃、无 `[light] error`。
+- 附带：`VirtualizedList: You have a large list that is slow to update` 出现 1 次
+  （dt 1109ms，prevDt 24543ms）；duplicate key 0。
+- 推测：长回答（最后一次 in:37155 tokens）全部留在 JS 状态与 Markdown 视图里，
+  `ChatScreen` 的 FlatList 又是 `removeClippedSubviews={false}` + `windowSize=9`；
+  回合越多驻留的 native view/文本越高。也可能是字体或 RN 图片缓存，尚未 profile。
+- 下一步：90 分钟 soak 看是否线性上涨；用 `dumpsys meminfo`/heap profile 区分「列表驻留」
+  与「RN 泄漏」；必要时改 `removeClippedSubviews`/窗口大小或给长会话做回合降采样。
+
+
 
 

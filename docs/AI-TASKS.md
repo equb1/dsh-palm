@@ -20,8 +20,9 @@
 - 输入区按 dsh-go 几何（2026-11-04）：单行 56 / 28 圆角、40 圆键；权限与锦囊在输入框上方，
   模型回顶栏，`+` 走附件面板；B3 前先把 Chat 的回合/思考/工具渲染拆到 `ui/chat/*`。
 - 流式主链路已修（2026-11-04）：canonical run/block id、chunk 缓冲、稳定块 memo、FlatList 和 follow
-  状态机已落地；真机工具密集长流、上滑冻结、回到底部、重进通过。20 分钟 soak 待补，见
-  `PITFALLS.md` H7 和 [STREAMING-FIX](STREAMING-FIX.md)。
+  状态机已落地；真机工具密集长流、上滑冻结、回到底部、重进通过。20 分钟 soak 已完成
+  （2026-11-05：33 回合 / 41 次流式，0 duplicate，PSS 623MB，见 PITFALLS I10），90 分钟待补；
+  见 `PITFALLS.md` H7 和 [STREAMING-FIX](STREAMING-FIX.md)。
 - 完整引擎（proot）自带 Python/Office 层（2026-11-04）：`assets/python.bin` 首次启动解压到 rootfs，
   `python3` + docx/openpyxl/pptx；三格式创建/读回/编辑在真机通过（见 P0 1.1）。
 - 默认引擎已改轻（2026-11-04）：冷启动只连轻引擎、不预热 proot；切完整走角标两阶段，
@@ -95,7 +96,9 @@
     `394c345f0b0c63ee-big-video.mp4`（25MB）、`7fa36b95d5c98859-plain note.txt`；chip 标「完整」，
     提示「PDF 暂不解析，只保存文件路径」「25 MB，超过 20MB，只按路径引用」；完整引擎模型列出三件并读回 txt。
     系统分享入口：文档查看器「以 PDF 格式分享」→ 选锦囊 → chip 复用同一文件（uploads 无重复），
-    提示同上。
+    提示同上。轻引擎侧也已真机：attach `plain note.txt` → 消息里带
+    `[附件] /workspace/uploads/7fa36b95d5c98859-plain note.txt (text/plain, 16 B, 未解析)` →
+    模型 `read_file` 后回答「文件第一行 hello attachment」，2 秒完成（tools=1）。
 
 - [x] **1.4 预路由 + 能力门 + Handoff v1**
   - [x] 发送前按 R2/R3 预路由（代码/后台/转格式 → proot）
@@ -148,14 +151,14 @@
     「N 个工具 · a · b」一行，可再展开逐条详情（`TurnView.tsx` 的 `groupProcessBlocks`）。
     真机 weekly.docx 会话验证：折叠行显示「2 个工具 create_docx · read_docx」，展开后两条工具行都在。
 - [x] **U3 流式性能**：按帧合并 + 活跃 block 局部更新 + stable/tail Markdown + 空 block 修复；
-  90 分钟 soak 待补
+  20 分钟 soak 已过（0 duplicate、1 次 VirtualizedList 警告），90 分钟待补
 - [ ] **U4 设置 IA**：6 组、SettingsTile、右侧当前值、搜索
 - [ ] **U5 引擎页**：状态环、启动/停止/重启、失败卡（重试/安全模式/日志）
 - [ ] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
 - [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
-  20 分钟 soak 仍待补（见 `PITFALLS.md` H7）
+  20 分钟 soak 已完成（2026-11-05，33 回合，见 PITFALLS I10）；90 分钟待补
 
 #### 可并行 UI 项（2026-11-03，给 agent）
 
