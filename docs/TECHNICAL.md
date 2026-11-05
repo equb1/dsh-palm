@@ -376,7 +376,8 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 | 首页 `HomeScreen` | 品牌、时段问候、最近会话、Composer（权限/锦囊在输入框上方） |
 | 抽屉 `SessionDrawer` | 工作区、搜索、运行中/今天/更早、行内状态、长按菜单、底部账号/设置 |
 | 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区 |
-| 设置 `SettingsScreen` | 6 组首页（搜索/SettingsTile）+ 详细卡片：账号 → API Key（折叠）→ 提供商 → 实验室 → 宿主 |
+| 设置 `SettingsScreen` | 6 组首页（搜索 / SettingsTile / 右侧当前值），只做导航 |
+| 设置二级页 | `AccountScreen` / `CredentialsScreen` / `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen` |
 | 引擎 `EngineScreen` | 状态环、启停/重启、失败卡、保活、日志、高级启动命令 |
 | 模型 `ModelSheet` | 模型列表 + 推理等级；权限/工作区不在这里 |
 | 提供商 `ProvidersCard` | 目录/自定义两个 tab、发现模型、增删 |
@@ -425,12 +426,13 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 
 ### 8.5 设置与抽屉
 
-- 设置首页（2026-11-06，U4 第一步）：6 组 IA（AI / 能力 / 外观 / 通用 / 主机 / 帮助与关于）
+- 设置首页（2026-11-06，U4）：6 组 IA（AI / 能力 / 外观 / 通用 / 主机 / 帮助与关于）
   + 顶部搜索；行在 `ui/settings/SettingsTile.tsx`（32 圆盘图标、52 行高、2px 缝、右侧当前值、
-  chevron）。点 tile 锚点滚到下方详细卡片；详细卡顺序：
-  **DeepSeek 账号 → API Key（备选，折叠）→ 模型提供商 → 本机引擎 → 实验室 → 宿主**。
+  chevron）。首页只做导航，点 tile 进二级页：`AccountScreen` / `CredentialsScreen` /
+  `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen`（轻引擎渠道直进 LightEngineScreen）。
+  二级页 header 的 ‹ 和安卓返回键都先回设置首页。
 - 每行右侧显示当前值（已登录/未配置/运行中/受限制），异常值用警告色；
-- 外观/通用部分只读（主题浅色、字号标准、通知系统管理），点按提示未接后端；二级页未做；
+- 外观/通用部分只读（主题浅色、字号标准、通知系统管理），点按提示未接后端（深色/字号在 U7）；
 - 抽屉分组：运行中 / 今天 / 更早；行尾最多一个状态标记；长按出「置顶/取消置顶/归档/改名」；
 - 底部主机条：本机 dsh + 引擎版本 + 模型与凭据 + 断开/设置。
 

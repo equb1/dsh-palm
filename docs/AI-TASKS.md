@@ -160,16 +160,18 @@
 - [x] **U3 流式性能**：按帧合并 + 活跃 block 局部更新 + stable/tail Markdown + 空 block 修复；
   20 分钟 soak 已过（0 duplicate、1 次 VirtualizedList 警告），40/42.5 分钟复核内存 430–546MB，
   **90 分钟 soak 已完成**（2026-11-06 00:11–01:42，109 轮，PSS 349→615MB，无 OOM，见 I10）
-- [ ] **U4 设置 IA**：6 组、SettingsTile、右侧当前值、搜索
+- [x] **U4 设置 IA**：6 组、SettingsTile、右侧当前值、搜索
   - 2026-11-06 第一步：设置首页改成 6 组（AI / 能力 / 外观 / 通用 / 主机 / 帮助与关于），
     新增 `app/src/ui/settings/SettingsTile.tsx`（32 圆盘图标、52 行高、组内 2px 缝、右侧当前值、
-    chevron）；顶部搜索按标题/当前值/副标题过滤；点 tile 滚到下方对应详细卡片，
-    「轻引擎渠道」直接进 LightEngineScreen。
+    chevron）；顶部搜索按标题/当前值/副标题过滤。
+  - 2026-11-06 第二步：详细卡全部拆成二级页——`AccountScreen`（账号/手机号/登录）、
+    `CredentialsScreen`（API Key）、`ProvidersScreen`（复用 ProvidersCard）、`HostScreen`（宿主信息/
+    断开）、`LabScreen`（三个实验入口）、`EngineScreen`（U5）。SettingsScreen 只剩 header、搜索、
+    6 组 tile、notice、错误行；tile 的 ‹ 与安卓返回键都先回设置首页。
   - 外观（主题/字号）与通用（通知）目前只有只读当前值，点按提示“未接后端”；外观的深色/字号档
-    属于 U7。二级页（每行独立成页）还没做，详细控制仍在同一页的卡片里。
-  - 真机：首页 6 组、搜索 `deepseek` 过滤出账号/模型提供商/轻引擎渠道、点「完整引擎」进引擎页、
-    点「轻引擎渠道」进 M1 实验室轻引擎页（`127-settings-home.png`、`128-settings-search.png`、
-    `129-settings-engine-jump.png`、`130-settings-light-engine.png`）；typecheck + verify 全绿。
+    属于 U7。
+  - 真机：首页 6 组、搜索 `deepseek` 过滤、账号/API Key/提供商/宿主/实验室/引擎各页都打开过，
+    安卓返回键从账号页回设置首页（`127`–`138` 截图）；typecheck + verify 全绿。
 - [x] **U5 引擎页**：状态环、启动/停止/重启、失败卡（重试/安全模式/日志）
   - 2026-11-06：新增 `app/src/ui/EngineScreen.tsx`，设置首页「本机引擎 / 完整引擎 / 后台保活」
     三个 tile 都进这一页。状态环（已停止/启动中/运行中/出错 + 进度）+ 引擎/桥/当前/保活元信息；

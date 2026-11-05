@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
@@ -64,6 +64,22 @@ export function SettingsScreen(): React.ReactElement {
   const signedIn = account?.status === 'credential-stored';
   const waiting =
     account?.attempt?.phase === 'waiting-browser' || account?.attempt?.phase === 'initializing';
+
+  // 首页也要读一次账号（账号页的 refresh 只在进账号页时跑，tile 不能一直是旧值）
+  React.useEffect(() => {
+    if (!state.caps) return;
+    void store.refreshAccount();
+  }, [state.caps]);
+
+  // 二级页打开时接管安卓返回键：先回设置首页，而不是整页关掉设置
+  React.useEffect(() => {
+    if (!route) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setRoute(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [route]);
 
   const flash = (message: string): void => {
     setNotice(message);
