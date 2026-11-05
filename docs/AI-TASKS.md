@@ -280,6 +280,7 @@ type AttachmentChipsProps = {
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
 - [ ] **E6** 文档过时 → 每次改动同步四篇文档
 - [x] **E7** 无性能基准 → `scripts/bench-light.ts` 取 P50/P90
+- [ ] **E8 签名/发布流程**：固定 keystore、release 签名、正式包/版本号；当前设备包与本机 keystore 不一致，只能靠 Metro 验证
 
 ## 4. 待决事项
 
