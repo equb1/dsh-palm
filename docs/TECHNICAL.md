@@ -187,6 +187,10 @@ OpenAI 兼容 `/chat/completions`，SSE 流；45s 空闲超时（每分片重置
 失败打 `[light] error kind=timeout|offline|unauthorized|rate_limited|… status=… run=…`；
 错误经 `lib/errors.ts` 人话化后写回当前会话（ChatScreen 横幅）。
 渠道配置存 SecureStore（baseURL/apiKey/model/image），支持 `dshpalm://light?...` 深链覆盖。
+账号模式的模型目录（M2.5）：`engine/light/catalog.ts` 用 `x-dsh-auth-token` GET `{baseURL}/models`，
+解析 `data[].id/name`、去重、6s 超时、失败回退；`LightHost.models.list` 返回目录并缓存 5 分钟，
+模型面板因此可选 `deepseek-chat / DeepSeek-V4.1-Flash / DeepSeek-V4-Pro`；选中后写会话级
+`sessions.setModel`，下一轮请求用该 model id。
 性能基准：`npm run bench:light -- --n 20`（本地 SSE mock；`--url/--key/--model` 可打真端点）。
 
 ## 6. 引擎路由与加载
@@ -286,6 +290,19 @@ C5 摘要+8 轮迁移；C6 原生收件 + 路径引用；C7 Office 三件套；
 C8 render/recalc/旧格式/PDF 暂不做；C9 light 不补 pptx；C10 后台必须 proot；
 C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期；
 C15 Python 走 APK 独立层（`python.bin`），不做首次下载（离线可靠、可裁剪）。
+C16 账号模型目录只做 `models.list` 展示与会话级 `setModel`，不引入 providers.list/save；
+C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开”，跨引擎 Handoff 继续另做。
+
+### 6.7 统一会话列表（M2.6 第一步）
+
+- 每个引擎最近 60 条会话存在 `store.sessionCache: { light, full }`，随 `refreshSessions`
+  更新并写 UI cache（重启恢复）；当前引擎列表以 `sessions.list` 为准。
+- `state/sessionList.ts` 的 `mergeSessionRows()` 合并当前列表 + 另一个引擎缓存：
+  当前引擎优先、按 id 去重、`updatedAt` 倒序，行上带 `engine: 'light'|'full'`。
+- 抽屉用 `store.sessionRows()`；另一个引擎的行标「轻/完整」，长按菜单只对当前引擎行开放。
+- 点击 `store.openSessionRow(id, engine)`：engine 不同先 `switchEngine`（完整会起 proot），
+  成功后按原 id `openSession`；失败时回落到 `switchEngine` 的错误提示。
+- 仍需：跨引擎 Handoff 继续（在另一引擎续聊、原会话只读）、按引擎过滤搜索、缓存失效/归档同步。
 
 ## 7. 登录与配对
 
@@ -358,6 +375,8 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 **现状**：回合按 `role` 分气泡/全宽；思考与工具是行；审批/提问是卡片；
 输入区已按 dsh-go 几何：单行 56 / 28 圆角、左右 40 圆键，权限与锦囊在输入框上方，
 模型在顶栏；完成回合有复制/分享，回到底部键在生成中做脉冲描边。
+顶栏已浮动（`position:absolute` + `top:topInset`，0.86/0.97 半透明白 + 滚动后描边/投影），
+正文按 `headerH` 留位；错误横幅是 dangerSoft 圆角卡片；完整过程里相邻 ≥2 个工具合并成一行。
 
 流式链路：
 
@@ -372,8 +391,8 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 - `ChatScreen` 使用 `FlatList` + 稳定 key + footer blankSpace；追底是显式 follow 状态机：
   用户真实拖拽离底后冻结，回到底部/点击按钮才恢复。跳到底部按钮位于列表容器内，键盘弹出时不被盖住。
 
-**目标（未做）**：浮动玻璃顶栏、工具行连续合并、整轮折叠、ChatCard、朗读（需要原生 TTS）；
-20 分钟真机 soak 与 VirtualizedList 慢更新警告继续观察。
+**目标（未做）**：ChatCard 统一、朗读（需要原生 TTS）；90 分钟 soak 与
+VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 完整调研见 [archive/19-ui-research.md](archive/19-ui-research.md)，本次修复记录见 [STREAMING-FIX](STREAMING-FIX.md)。
 
 ### 8.4 输入与键盘
