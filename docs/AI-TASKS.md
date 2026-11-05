@@ -143,6 +143,10 @@
     `describeHttpError` 现在只取 JSON 的 `error.message`/`message`，不再把整段 JSON 塞进横幅
     （`test/light-errors.test.ts` 3 条）。随后 LightEngineScreen「用账号连接」恢复，
     日志回到 `auth=account(64)`，真模型 `hi` 正常（`159-401-humanized.png`）。
+  - 2026-11-06 追加 429/断网真机：用 `dshpalm://light` 深链把渠道切到本机 429 mock →
+    横幅「请求太频繁或额度不足（429）：rate limit exceeded」；停 mock、移除 adb reverse 再发 →
+    「连不上模型服务（网络错误）…」；每次都用 LightEngineScreen 断开 +「用账号连接」恢复，
+    真模型 `hi` 正常（`160-429.png`、`161-offline.png`）。超时仍只有单测（45s 空闲）。
 
 ### UI 工作流（与 P0 并行）
 
