@@ -42,6 +42,7 @@ import {
 import { routeNeedsFullPermission, routeTurn, type RouteTurnResult } from './router';
 import { LocalEngineClient } from '../engine/light/localClient';
 import type { LightHost } from '../engine/light/host';
+import { applyProviderSave } from '../engine/light/config';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
 import { isAppActive, openUrl } from '../lib/platform';
 import {
@@ -1522,10 +1523,40 @@ export class Store {
   }
 
   async saveProvider(input: RequestParams['providers.save']): Promise<void> {
+    // 轻引擎只有一条模型渠道，配置在 App 侧（SecureStore）；不能交给宿主，否则重启即丢
+    if (this.state.engineKind === 'light') {
+      await this.saveLightProvider(input);
+      return;
+    }
     if (!this.client) return;
     const { providers } = await this.client.request('providers.save', input);
     this.patch({ providers });
     // 新渠道的模型要能马上出现在会话的模型选择里
+    void this.refreshModels();
+  }
+
+  /** M2.5：把 ProvidersCard 的保存落到轻引擎单渠道并重连；失败不覆盖旧配置 */
+  private async saveLightProvider(input: RequestParams['providers.save']): Promise<void> {
+    if (input.mode !== 'custom') {
+      throw new Error('轻引擎只有一条自定义模型渠道；第三方目录请切完整引擎配置');
+    }
+    const setup = this.lightSetup;
+    if (!setup) throw new Error('轻引擎还没配置模型渠道');
+    const next = applyProviderSave(setup, {
+      mode: 'custom',
+      baseURL: input.baseURL,
+      api: input.api,
+      models: input.models,
+      ...(input.displayName ? { displayName: input.displayName } : {}),
+      ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+    });
+    await this.connectLight(next);
+    if (this.state.engineKind !== 'light' || this.state.conn !== 'connected') {
+      // connectLight 只有连上才写 SecureStore，这里恢复内存里的旧 setup 以免下次重连读错
+      this.lightSetup = setup;
+      throw new Error('新渠道没连上，旧配置未覆盖；检查 Base URL / API Key / 模型名');
+    }
+    await this.refreshProviders();
     void this.refreshModels();
   }
 

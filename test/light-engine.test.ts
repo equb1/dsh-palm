@@ -416,9 +416,45 @@ describe('LocalEngineClient', () => {
     await assert.rejects(harness.client.request('sessions.list', {}), /还没连上/);
   });
 
+  it('providers.list 显示单渠道；discover 用当前 Key 拉 /models（M2.5）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    const { providers } = await harness.client.request('providers.list', {});
+    assert.equal(providers.length, 1);
+    assert.equal(providers[0]?.baseURL, MODEL.baseURL);
+    assert.equal(providers[0]?.configured, true);
+    assert.equal(providers[0]?.models[0]?.id, MODEL.model);
+
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), headers: (init?.headers ?? {}) as Record<string, string> });
+      return new Response(
+        JSON.stringify({ data: [{ id: 'fake-model', context_window: 65536 }, { id: 'fake-model-2' }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+    try {
+      const { models } = await harness.client.request('providers.discover', {
+        baseURL: MODEL.baseURL,
+        api: 'openai-completions',
+      });
+      assert.deepEqual(models.map((model) => model.id), ['fake-model', 'fake-model-2']);
+      assert.equal(calls[0]?.url, `${MODEL.baseURL}/models`);
+      // 没填新 Key、Base URL 没变：沿用当前渠道的 Key
+      assert.equal(calls[0]?.headers.Authorization, 'Bearer test-key');
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    await assert.rejects(
+      harness.client.request('providers.discover', { baseURL: MODEL.baseURL, api: 'anthropic-messages' }),
+      (error: unknown) => (error as { code?: string }).code === 'unsupported',
+    );
+  });
+
   it('未实现的方法返回 unsupported 而不是假装成功', async () => {
     const harness = await makeHost([{ text: 'ok' }]);
-    await assert.rejects(harness.client.request('providers.discover', { baseURL: 'https://x', api: 'openai-completions' }), (error: unknown) => {
+    await assert.rejects(harness.client.request('providers.save', { mode: 'custom', id: 'x', baseURL: 'https://x', api: 'openai-completions', models: [] }), (error: unknown) => {
       return (error as { code?: string }).code === 'unsupported';
     });
   });

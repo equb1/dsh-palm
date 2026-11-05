@@ -641,24 +641,63 @@ export class LightHost {
             api: 'openai-completions' as const,
             baseURL: this.options.model.baseURL,
             models: [{ id: this.options.model.model, name: this.options.model.model }],
-            configured: this.options.model.apiKey.length > 0,
+            configured:
+              this.options.model.apiKey.length > 0 || Boolean(this.options.model.authToken),
             source: 'custom' as const,
           },
         ],
       }),
       'providers.catalog': async () => ({ providers: [] }),
-      'providers.discover': async () => {
-        throw new EngineProtocolError({
-          code: 'unsupported',
-          message: '轻引擎不会去拉模型列表',
-          hint: '模型名在「M1 实验室」里手填；完整引擎支持从服务商发现',
+      'providers.discover': async ({
+        baseURL,
+        api,
+        apiKey,
+      }: {
+        baseURL: string;
+        api: string;
+        apiKey?: string;
+      }) => {
+        if (api !== 'openai-completions') {
+          throw new EngineProtocolError({
+            code: 'unsupported',
+            message: '轻引擎只支持 OpenAI 兼容协议',
+            hint: 'Anthropic / OpenAI Responses 渠道请切完整引擎配置',
+          });
+        }
+        const base = baseURL.trim().replace(/\/+$/, '');
+        if (!/^https?:\/\//i.test(base)) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: 'Base URL 要以 http:// 或 https:// 开头',
+          });
+        }
+        const current = this.options.model;
+        const sameBase = base === current.baseURL.trim().replace(/\/+$/, '');
+        const key = apiKey?.trim();
+        const catalog = await listProviderModels({
+          baseURL: base,
+          ...(key
+            ? { apiKey: key }
+            : sameBase && current.apiKey
+              ? { apiKey: current.apiKey }
+              : sameBase && current.authToken
+                ? { authToken: current.authToken }
+                : {}),
         });
+        if (catalog.length === 0) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: '服务商没有返回模型',
+            hint: '检查 Base URL / API Key 是否有效，或换一个 OpenAI 兼容地址',
+          });
+        }
+        return { models: catalog };
       },
       'providers.save': async () => {
         throw new EngineProtocolError({
           code: 'unsupported',
-          message: '轻引擎的模型配置不经过宿主',
-          hint: '在「设置 → M1 实验室」改 Base URL / 模型 / Key',
+          message: '轻引擎的模型渠道在设置页的「模型提供商」卡片里保存',
+          hint: '宿主侧的 providers.save 不是轻引擎的入口',
         });
       },
       'providers.remove': async () => {

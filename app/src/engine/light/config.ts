@@ -4,6 +4,7 @@
  * 文本模型只有一个渠道（Base URL + 模型 + Key）；生图是**可选渠道**
  * （官方账号没有图像模型，要用户自己配）。
  */
+import type { ProviderProtocol } from '../../protocol';
 import type { ImageResponseFormat, LightImageConfig } from './types';
 
 export interface LightEngineSetup {
@@ -87,4 +88,60 @@ export function imageConfigFrom(setup: LightEngineSetup): LightImageConfig | und
     ...(setup.imageSize ? { size: setup.imageSize } : {}),
     ...(responseFormat !== 'auto' ? { responseFormat } : {}),
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * M2.5：设置页 ProvidersCard 在轻引擎里保存单条模型渠道
+ * ------------------------------------------------------------------ */
+
+/** providers.save 的 custom 分支（轻引擎只有这一种） */
+export interface ProviderSaveDraft {
+  mode: 'custom';
+  displayName?: string;
+  baseURL: string;
+  api: ProviderProtocol;
+  models: Array<{ id: string }>;
+  apiKey?: string;
+}
+
+function hostLabel(baseURL: string): string | undefined {
+  const match = /^https?:\/\/([^/:]+)/i.exec(baseURL);
+  return match?.[1]?.replace(/^www\./i, '');
+}
+
+/**
+ * 把 ProvidersCard 的保存动作落到轻引擎的单条渠道上。
+ *
+ * 规则：
+ *  - 只支持 OpenAI 兼容协议和一条渠道（轻引擎本来就是单模型）；
+ *  - 提交的模型里如果还有当前模型就保持不动，否则取第一个（UI 是多选，轻引擎只认一个）；
+ *  - API Key 留空表示沿用原 Key；账号模式下继续复用账号 token（I7）；
+ *  - 换了 Base URL 又没填 Key 直接拒绝，避免把账号 token 发到别的域名。
+ */
+export function applyProviderSave(setup: LightEngineSetup, draft: ProviderSaveDraft): LightEngineSetup {
+  if (draft.mode !== 'custom') throw new Error('轻引擎只有一条自定义模型渠道');
+  if (draft.api !== 'openai-completions') {
+    throw new Error('轻引擎只支持 OpenAI 兼容协议（chat/completions）');
+  }
+  const baseURL = draft.baseURL.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(baseURL)) throw new Error('Base URL 要以 http:// 或 https:// 开头');
+  const ids = draft.models.map((model) => model.id.trim()).filter(Boolean);
+  if (ids.length === 0) throw new Error('至少勾选一个模型');
+  const model = ids.includes(setup.model) ? setup.model : (ids[0] as string);
+
+  const previousBase = setup.baseURL.trim().replace(/\/+$/, '');
+  const apiKey = draft.apiKey?.trim() ?? '';
+  if (!apiKey && baseURL !== previousBase) throw new Error('换了 Base URL 就要重新填 API Key');
+  if (!apiKey && !setup.apiKey && setup.authMode !== 'account') throw new Error('先填 API Key');
+
+  const name = draft.displayName?.trim() || setup.providerName || hostLabel(baseURL);
+  const next: LightEngineSetup = { ...setup, baseURL, model, ...(name ? { providerName: name } : {}) };
+  if (apiKey) {
+    next.apiKey = apiKey;
+    delete next.authMode;
+    delete next.authToken;
+  } else if (next.authMode === 'account' && !next.authToken) {
+    throw new Error('账号 token 已失效，请先在完整引擎重新登录');
+  }
+  return normalizeSetup(next);
 }

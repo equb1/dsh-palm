@@ -327,8 +327,16 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 
 ### 7.3 模型提供商
 
-目录 43 条 + 自定义。UI：设置 → 模型提供商 → 两个 tab。保存后刷新 `models.list`，
+完整引擎：目录 43 条 + 自定义。UI：设置 → 模型提供商 → 两个 tab。保存后刷新 `models.list`，
 会话模型胶囊里可见。Key 落 dsh credentials；`credentials.describe` 只回 configured，不回明文。
+
+轻引擎（2026-11-06，M2.5）：只有一条 OpenAI 兼容渠道，复用同一张 ProvidersCard。
+`providers.list` 回当前渠道；`providers.discover` 由轻宿主实现，账号模式走
+`x-dsh-auth-token`、普通渠道走 `Authorization: Bearer` 拉 `/models`（解析 id/name/contextWindow，
+失败给人话）；`providers.save` 在 App 侧接管：`applyProviderSave` 校验协议/地址/模型，
+优先保留当前模型、账号模式保留 `authMode/authToken`、换 Base URL 必须重填 Key，
+然后 `connectLight` 重连并写 SecureStore（失败不覆盖旧配置）。轻引擎下卡片隐藏目录/新增/删除，
+`discover` 会把同域名的当前模型并入候选（账号目录已不列 `deepseek-chat`）。
 
 ## 8. UI 基线
 

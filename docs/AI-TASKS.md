@@ -271,8 +271,21 @@ type AttachmentChipsProps = {
 - [ ] **2.2 会话迁移完整版**（事件回放/结构化交接；P0 的 1.4 只做 v1）
 - [ ] **2.3 插件徽章**（矩阵已有，App 入口 + 搜索 + 判定理由）
 - [ ] **2.4 轻引擎附件引用**（图片视觉/路径消费；与 1.3 原生收件不重复）
-- [ ] **2.5 轻引擎多提供商 + 账号模型目录**
-  - [ ] 轻引擎实现 `providers.list/save/discover`，设置页复用 ProvidersCard；
+- [x] **2.5 轻引擎多提供商 + 账号模型目录**
+  - [x] 轻引擎实现 `providers.list/save/discover`，设置页复用 ProvidersCard；
+    2026-11-06：`providers.list` 回当前单渠道（`configured` 认 API Key 或账号 token）；
+    `providers.discover` 由轻宿主实现（只收 OpenAI 兼容；同域名复用账号 token、填了 Key 用
+    `Authorization: Bearer`，返回 id/name/contextWindow）；`providers.save` 在 App 侧接管
+    （`engine/light/config.ts` 的 `applyProviderSave` 纯函数：只收 custom、优先保留当前模型、
+    账号模式不洗掉 token、换 Base URL 必须重填 Key）→ `connectLight` 重连并写 SecureStore。
+    ProvidersCard 在轻引擎下隐藏目录/新增/删除，只留单渠道编辑；`discover` 会把同域名的当前模型
+    并入候选，避免「获取模型 → 保存」静默换模型。
+    单测 `test/light-provider-config.test.ts` 5 条 + `test/light-catalog.test.ts` 3 条 + 轻宿主
+    providers 测试；`typecheck` + `npm run verify` 全绿。
+    真机：设置页显示 1 个渠道（`124-providers-light.png`）；编辑 → 获取模型出 3 个候选
+    （deepseek-chat / V4.1-Flash / V4-Pro，后两个 1024K，`125-providers-discover.png`）；
+    保存后日志 `[light] … model=deepseek-chat`、`auth=account(64)`，发 `hi` 正常 done
+    （`126-provider-saved-chat.png`）。
   - [x] 账号模式拉 `/models`（2026-11-05）：`engine/light/catalog.ts` 用账号 token GET
     `{baseURL}/models`，`models.list` 返回目录并缓存 5 分钟；普通 API Key 渠道仍只报当前模型。
     真机：模型面板显示 `deepseek-chat`、`DeepSeek-V4.1-Flash`、`DeepSeek-V4-Pro`；

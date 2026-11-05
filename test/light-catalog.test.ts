@@ -64,4 +64,46 @@ describe('light · 账号模型目录', () => {
       [],
     );
   });
+
+  it('API Key 渠道走 Authorization: Bearer，账号模式走 x-dsh-auth-token', async () => {
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    const capture = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({
+        url: String(url),
+        headers: (init?.headers ?? {}) as Record<string, string>,
+      });
+      return new Response(JSON.stringify({ data: [{ id: 'm1' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+
+    await listProviderModels({ baseURL: 'https://x.test/v1', apiKey: 'sk-1' }, { fetchImpl: capture });
+    assert.equal(calls[0]?.url, 'https://x.test/v1/models');
+    assert.equal(calls[0]?.headers.Authorization, 'Bearer sk-1');
+    assert.equal(calls[0]?.headers['x-dsh-auth-token'], undefined);
+
+    await listProviderModels({ baseURL: 'https://x.test/v1', authToken: 't' }, { fetchImpl: capture });
+    assert.equal(calls[1]?.headers['x-dsh-auth-token'], 't');
+    assert.equal(calls[1]?.headers.Authorization, undefined);
+  });
+
+  it('解析 context_window / context_length 给模型面板', async () => {
+    const fetchImpl = fakeFetch({
+      data: [
+        { id: 'a', context_window: 65536 },
+        { id: 'b', context_length: '131072' },
+        { id: 'c', context_length: 0 },
+      ],
+    });
+    const models = await listProviderModels(
+      { baseURL: 'https://x', apiKey: 'k' },
+      { fetchImpl, timeoutMs: 1000 },
+    );
+    assert.deepEqual(models, [
+      { id: 'a', name: 'a', contextWindow: 65536 },
+      { id: 'b', name: 'b', contextWindow: 131072 },
+      { id: 'c', name: 'c' },
+    ]);
+  });
 });
