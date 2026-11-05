@@ -381,6 +381,7 @@ export function SessionDrawer({
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.folderScroll}
             contentContainerStyle={styles.folderRow}
           >
             <Pressable
@@ -627,7 +628,14 @@ const styles = StyleSheet.create({
   filterPillActive: { backgroundColor: colors.blueSoft, borderColor: colors.blue },
   filterText: { color: colors.textDim, fontSize: 11.5 },
   filterTextActive: { color: colors.blue, fontWeight: '600' },
-  folderRow: { flexDirection: 'row', gap: 6, paddingHorizontal: space.md, paddingTop: 6 },
+  folderScroll: { flexGrow: 0, flexShrink: 0, height: 42 },
+  folderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: space.md,
+    paddingVertical: 3,
+  },
   folderEditorTop: {
     marginHorizontal: space.md,
     marginTop: 8,
