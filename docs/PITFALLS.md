@@ -525,3 +525,13 @@
   2. 需要整包更新时：`run-as` 备份 `files` 与 `shared_prefs` → 卸载 → 装新包 → 还原数据；
   3. 长期：固定一台机器/一个 keystore 构建，或把 keystore 纳入发布流程（勿进 git）。
 - 验证：`dumpsys package` 的 `lastUpdateTime` 更新；App 数据仍在。
+
+### H9. 中断后继续问，400 `tool_calls must be followed by tool messages`
+
+- 现象：在审批卡/工具执行时点「结束回话」，再继续提问，模型返回
+  `400 An assistant message with 'tool_calls' must be followed by tool messages…`。
+- 原因：assistant 的 `tool_calls` 已经写进历史，但用户中断时工具还没执行完，
+  对应的 `tool` 消息没写；下一次请求整段历史非法。`trimHistory` 也可能从中间截断。
+- 处理：`light/history.ts` 在每次请求前清洗——给缺失的调用补
+  `{role:'tool', content:'[已停止] 未执行'}`，丢弃孤立 tool 消息；中断时也主动补齐。
+- 验证：原会话继续发消息不再 400，能正常进入 `list_dir` / `bash` 审批卡。

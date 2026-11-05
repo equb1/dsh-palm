@@ -21,16 +21,19 @@ import type {
 import { streamChat } from './provider';
 import { newBlockId } from './sessionRepo';
 import { checkToolCapability } from './capability';
+import { closePendingToolCalls, sanitizeToolHistory } from './history';
 import { permissionNote, TOOL_CONTEXT_HELP, toolsForPermission, toDisplayPath, toSandboxPath } from './tools';
 import { errorKindOf, errorStatusOf } from '../../lib/errors';
 import type {
   AgentTool,
   AskAnswer,
   AskQuestion,
+  ChatMessage,
   LightImageConfig,
   LightModelConfig,
   LightRun,
   StoredSession,
+  ToolCall,
   ToolContext,
 } from './types';
 import type { SandboxFs } from '../fs/sandbox';
@@ -222,7 +225,7 @@ export class Agent {
 
         const messages = [
           { role: 'system' as const, content: this.systemPrompt(session) },
-          ...this.trimHistory(session.history),
+          ...sanitizeToolHistory(this.trimHistory(session.history)),
         ];
 
         let result;
@@ -311,6 +314,8 @@ export class Agent {
         }
 
         if (signal.aborted) {
+          // 停止时 assistant.tool_calls 已经写入历史，补齐未执行的 tool 结果
+          closePendingToolCalls(session.history, toolCalls);
           turn.status = 'stopped';
           sink.emit('block.appended', { sessionId: session.id, runId: run.runId, turn: cloneTurn(turn) });
           if (run.abortKind === 'stop') return this.finish(run, { reason: 'stopped' });
@@ -456,6 +461,8 @@ export class Agent {
         await sink.persist();
 
         if (signal.aborted) {
+          // 工具循环被打断：没跑到的调用也要补结果，历史才合法
+          closePendingToolCalls(session.history, toolCalls);
           if (run.abortKind === 'stop') return this.finish(run, { reason: 'stopped' });
           // steer：回到顶部，历史里已经有用户的新消息
           continue;
