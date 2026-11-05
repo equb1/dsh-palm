@@ -612,6 +612,38 @@ export class LightHost {
           });
         }
       },
+      'fs.rename': async ({ path, to }: { path: string; to: string }) => {
+        const from = path.trim();
+        const dest = to.trim();
+        if (!from || !dest || from === '/' || dest === '/') {
+          throw new EngineProtocolError({ code: 'bad_request', message: '不能重命名工作区根目录' });
+        }
+        try {
+          await this.options.workspace.mv(from, dest);
+          return { ok: true as const };
+        } catch (error) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: `重命名失败：${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      },
+      'fs.delete': async ({ path }: { path: string }) => {
+        const target = path.trim();
+        if (!target || target === '/') {
+          throw new EngineProtocolError({ code: 'bad_request', message: '不能删除工作区根目录' });
+        }
+        try {
+          const stat = await this.options.workspace.stat(target);
+          await this.options.workspace.rm(target, { recursive: stat.isDirectory, force: true });
+          return { ok: true as const };
+        } catch (error) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: `删除失败：${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      },
       'approvals.list': async ({ sessionId }: { sessionId?: string }) => ({
         approvals: [...this.approvals.values()]
           .map((pending) => pending.approval)

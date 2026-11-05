@@ -751,6 +751,14 @@ const handlers: { [M in Method]: Handler<M> } = {
   'fs.list': () => {
     throw Object.assign(new Error('mock 宿主没有工作区文件'), { code: 'unsupported' });
   },
+
+  'fs.rename': () => {
+    throw Object.assign(new Error('mock 宿主没有工作区文件'), { code: 'unsupported' });
+  },
+
+  'fs.delete': () => {
+    throw Object.assign(new Error('mock 宿主没有工作区文件'), { code: 'unsupported' });
+  },
 };
 
 /* ------------------------------------------------------------------ *

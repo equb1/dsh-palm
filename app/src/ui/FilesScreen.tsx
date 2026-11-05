@@ -1,10 +1,10 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { WorkspaceEntry } from '../protocol';
-import { openWorkspaceFile } from '../lib/fileActions';
+import { openWorkspaceFile, shareWorkspaceFile } from '../lib/fileActions';
 import { store } from './useStore';
-import { IconButton } from './parts';
+import { Btn, IconButton } from './parts';
 import { colors, radius, space, topInset } from './theme';
 
 /** U8 第一步：工作区文件浏览（只列目录 + 用系统查看器打开文件） */
@@ -24,6 +24,9 @@ export function FilesScreen(): React.ReactElement {
   const [entries, setEntries] = React.useState<WorkspaceEntry[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
+  /** 每行的操作菜单 / 重命名草稿（U8 文件操作） */
+  const [menuFor, setMenuFor] = React.useState<string | null>(null);
+  const [renaming, setRenaming] = React.useState<{ entry: WorkspaceEntry; name: string } | null>(null);
 
   const load = React.useCallback(async (target: string): Promise<void> => {
     setLoading(true);
@@ -50,6 +53,60 @@ export function FilesScreen(): React.ReactElement {
     const rel = joinPath(path, entry.name).replace(/^\/+/, '');
     void openWorkspaceFile(rel).then((result) => {
       if (!result.ok) setNotice(result.message ?? '打不开这个文件。');
+    });
+  };
+
+  const entryPath = (name: string): string => joinPath(path, name);
+
+  const saveRename = async (): Promise<void> => {
+    if (!renaming) return;
+    const next = renaming.name.trim();
+    if (!next || next.includes('/') || next === renaming.entry.name) {
+      setRenaming(null);
+      return;
+    }
+    try {
+      await store.renameWorkspace(entryPath(renaming.entry.name), joinPath(path, next));
+      setRenaming(null);
+      await load(path);
+    } catch (error) {
+      setNotice(`重命名失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const confirmDelete = (entry: WorkspaceEntry): void => {
+    setMenuFor(null);
+    Alert.alert(
+      '删除',
+      `删除「${entry.name}」？${entry.kind === 'dir' ? '目录会连同里面的内容一起删除。' : ''}不会进回收站。`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await store.deleteWorkspace(entryPath(entry.name));
+                if (path !== '/' && entries.length <= 1) {
+                  await load('/');
+                } else {
+                  await load(path);
+                }
+              } catch (error) {
+                setNotice(`删除失败：${error instanceof Error ? error.message : String(error)}`);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const shareFile = (entry: WorkspaceEntry): void => {
+    setMenuFor(null);
+    void shareWorkspaceFile(entryPath(entry.name).replace(/^\/+/, '')).then((result) => {
+      if (!result.ok) setNotice(result.message ?? '分享失败。');
     });
   };
 
@@ -96,32 +153,84 @@ export function FilesScreen(): React.ReactElement {
           <Text style={styles.hint}>这个目录是空的。</Text>
         ) : null}
 
+        {renaming ? (
+          <View style={styles.renameCard}>
+            <Text style={styles.renameLabel}>重命名「{renaming.entry.name}」</Text>
+            <TextInput
+              style={styles.renameInput}
+              value={renaming.name}
+              onChangeText={(name) => setRenaming({ ...renaming, name })}
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="新文件名"
+            />
+            <View style={styles.renameActions}>
+              <Btn label="取消" kind="ghost" onPress={() => setRenaming(null)} style={{ flex: 1 }} />
+              <Btn label="保存" onPress={() => void saveRename()} style={{ flex: 1 }} />
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.list}>
           {entries.map((entry) => {
             const isDir = entry.kind === 'dir';
+            const menuOpen = menuFor === entry.name;
             return (
-              <Pressable
-                key={entry.name}
-                accessibilityRole="button"
-                accessibilityLabel={`${isDir ? '目录' : '文件'} ${entry.name}`}
-                onPress={() => (isDir ? void load(joinPath(path, entry.name)) : openFile(entry))}
-                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              >
-                <View style={[styles.icon, isDir && styles.iconDir]}>
-                  <Text style={[styles.iconGlyph, isDir && { color: colors.blue }]}>
-                    {isDir ? '▸' : '▤'}
-                  </Text>
-                </View>
-                <View style={styles.rowTexts}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {entry.name}
-                  </Text>
-                  <Text style={styles.meta}>
-                    {isDir ? '目录' : formatSize(entry.size) || '文件'}
-                  </Text>
-                </View>
-                <Text style={styles.chevron}>{isDir ? '›' : '↗'}</Text>
-              </Pressable>
+              <React.Fragment key={entry.name}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${isDir ? '目录' : '文件'} ${entry.name}`}
+                  onPress={() => (isDir ? void load(joinPath(path, entry.name)) : openFile(entry))}
+                  onLongPress={() => setMenuFor(menuOpen ? null : entry.name)}
+                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                >
+                  <View style={[styles.icon, isDir && styles.iconDir]}>
+                    <Text style={[styles.iconGlyph, isDir && { color: colors.blue }]}>
+                      {isDir ? '▸' : '▤'}
+                    </Text>
+                  </View>
+                  <View style={styles.rowTexts}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {entry.name}
+                    </Text>
+                    <Text style={styles.meta}>
+                      {isDir ? '目录' : formatSize(entry.size) || '文件'}
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${entry.name} 操作`}
+                    hitSlop={10}
+                    onPress={() => setMenuFor(menuOpen ? null : entry.name)}
+                    style={styles.moreButton}
+                  >
+                    <Text style={styles.moreText}>⋯</Text>
+                  </Pressable>
+                  <Text style={styles.chevron}>{isDir ? '›' : '↗'}</Text>
+                </Pressable>
+                {menuOpen ? (
+                  <View style={styles.actionsMenu}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setRenaming({ entry, name: entry.name });
+                        setMenuFor(null);
+                      }}
+                    >
+                      <Text style={styles.menuItem}>重命名</Text>
+                    </Pressable>
+                    {isDir ? null : (
+                      <Pressable accessibilityRole="button" onPress={() => shareFile(entry)}>
+                        <Text style={styles.menuItem}>分享</Text>
+                      </Pressable>
+                    )}
+                    <Pressable accessibilityRole="button" onPress={() => confirmDelete(entry)}>
+                      <Text style={[styles.menuItem, { color: colors.danger }]}>删除</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </React.Fragment>
             );
           })}
         </View>
@@ -151,6 +260,40 @@ const styles = StyleSheet.create({
   crumbSep: { color: colors.textFaint, fontSize: 12.5 },
   notice: { color: colors.warn, fontSize: 12, lineHeight: 17 },
   hint: { color: colors.textFaint, fontSize: 12.5, lineHeight: 18 },
+  renameCard: {
+    backgroundColor: colors.glass,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    padding: space.md,
+    gap: space.sm,
+  },
+  renameLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  renameInput: {
+    backgroundColor: colors.glassStrong,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    color: colors.text,
+    fontSize: 13,
+  },
+  renameActions: { flexDirection: 'row', gap: space.sm },
+  moreButton: { paddingHorizontal: 4, paddingVertical: 4 },
+  moreText: { color: colors.textFaint, fontSize: 16, lineHeight: 18 },
+  actionsMenu: {
+    marginLeft: 44,
+    marginBottom: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    gap: 2,
+  },
+  menuItem: { color: colors.blue, fontSize: 13, lineHeight: 20, paddingVertical: 4 },
   list: {
     backgroundColor: colors.glass,
     borderRadius: radius.lg,

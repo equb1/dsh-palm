@@ -203,8 +203,12 @@
   - 真机：根目录列出 `deepseek-harness / docs / uploads`，进 `docs` 看到 weekly.docx 9.3KB，
     点开进系统文档查看器显示 Weekly Report（`143-files-root.png`、`144-files-docs.png`、
     `145-files-open-docx.png`）；单测覆盖 fs.list 目录/大小/不存在目录。
-  - 未做：终端、工作区管理（多工作区）、重命名/删除/搜索/分享；完整引擎（proot）未实现
-    `fs.list`，连完整引擎时文件页会提示不支持。
+  - 2026-11-06 第二步：协议加 `fs.rename` / `fs.delete`（轻宿主，根目录拒绝），文件页每行加
+    ⋯ 操作菜单：重命名（行内输入）、分享（`shareWorkspaceFile`）、删除（二次确认，目录递归）。
+    真机：weekly.docx → weekly.docx-renamed → 改回；新建 tmp-del.txt 后删除，宿主文件同步消失
+    （`150-files-actions.png`、`151-files-rename.png`、`152-files-renamed.png`）；
+    单测覆盖 rename/delete/根目录拒绝。
+  - 未做：文件搜索、终端、工作区管理；完整引擎（proot）未实现 fs 系列，连完整引擎时会提示不支持。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）

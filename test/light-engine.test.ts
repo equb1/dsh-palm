@@ -480,6 +480,30 @@ describe('LocalEngineClient', () => {
     );
   });
 
+  it('fs.rename / fs.delete 改工作区文件，根目录拒绝（U8）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    await mkdir(join(harness.workspaceRoot, 'docs'), { recursive: true });
+    await writeFile(join(harness.workspaceRoot, 'docs', 'a.txt'), 'hello');
+
+    await harness.client.request('fs.rename', { path: '/docs/a.txt', to: '/docs/b.txt' });
+    const renamed = await harness.client.request('fs.list', { path: '/docs' });
+    assert.equal(renamed.entries.some((entry) => entry.name === 'a.txt'), false);
+    assert.equal(renamed.entries.find((entry) => entry.name === 'b.txt')?.size, 5);
+
+    await harness.client.request('fs.delete', { path: '/docs/b.txt' });
+    const after = await harness.client.request('fs.list', { path: '/docs' });
+    assert.equal(after.entries.some((entry) => entry.name === 'b.txt'), false);
+
+    await assert.rejects(
+      harness.client.request('fs.delete', { path: '/' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+    await assert.rejects(
+      harness.client.request('fs.rename', { path: '/docs', to: '/' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+  });
+
   it('sessions.delete 删除会话，运行中的会话拒绝删除（E3）', async () => {
     const harness = await makeHost([{ text: 'ok' }]);
     const a = await createSession(harness);

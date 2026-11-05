@@ -1461,6 +1461,16 @@ export class Store {
     return this.client.request('fs.list', { path });
   }
 
+  async renameWorkspace(path: string, to: string): Promise<void> {
+    if (!this.client) throw new Error('还没连上宿主');
+    await this.client.request('fs.rename', { path, to });
+  }
+
+  async deleteWorkspace(path: string): Promise<void> {
+    if (!this.client) throw new Error('还没连上宿主');
+    await this.client.request('fs.delete', { path });
+  }
+
   /**
    * 轻引擎账号 401 的恢复路径（M2.7 最小版）：
    * 切完整引擎 → 打开设置账号卡，让用户重新登录；登录后点「切回轻引擎」会用新 token 重建轻引擎。

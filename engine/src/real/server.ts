@@ -1429,6 +1429,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     },
 
     'fs.list': async () => unsupported('fs.list'),
+    'fs.rename': async () => unsupported('fs.rename'),
+    'fs.delete': async () => unsupported('fs.delete'),
 
     'account.signOut': async () => {
       const account = asAccountState(await accountRpc('account/signOut', { client: accountClient() }));

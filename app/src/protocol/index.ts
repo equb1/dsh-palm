@@ -589,6 +589,8 @@ export interface RequestParams {
 
   /** 工作区文件浏览（U8，轻引擎实现；完整引擎未接） */
   'fs.list': { path?: string };
+  'fs.rename': { path: string; to: string };
+  'fs.delete': { path: string };
 
   /** 会话管理：改名、置顶、归档（真宿主接口） */
   'sessions.rename': { sessionId: string; title: string };
@@ -633,6 +635,8 @@ export interface RequestResults {
   'providers.save': { providers: ProviderRow[] };
   'providers.remove': { providers: ProviderRow[] };
   'fs.list': { path: string; entries: WorkspaceEntry[] };
+  'fs.rename': { ok: true };
+  'fs.delete': { ok: true };
   'sessions.rename': { session: SessionDetail };
   'sessions.pin': { ok: true };
   'sessions.archive': { ok: true };
