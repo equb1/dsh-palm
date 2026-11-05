@@ -37,6 +37,8 @@
   （记住选择，下次直接起 proot）；连接失败不再停在「连接中」。
 - 轻引擎支持账号模式（2026-11-05）：读 `files/home/.dsh/.credentials.yaml` 的账号 token，
   用 `x-dsh-auth-token` 调模型，**账号已登录时不需要手动填 API Key**；切回轻引擎也不再报失败。
+- 轻引擎工具历史已清洗（2026-11-05）：中断/停止后 assistant `tool_calls` 悬空会导致下一次
+  请求 400，现于发请求前统一补齐 `[已停止] 未执行` 并丢弃孤立 tool 消息（`light/history.ts`）。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
 
