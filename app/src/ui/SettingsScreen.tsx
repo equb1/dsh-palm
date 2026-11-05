@@ -245,6 +245,12 @@ export function SettingsScreen(): React.ReactElement {
                 {signedIn ? (
                   <>
                     <Btn
+                      label="重新登录"
+                      kind="ghost"
+                      onPress={() => void store.reloginAccount()}
+                      style={{ flex: 1 }}
+                    />
+                    <Btn
                       label="退出登录"
                       kind="ghost"
                       onPress={() => void store.signOutAccount()}
