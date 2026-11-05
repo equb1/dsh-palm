@@ -587,3 +587,15 @@
 - 验证：修复后真机日志 `[light] auth=account(64) base=https://api.deepseek.com/v1`，ready=19ms；
   typecheck + verify 209 pass。
 
+### I8. 审批未决时再发消息，出现重复 React key（2026-11-05）
+
+- 现象：`create_docx` 审批卡未处理时又发一条消息，日志刷
+  `Encountered two children with the same key, '.$r_mw3jn4bs_lhyo'`；界面上同一个 run 出现两个
+  create_docx 行/两张审批卡，点“批准”很容易点错/失效。
+- 原因：先生成的 assistant 回合和随后补发的回合共用同一个 runId（`r_…`），FlatList/TurnView 的 key
+  用了 runId；`turnIdsFor`/`cleanTurns` 没有为“同 run 的后续回合”生成唯一 key。
+- 处理（待做）：给 turn key 加序号/role 后缀（如 `runId#turnIndex`），或在发送新消息前把旧 run 的
+  pending 审批/回合收口；复现步骤：发“create docx” → 不点批准 → 再发一句 → 看 logcat duplicate key。
+- 验证（待）：同一操作 logcat 无 duplicate key，审批卡只保留一张。
+
+
