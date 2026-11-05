@@ -88,3 +88,7 @@ artifacts/
 # Python/Office 运行时层（36MB，和 rootfs/payload 一样走制品，不进仓库）
 app/android/app/src/main/assets/python.bin
 
+
+# release 签名配置（keystore 本身被 *.jks 忽略）
+app/android/keystore.properties
+
