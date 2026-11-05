@@ -499,6 +499,8 @@ cd app/android && sh gradlew :app:assembleDebug
   `$ANDROID_HOME/build-tools/37.0.0/apksigner.bat verify --print-certs app-release.apk` 核对；
   版本号可用 `DSH_PALM_VERSION_CODE` / `DSH_PALM_VERSION_NAME` 覆盖。
   **keystore + 密码必须备份**，丢失后不能覆盖升级。
+- 发布 runbook 见 [RELEASE.md](RELEASE.md)：`npm run release:preflight` 只读检查 APK/签名/设备/备份；
+  release 非 debuggable，debug→release 证书不同时不能 `install -r`，这台设备切换会丢 App 数据。
 - 桥/补丁打进 APK assets，运行时同步进 rootfs（`ensurePatch`），改桥不用重打 payload。
 
 ### 9.4 真机

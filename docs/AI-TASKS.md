@@ -454,6 +454,12 @@ type AttachmentChipsProps = {
     `DSH_PALM_VERSION_CODE/NAME` 覆盖。产物 `app-release.apk` 243.5MB，含 rootfs/payload/python.bin/index.android.bundle。
   - 仍需：keystore + 密码备份（丢了不能覆盖升级）；设备上仍是 debug 包，release 包覆盖装需先统一签名/卸载；
     正式发版前在干净设备走一次首装 + 升级。
+  - 2026-11-06：新增 `scripts/release-preflight.ps1` + `npm run release:preflight`（只读检查 APK/版本/签名/
+    设备/keystore 备份）；`docs/RELEASE.md` 写清首装/升级/回滚。预检 PASS：APK 243.5MB、`0.1.0 (1)`、
+    证书 `50de0609…`、设备 debug `0.1.0 (1)`、两处 keystore 备份都在。
+  - 关键修正（推翻旧想法）：release 默认 `debuggable=false`，装完 `run-as` 不可用；且 debug 与 release
+    证书不同。所以这台设备 debug → release **必然丢 App 数据**，「卸前 tar 备份 files/shared_prefs、
+    装 release 再还原」走不通。首装/升级仍等用户确认后执行（路径 A 干净首装 / 路径 B 同签名升级）。
 
 
 ## 4. 待决事项

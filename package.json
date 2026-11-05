@@ -11,6 +11,7 @@
     "stream:replay": "node --import tsx scripts/stream-replay.ts",
     "bench:light": "node --import tsx scripts/bench-light.ts",
     "device:regression": "node --import tsx scripts/device-regression.ts",
+    "release:preflight": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-preflight.ps1",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test",
     "plugin:check": "node --import tsx scripts/plugin-compat.ts"
