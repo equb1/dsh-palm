@@ -16,6 +16,7 @@ import { ProvidersCard } from './ProvidersCard';
 import { JustBashProbe } from './JustBashProbe';
 import { LightEngineScreen } from './LightEngineScreen';
 import { WebSurface } from './WebSurface';
+import { SettingsGroup, type SettingsRow } from './settings/SettingsTile';
 import { loadAccountPhone, saveAccountPhone } from '../lib/accountPhone';
 
 const REF = 'DEEPSEEK_API_KEY';
@@ -78,6 +79,11 @@ export function SettingsScreen(): React.ReactElement {
   const [labNote, setLabNote] = React.useState<string | null>(null);
   const [phone, setPhone] = React.useState('');
   const [phoneSaved, setPhoneSaved] = React.useState(false);
+  /** U4：设置首页搜索与分组滚动定位 */
+  const [query, setQuery] = React.useState('');
+  const [notice, setNotice] = React.useState<string | null>(null);
+  const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const sectionY = React.useRef<Record<string, number>>({});
   React.useEffect(() => {
     void loadAccountPhone().then(setPhone);
   }, []);
@@ -138,6 +144,197 @@ export function SettingsScreen(): React.ReactElement {
     return () => clearInterval(timer);
   }, [accountAttempt?.id, waiting]);
 
+  const flash = (message: string): void => {
+    setNotice(message);
+    setTimeout(() => setNotice((current) => (current === message ? null : current)), 2600);
+  };
+
+  const scrollToSection = (id: string): void => {
+    const y = sectionY.current[id];
+    if (y == null) {
+      flash('这个设置还在下面，先往下滑一点。');
+      return;
+    }
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+  };
+
+  const exportLogs = (): void => {
+    void (async () => {
+      const lines = await hostLogs();
+      await Share.share({ message: lines.slice(-300).join('\n') || '（暂无日志）' }).catch(
+        () => undefined,
+      );
+    })();
+  };
+
+  const lightModel = state.defaultModel?.model ?? '未配置';
+  const providerCount = state.providers.length;
+  const allGroups: Array<{ key: string; title: string; rows: SettingsRow[] }> = [
+    {
+      key: 'ai',
+      title: 'AI',
+      rows: [
+        {
+          id: 'account',
+          title: 'DeepSeek 账号',
+          value: signedIn ? '已登录' : waiting ? '登录中' : '未登录',
+          icon: '人',
+          tone: 'blue',
+          warn: !signedIn,
+          onPress: () => scrollToSection('account'),
+        },
+        {
+          id: 'key',
+          title: 'API Key（备选）',
+          value: configured ? '已配置' : '未配置',
+          icon: '钥',
+          tone: 'blue',
+          onPress: () => scrollToSection('key'),
+        },
+        {
+          id: 'providers',
+          title: '模型提供商',
+          value: `${providerCount} 个`,
+          icon: '模',
+          tone: 'blue',
+          hint: lightModel !== '未配置' ? `当前 ${lightModel}` : undefined,
+          onPress: () => scrollToSection('providers'),
+        },
+      ],
+    },
+    {
+      key: 'capability',
+      title: '能力',
+      rows: [
+        {
+          id: 'light-engine',
+          title: '轻引擎渠道',
+          value: lightModel,
+          icon: '轻',
+          tone: 'green',
+          onPress: () => setLab('light'),
+        },
+        {
+          id: 'full-engine',
+          title: '完整引擎',
+          value: hostAvailable ? hostLabel : '不支持',
+          icon: '全',
+          tone: 'green',
+          warn: host?.engine === 'failed' || host?.bridge === 'failed',
+          onPress: () => scrollToSection('engine'),
+        },
+      ],
+    },
+    {
+      key: 'appearance',
+      title: '外观',
+      rows: [
+        {
+          id: 'theme',
+          title: '主题',
+          value: '浅色',
+          icon: '◐',
+          tone: 'violet',
+          onPress: () => flash('主题跟着官方浅色 token 走；深色主题在 U7 做。'),
+        },
+        {
+          id: 'font',
+          title: '对话字号',
+          value: '标准',
+          icon: 'A',
+          tone: 'violet',
+          onPress: () => flash('字号档在 U7 做；当前固定为官方标准字号。'),
+        },
+      ],
+    },
+    {
+      key: 'general',
+      title: '通用',
+      rows: [
+        {
+          id: 'notify',
+          title: '通知',
+          value: '系统管理',
+          icon: '铃',
+          tone: 'amber',
+          onPress: () => flash('通知权限由系统管理；会话完成/审批提醒已接原生通知。'),
+        },
+        {
+          id: 'battery',
+          title: '后台保活',
+          value: batteryOk == null ? '未知' : batteryOk ? '已放行' : '受限制',
+          icon: '电',
+          tone: 'amber',
+          warn: batteryOk === false,
+          onPress: () => scrollToSection('engine'),
+        },
+      ],
+    },
+    {
+      key: 'host',
+      title: '主机',
+      rows: [
+        {
+          id: 'engine',
+          title: '本机引擎',
+          value: hostLabel,
+          icon: '引',
+          tone: 'slate',
+          onPress: () => scrollToSection('engine'),
+        },
+        {
+          id: 'host-info',
+          title: '宿主',
+          value: state.caps?.host.name ?? '未连接',
+          icon: '宿',
+          tone: 'slate',
+          onPress: () => scrollToSection('host'),
+        },
+        {
+          id: 'lab',
+          title: '实验室',
+          value: '3 个入口',
+          icon: '验',
+          tone: 'slate',
+          onPress: () => scrollToSection('lab'),
+        },
+      ],
+    },
+    {
+      key: 'about',
+      title: '帮助与关于',
+      rows: [
+        {
+          id: 'version',
+          title: '版本',
+          value: state.caps?.host.engineVersion ?? '—',
+          icon: 'v',
+          tone: 'slate',
+          onPress: () => flash(`引擎 ${state.caps?.host.engineVersion ?? '—'} · 轻引擎 0.1.0-light`),
+        },
+        {
+          id: 'export',
+          title: '导出宿主日志',
+          icon: '⇪',
+          tone: 'slate',
+          hint: '最近 300 行，走系统分享',
+          onPress: exportLogs,
+        },
+      ],
+    },
+  ];
+  const q = query.trim().toLowerCase();
+  const groups = allGroups
+    .map((group) => ({
+      ...group,
+      rows: q
+        ? group.rows.filter((row) =>
+            `${row.title} ${row.value ?? ''} ${row.hint ?? ''}`.toLowerCase().includes(q),
+          )
+        : group.rows,
+    }))
+    .filter((group) => group.rows.length > 0);
+
   const save = async (value: string): Promise<void> => {
     const ok = await store.saveCredential(REF, value);
     if (ok) {
@@ -191,13 +388,46 @@ export function SettingsScreen(): React.ReactElement {
     <View style={styles.root}>
       <View style={styles.header}>
         <IconButton glyph="‹" label="返回" onPress={() => store.closeSettings()} />
-        <Text style={styles.title}>模型与凭据</Text>
+        <Text style={styles.title}>设置</Text>
         <View style={{ width: 36 }} />
       </View>
 
       <SmoothKeyboardAvoid style={styles.bodyWrap}>
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <View style={styles.card}>
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll}>
+          <View style={styles.searchBox}>
+            <Text style={styles.searchGlyph}>⌕</Text>
+            <TextInput
+              style={styles.searchInput}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="搜索设置"
+              placeholderTextColor={colors.textFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="搜索设置"
+            />
+            {query.length > 0 ? (
+              <Pressable accessibilityRole="button" onPress={() => setQuery('')} hitSlop={8}>
+                <Text style={styles.searchClear}>×</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+
+          {groups.map((group) => (
+            <SettingsGroup key={group.key} title={group.title} rows={group.rows} />
+          ))}
+          {groups.length === 0 ? <Text style={styles.hint}>没找到匹配的设置项。</Text> : null}
+
+          <Text style={styles.sectionLabel}>详细设置</Text>
+
+          <View
+            style={styles.card}
+            onLayout={(event) => {
+              sectionY.current.account = event.nativeEvent.layout.y;
+            }}
+          >
             <View style={styles.rowTop}>
               <Text style={styles.cardTitle}>DeepSeek 账号</Text>
               <Pill>
@@ -291,7 +521,12 @@ export function SettingsScreen(): React.ReactElement {
             )}
           </View>
 
-          <View style={styles.card}>
+          <View
+            style={styles.card}
+            onLayout={(event) => {
+              sectionY.current.key = event.nativeEvent.layout.y;
+            }}
+          >
             <Pressable
               style={styles.rowTop}
               accessibilityRole="button"
@@ -359,9 +594,20 @@ export function SettingsScreen(): React.ReactElement {
             )}
           </View>
 
-          <ProvidersCard />
+          <View
+            onLayout={(event) => {
+              sectionY.current.providers = event.nativeEvent.layout.y;
+            }}
+          >
+            <ProvidersCard />
+          </View>
 
-          <View style={styles.card}>
+          <View
+            style={styles.card}
+            onLayout={(event) => {
+              sectionY.current.engine = event.nativeEvent.layout.y;
+            }}
+          >
             <View style={styles.rowTop}>
               <Text style={styles.cardTitle}>本机引擎</Text>
               <Pill>
@@ -528,7 +774,12 @@ export function SettingsScreen(): React.ReactElement {
             )}
           </View>
 
-          <View style={styles.card}>
+          <View
+            style={styles.card}
+            onLayout={(event) => {
+              sectionY.current.lab = event.nativeEvent.layout.y;
+            }}
+          >
             <Text style={styles.cardTitle}>实验室 · M1</Text>
             <Text style={styles.hint}>
               L0 = 官方 web 界面（WebView，全部 web 插件原样）；L1 = just-bash 在 Hermes 上跑；
@@ -554,7 +805,12 @@ export function SettingsScreen(): React.ReactElement {
             {labNote ? <Text style={styles.hint}>{labNote}</Text> : null}
           </View>
 
-          <View style={styles.card}>
+          <View
+            style={styles.card}
+            onLayout={(event) => {
+              sectionY.current.host = event.nativeEvent.layout.y;
+            }}
+          >
             <Text style={styles.cardTitle}>宿主</Text>
             <View style={styles.kv}>
               <Text style={styles.k}>引擎</Text>
@@ -632,6 +888,27 @@ const styles = StyleSheet.create({
   },
   title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
   scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glassStrong,
+  },
+  searchGlyph: { color: colors.textFaint, fontSize: 15 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 0 },
+  searchClear: { color: colors.textFaint, fontSize: 16, paddingHorizontal: 2 },
+  notice: { color: colors.textDim, fontSize: 12, lineHeight: 17, paddingHorizontal: space.xs },
+  sectionLabel: {
+    color: colors.textFaint,
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: space.xs,
+    marginTop: 4,
+    letterSpacing: 0.2,
+  },
   card: {
     backgroundColor: colors.glass,
     borderRadius: radius.lg,

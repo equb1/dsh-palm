@@ -192,6 +192,8 @@ OpenAI 兼容 `/chat/completions`，SSE 流；45s 空闲超时（每分片重置
 模型面板因此可选 `deepseek-chat / DeepSeek-V4.1-Flash / DeepSeek-V4-Pro`；选中后写会话级
 `sessions.setModel`，下一轮请求用该 model id。
 性能基准：`npm run bench:light -- --n 20`（本地 SSE mock；`--url/--key/--model` 可打真端点）。
+平台差异：`transport.ts`（fetch）与 `transport.native.ts`（XHR）共用 `transport.shared.ts`
+的常量/类型；native 不能从 `'./transport'` 取共享项，否则 Metro 会解析回自身形成 self require cycle。
 
 ## 6. 引擎路由与加载
 
@@ -422,8 +424,12 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 
 ### 8.5 设置与抽屉
 
-- 设置卡片顺序：**DeepSeek 账号 → API Key（备选，折叠）→ 模型提供商 → 本机引擎 → 宿主**；
+- 设置首页（2026-11-06，U4 第一步）：6 组 IA（AI / 能力 / 外观 / 通用 / 主机 / 帮助与关于）
+  + 顶部搜索；行在 `ui/settings/SettingsTile.tsx`（32 圆盘图标、52 行高、2px 缝、右侧当前值、
+  chevron）。点 tile 锚点滚到下方详细卡片；详细卡顺序：
+  **DeepSeek 账号 → API Key（备选，折叠）→ 模型提供商 → 本机引擎 → 实验室 → 宿主**。
 - 每行右侧显示当前值（已登录/未配置/运行中/受限制），异常值用警告色；
+- 外观/通用部分只读（主题浅色、字号标准、通知系统管理），点按提示未接后端；二级页未做；
 - 抽屉分组：运行中 / 今天 / 更早；行尾最多一个状态标记；长按出「置顶/取消置顶/归档/改名」；
 - 底部主机条：本机 dsh + 引擎版本 + 模型与凭据 + 断开/设置。
 
