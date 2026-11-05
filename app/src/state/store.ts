@@ -1295,6 +1295,29 @@ export class Store {
     await this.refreshCredentials();
   }
 
+  /**
+   * 轻引擎账号 401 的恢复路径（M2.7 最小版）：
+   * 切完整引擎 → 打开设置账号卡，让用户重新登录；登录后点「切回轻引擎」会用新 token 重建轻引擎。
+   */
+  async recoverLightAuth(): Promise<void> {
+    this.clearError();
+    if (this.state.engine.mode !== 'full') {
+      const ok = await this.switchEngine('full');
+      if (!ok) {
+        this.setError('完整引擎没起来；也可以在设置里给轻引擎配置独立 API Key。');
+        return;
+      }
+    }
+    await this.openSettings();
+    this.setError('已切到完整模式：在「DeepSeek 账号」卡点「重新登录」，成功后再切回轻引擎。');
+  }
+
+  /** 账号已登录但 token 过期时，先退出再重新走 OAuth（M2.7） */
+  async reloginAccount(): Promise<void> {
+    await this.signOutAccount();
+    await this.startAccountSignIn();
+  }
+
   closeSettings(): void {
     this.patch({ view: 'main' });
   }

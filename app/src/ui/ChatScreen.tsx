@@ -13,7 +13,7 @@ import {
 
 import type { SessionDetail, Turn } from '../protocol';
 import { store, useStore } from './useStore';
-import { IconButton, Pill } from './parts';
+import { IconButton, Pill, Btn } from './parts';
 import { EngineBadge } from './EngineBadge';
 import { badgeFor, canSwitch } from '../state/engineManager';
 import { isConversationReadOnly } from '../lib/handoff';
@@ -53,6 +53,11 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const running = session.status === 'running' || session.status === 'waiting_approval';
   const engineBadge = badgeFor(state.engine);
   const engineSwitch = canSwitch(state.engine);
+  // M2.7：轻引擎 401（账号 token 过期）时给一条可行动的恢复路径
+  const needsAuthRecovery =
+    state.engineKind === 'light' &&
+    Boolean(state.error) &&
+    /(401|登录|API Key|凭据|token)/i.test(state.error ?? '');
   // 逻辑会话按 activeSide 判断只读：完整侧链路断了就只读，绝不在轻引擎里重放
   const link = state.links.find(
     (item) =>
@@ -309,9 +314,19 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         </View>
 
         {Boolean(state.error) ? (
-          <Pressable onPress={() => store.clearError()}>
-            <Text style={styles.error}>{state.error}</Text>
-          </Pressable>
+          <View style={styles.errorRow}>
+            <Pressable style={styles.errorTextWrap} onPress={() => store.clearError()}>
+              <Text style={styles.error}>{state.error}</Text>
+            </Pressable>
+            {needsAuthRecovery ? (
+              <Btn
+                label="重新登录"
+                kind="ghost"
+                onPress={() => void store.recoverLightAuth()}
+                style={styles.errorBtn}
+              />
+            ) : null}
+          </View>
         ) : null}
 
         <ModelSheet />
@@ -390,4 +405,7 @@ const styles = StyleSheet.create({
   emptyChatText: { color: colors.textFaint, fontSize: 12.5 },
 
   error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.lg, paddingBottom: 6 },
+  errorRow: { flexDirection: 'row', alignItems: 'center', paddingRight: space.md },
+  errorTextWrap: { flex: 1, paddingVertical: 2 },
+  errorBtn: { height: 32, paddingHorizontal: 10 },
 });
