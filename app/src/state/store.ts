@@ -268,6 +268,8 @@ export interface AppState {
   links: ConversationLink[];
   /** 会话级引擎 pin：用户点「留在轻引擎」后，这一条会话不再自动切 */
   sessionPins: Record<string, 'light' | 'full'>;
+  /** U6 文件夹：逻辑会话 id → 文件夹名（UI cache，仅本机） */
+  sessionFolders: Record<string, string>;
   /** 全局自动路由（默认 true），持久化在 ui-cache */
   autoRoute: boolean;
   /** 完成的回合默认收起思考/工具过程（外观设置，持久化在 UI cache） */
@@ -432,6 +434,7 @@ export class Store {
     lightSetupOpen: false,
     links: [],
     sessionPins: {},
+    sessionFolders: {},
     autoRoute: true,
     collapseProcess: true,
   };
@@ -751,6 +754,16 @@ export class Store {
     this.persistUiCache();
   }
 
+  /** U6 文件夹：设置/清除会话的文件夹，仅存本机 UI cache */
+  setSessionFolder(logicalId: string, folder: string): void {
+    const name = folder.trim().slice(0, 24);
+    const folders = { ...this.state.sessionFolders };
+    if (name) folders[logicalId] = name;
+    else delete folders[logicalId];
+    this.patch({ sessionFolders: folders });
+    this.persistUiCache();
+  }
+
   /** 「留在轻引擎」按钮：这个会话以后不自动切；能力门仍会在下次缺能力时提示 */
   stayOnLight(_block?: Extract<Block, { kind: 'capability' }>): void {
     this.setSessionPin('light', this.state.currentId);
@@ -788,6 +801,7 @@ export class Store {
         prewarmTier: this.state.prewarmTier,
         links: this.state.links.slice(0, 40),
         sessionPins: this.state.sessionPins,
+        sessionFolders: this.state.sessionFolders,
         autoRoute: this.state.autoRoute,
         collapseProcess: this.state.collapseProcess,
       });
@@ -812,6 +826,7 @@ export class Store {
           prewarmTier?: PrewarmTier;
           links?: ConversationLink[];
           sessionPins?: Record<string, 'light' | 'full'>;
+          sessionFolders?: Record<string, string>;
           autoRoute?: boolean;
           collapseProcess?: boolean;
         };
@@ -834,6 +849,9 @@ export class Store {
         }
         if (parsed.sessionPins && typeof parsed.sessionPins === 'object') {
           nextPatch.sessionPins = parsed.sessionPins;
+        }
+        if (parsed.sessionFolders && typeof parsed.sessionFolders === 'object') {
+          nextPatch.sessionFolders = parsed.sessionFolders;
         }
         if (typeof parsed.autoRoute === 'boolean') {
           nextPatch.autoRoute = parsed.autoRoute;
@@ -2313,6 +2331,11 @@ export class Store {
           link.fullSessionId !== physicalId,
       );
       if (links.length !== this.state.links.length) this.patch({ links });
+      if (this.state.sessionFolders[logicalId]) {
+        const folders = { ...this.state.sessionFolders };
+        delete folders[logicalId];
+        this.patch({ sessionFolders: folders });
+      }
       this.baseDetails.delete(logicalId);
       await this.refreshSessions();
     } catch (err) {

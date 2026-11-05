@@ -123,6 +123,10 @@ export function SessionDrawer({
   const [mounted, setMounted] = React.useState(visible);
   const [q, setQ] = React.useState('');
   const [filter, setFilter] = React.useState<SessionFilter>('all');
+  /** U6 文件夹：筛选 + 给会话改名/移动 */
+  const [folderFilter, setFolderFilter] = React.useState<string | null>(null);
+  const [folderPromptFor, setFolderPromptFor] = React.useState<string | null>(null);
+  const [folderText, setFolderText] = React.useState('');
   const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
@@ -154,7 +158,9 @@ export function SessionDrawer({
   const matched = keyword
     ? sessions.filter((s) => `${s.title}${s.preview}`.toLowerCase().includes(keyword))
     : sessions;
+  const folderNames = Array.from(new Set(Object.values(state.sessionFolders))).sort();
   const filtered = matched.filter((s) => {
+    if (folderFilter && state.sessionFolders[s.id] !== folderFilter) return false;
     if (filter === 'running') return s.status === 'running' || s.status === 'waiting_approval';
     if (filter === 'waiting') return s.status === 'waiting_approval';
     if (filter === 'unread') return s.unread > 0;
@@ -215,6 +221,11 @@ export function SessionDrawer({
             {otherEngine ? <EngineTag engine={s.engine} /> : null}
             <SideTag link={link} />
             <StatusTag s={s} />
+            {state.sessionFolders[s.id] ? (
+              <View style={styles.folderTag}>
+                <Text style={styles.folderTagText}>{state.sessionFolders[s.id]}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </Pressable>
@@ -232,6 +243,15 @@ export function SessionDrawer({
               <Text style={styles.menuItem}>在轻引擎继续（摘要交接）</Text>
             </Pressable>
           ) : null}
+          <Pressable
+            onPress={() => {
+              setFolderPromptFor(s.id);
+              setFolderText(state.sessionFolders[s.id] ?? '');
+              setMenuFor(null);
+            }}
+          >
+            <Text style={styles.menuItem}>移到文件夹…</Text>
+          </Pressable>
           <Pressable onPress={() => { void store.setSessionPinned(s.id, true); setMenuFor(null); }}>
             <Text style={styles.menuItem}>置顶</Text>
           </Pressable>
@@ -356,6 +376,92 @@ export function SessionDrawer({
             );
           })}
         </View>
+
+        {folderNames.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.folderRow}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="全部文件夹"
+              onPress={() => setFolderFilter(null)}
+              style={[styles.filterPill, folderFilter === null && styles.filterPillActive]}
+            >
+              <Text style={[styles.filterText, folderFilter === null && styles.filterTextActive]}>
+                全部文件夹
+              </Text>
+            </Pressable>
+            {folderNames.map((name) => {
+              const active = folderFilter === name;
+              return (
+                <Pressable
+                  key={name}
+                  accessibilityRole="button"
+                  accessibilityLabel={`文件夹 ${name}`}
+                  onPress={() => setFolderFilter(active ? null : name)}
+                  style={[styles.filterPill, active && styles.filterPillActive]}
+                >
+                  <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                    {name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {folderPromptFor ? (
+          <View style={styles.folderEditorTop}>
+            <Text style={styles.folderLabel} numberOfLines={1}>
+              移到文件夹：{sessions.find((s) => s.id === folderPromptFor)?.title ?? '会话'}
+            </Text>
+            <View style={styles.renameRow}>
+              <TextInput
+                style={styles.renameInput}
+                value={folderText}
+                onChangeText={setFolderText}
+                placeholder="留空则移出文件夹"
+                placeholderTextColor={colors.textFaint}
+                autoFocus
+                accessibilityLabel="文件夹名"
+                onSubmitEditing={() => {
+                  store.setSessionFolder(folderPromptFor, folderText);
+                  setFolderPromptFor(null);
+                }}
+              />
+              <Pressable
+                hitSlop={10}
+                onPress={() => {
+                  store.setSessionFolder(folderPromptFor, folderText);
+                  setFolderPromptFor(null);
+                }}
+              >
+                <Text style={styles.menuItem}>保存</Text>
+              </Pressable>
+              <Pressable hitSlop={10} onPress={() => setFolderPromptFor(null)}>
+                <Text style={styles.menuItem}>取消</Text>
+              </Pressable>
+            </View>
+            {folderNames.length > 0 ? (
+              <View style={styles.folderQuick}>
+                {folderNames.map((name) => (
+                  <Pressable
+                    key={name}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      store.setSessionFolder(folderPromptFor, name);
+                      setFolderPromptFor(null);
+                    }}
+                  >
+                    <Text style={styles.folderQuickText}>{name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         <View style={styles.workspaceBlock}>
           <Text style={styles.workspaceLabel}>工作区</Text>
@@ -521,6 +627,44 @@ const styles = StyleSheet.create({
   filterPillActive: { backgroundColor: colors.blueSoft, borderColor: colors.blue },
   filterText: { color: colors.textDim, fontSize: 11.5 },
   filterTextActive: { color: colors.blue, fontWeight: '600' },
+  folderRow: { flexDirection: 'row', gap: 6, paddingHorizontal: space.md, paddingTop: 6 },
+  folderEditorTop: {
+    marginHorizontal: space.md,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    gap: 6,
+  },
+  folderEditor: {
+    marginLeft: 46,
+    marginBottom: 6,
+    padding: 8,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    gap: 6,
+  },
+  folderLabel: { color: colors.textFaint, fontSize: 11 },
+  folderQuick: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  folderQuickText: {
+    color: colors.blue,
+    fontSize: 11.5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.blueSoft,
+  },
+  folderTag: {
+    backgroundColor: colors.glassStrong,
+    borderRadius: radius.xs,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  folderTagText: { color: colors.textDim, fontSize: 10 },
   listScroll: { flex: 1 },
   list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
   workspaceBlock: {
