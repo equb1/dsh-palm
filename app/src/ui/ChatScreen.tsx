@@ -234,6 +234,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         turn={item}
         approvals={state.approvals}
         onToggleThinking={handleToggleThinking}
+        expandProcess={!state.collapseProcess}
         fallbackDurationMs={
           index === lastAssistantIndex && item.status !== 'streaming' && session.updatedAt > item.createdAt
             ? session.updatedAt - item.createdAt
@@ -241,7 +242,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         }
       />
     ),
-    [handleToggleThinking, lastAssistantIndex, session.updatedAt, state.approvals],
+    [handleToggleThinking, lastAssistantIndex, session.updatedAt, state.approvals, state.collapseProcess],
   );
 
   const renderEmpty = React.useCallback(

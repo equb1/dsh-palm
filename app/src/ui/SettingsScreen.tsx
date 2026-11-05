@@ -173,6 +173,14 @@ export function SettingsScreen(): React.ReactElement {
           tone: 'violet',
           onPress: () => flash('字号档在 U7 做；当前固定为官方标准字号。'),
         },
+        {
+          id: 'collapse',
+          title: '完成后收起过程',
+          value: state.collapseProcess ? '开' : '关',
+          icon: '▾',
+          tone: 'violet',
+          onPress: () => store.setCollapseProcess(!state.collapseProcess),
+        },
       ],
     },
     {

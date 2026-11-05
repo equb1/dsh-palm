@@ -285,13 +285,16 @@ const AssistantTurn = React.memo(function AssistantTurn({
   approvals,
   onToggleThinking,
   fallbackDurationMs,
+  expandProcess,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
   onToggleThinking?: () => void;
   fallbackDurationMs?: number;
+  /** 外观设置「完成后收起过程」关掉时，完成的回合默认展开思考/工具 */
+  expandProcess?: boolean;
 }): React.ReactElement {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(expandProcess === true);
   const completed = turn.status !== 'streaming';
   const visibleBlocks = React.useMemo(
     () => turn.blocks.filter((b) => !(b.kind === 'thinking' && !b.text.trim())),
@@ -385,11 +388,13 @@ function TurnViewImpl({
   approvals,
   onToggleThinking,
   fallbackDurationMs,
+  expandProcess,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
   onToggleThinking?: () => void;
   fallbackDurationMs?: number;
+  expandProcess?: boolean;
 }): React.ReactElement {
   if (turn.role === 'user') {
     const text = turn.blocks
@@ -411,6 +416,7 @@ function TurnViewImpl({
       approvals={approvals}
       onToggleThinking={onToggleThinking}
       fallbackDurationMs={fallbackDurationMs}
+      expandProcess={expandProcess}
     />
   );
 }

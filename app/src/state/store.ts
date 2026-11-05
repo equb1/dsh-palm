@@ -269,6 +269,8 @@ export interface AppState {
   sessionPins: Record<string, 'light' | 'full'>;
   /** 全局自动路由（默认 true），持久化在 ui-cache */
   autoRoute: boolean;
+  /** 完成的回合默认收起思考/工具过程（外观设置，持久化在 UI cache） */
+  collapseProcess: boolean;
 }
 
 /**
@@ -430,6 +432,7 @@ export class Store {
     links: [],
     sessionPins: {},
     autoRoute: true,
+    collapseProcess: true,
   };
 
   private readonly engineDeps: EngineDeps;
@@ -728,6 +731,12 @@ export class Store {
     this.persistUiCache();
   }
 
+  /** 外观：完成的回合是否默认收起过程（默认 true） */
+  setCollapseProcess(enabled: boolean): void {
+    this.patch({ collapseProcess: enabled });
+    this.persistUiCache();
+  }
+
   /**
    * 会话级 pin：'light' 表示以后不再自动切完整；null 清除。
    * TODO(1.4): 还没做 pin 的 UI 入口（按裁剪顺序最后补；规则与持久化已就绪）。
@@ -779,6 +788,7 @@ export class Store {
         links: this.state.links.slice(0, 40),
         sessionPins: this.state.sessionPins,
         autoRoute: this.state.autoRoute,
+        collapseProcess: this.state.collapseProcess,
       });
       void writeHostUiCache(payload);
     } catch {
@@ -802,6 +812,7 @@ export class Store {
           links?: ConversationLink[];
           sessionPins?: Record<string, 'light' | 'full'>;
           autoRoute?: boolean;
+          collapseProcess?: boolean;
         };
         if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
           nextPatch.sessions = parsed.sessions;
@@ -825,6 +836,9 @@ export class Store {
         }
         if (typeof parsed.autoRoute === 'boolean') {
           nextPatch.autoRoute = parsed.autoRoute;
+        }
+        if (typeof parsed.collapseProcess === 'boolean') {
+          nextPatch.collapseProcess = parsed.collapseProcess;
         }
         if (parsed.draftPresetId && !this.state.draftPresetId) {
           nextPatch.draftPresetId = parsed.draftPresetId;
