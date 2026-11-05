@@ -42,7 +42,7 @@ import {
 import { routeNeedsFullPermission, routeTurn, type RouteTurnResult } from './router';
 import { LocalEngineClient } from '../engine/light/localClient';
 import type { LightHost } from '../engine/light/host';
-import { applyProviderSave } from '../engine/light/config';
+import { applyProviderSave, withFreshAccountToken } from '../engine/light/config';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
 import { isAppActive, openUrl } from '../lib/platform';
 import {
@@ -2732,8 +2732,8 @@ export class Store {
       if (token) setup = { ...setup, authMode: 'account', authToken: token };
     }
     if (setup?.authMode === 'account') {
-      const token = setup.authToken ?? (await loadAccountToken());
-      setup = token ? { ...setup, authToken: token } : null;
+      // 每次重连都重读账号 token：浏览器 OAuth 重登后旧 token 已失效（M2.7）
+      setup = withFreshAccountToken(setup, await loadAccountToken());
     }
     if (!setup) {
       const token = await loadAccountToken();

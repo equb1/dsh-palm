@@ -324,6 +324,9 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 - App 打开返回的 `authorizeUrl`；用户在浏览器完成授权；引擎收到回调后换 token。
 - App 监听 `account.updated`；token 无 refresh，过期需重登。
 - 授权页由 App 在 `pendingSignIn` 时自动打开；也提供「重新打开授权页」。
+- 轻引擎账号模式每次连接都重读 `files/home/.dsh/.credentials.yaml` 的 token
+  （`withFreshAccountToken`），缓存里的旧 token 只在新 token 读不到时回退；浏览器 OAuth
+  重登后切回轻引擎即用新 token，不用重启 App。
 
 ### 7.3 模型提供商
 

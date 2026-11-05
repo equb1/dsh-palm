@@ -322,7 +322,7 @@ type AttachmentChipsProps = {
     并加了「重新登录」按钮（切完整引擎 + 打开设置；账号卡已登录时也有「重新登录」= 退出后重走 OAuth）。
     真机已验证：点 401 横幅「重新登录」→ 完整引擎 ready → 设置「模型与凭据」页，
     账号卡「已登录」且有 重新登录/退出登录/查看用量，底部「当前引擎 完整引擎（本机）」。
-    浏览器 OAuth 授权本身、以及重登后切回轻引擎自动用新 token 仍未走完。
+    浏览器 OAuth 授权本身仍未真机走完；重登后切回轻引擎自动用新 token 的代码路径已补（见下）。
     2026-11-05 新证据：**同一账号 token 在完整引擎可用**（bash python 三库返回版本），
     根因是旧保存配置缺 `authMode/authToken`，轻引擎以 `auth=none` 请求（PITFALLS I7）。
     已在 `resolveLightSetup` 自动补账号 token 并加 `[light] auth=…` 日志；真机日志已变
@@ -330,6 +330,10 @@ type AttachmentChipsProps = {
     发 “hi” 得到 `[light] ttft=982ms stream=1312ms model=deepseek-chat step=1 first=content tools=0
     usage=in:2152,out:42 run=…` 且 `done`，不再 401。
     恢复入口/重登按钮保留，浏览器 OAuth 重登流程仍未走完。
+    2026-11-06：新增 `withFreshAccountToken`（`engine/light/config.ts`），`resolveLightSetup`
+    在账号模式每次重连都重读 `loadAccountToken()`，缓存里的旧 token 只在新 token 读不到时回退；
+    浏览器 OAuth 重登后切回轻引擎不会再用旧 64 字符 token。单测 4 条；
+    真机仍受“需要用户完成一次授权”限制，未走完整闭环。
 
 
 ### M3 · 未开始

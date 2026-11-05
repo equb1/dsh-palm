@@ -145,3 +145,19 @@ export function applyProviderSave(setup: LightEngineSetup, draft: ProviderSaveDr
   }
   return normalizeSetup(next);
 }
+
+/**
+ * M2.7：账号模式每次连接都用最新的 dsh 账号 token。
+ *
+ * 浏览器 OAuth 重登后 credentials 文件会换新 token，但 store 里缓存的 lightSetup
+ * 还拿着旧 token；切回轻引擎时必须重读，否则会继续 401。读不到文件时回退旧值，
+ * 避免一次读取抖动把还能用的配置清空。
+ */
+export function withFreshAccountToken(
+  setup: LightEngineSetup,
+  token: string | null,
+): LightEngineSetup | null {
+  if (setup.authMode !== 'account') return setup;
+  const fresh = token?.trim() || setup.authToken?.trim();
+  return fresh ? { ...setup, authToken: fresh } : null;
+}

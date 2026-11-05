@@ -7,7 +7,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { applyProviderSave, type LightEngineSetup } from '../app/src/engine/light/config';
+import {
+  applyProviderSave,
+  withFreshAccountToken,
+  type LightEngineSetup,
+} from '../app/src/engine/light/config';
 
 const account: LightEngineSetup = {
   baseURL: 'https://api.deepseek.com/v1',
@@ -68,5 +72,27 @@ describe('light · providers.save', () => {
       }),
       /重新登录/,
     );
+  });
+});
+
+describe('light · 账号 token 刷新（M2.7）', () => {
+  it('切回轻引擎优先用最新 token，不被缓存里的旧 token 挡住', () => {
+    const next = withFreshAccountToken(account, ' brand-new-token ');
+    assert.equal(next?.authToken, 'brand-new-token');
+    assert.equal(next?.authMode, 'account');
+  });
+
+  it('读不到新 token 时回退旧值，不清空还能用的配置', () => {
+    assert.equal(withFreshAccountToken(account, null)?.authToken, 'account-token-64');
+    assert.equal(withFreshAccountToken(account, '   ')?.authToken, 'account-token-64');
+  });
+
+  it('账号模式且新旧 token 都没有 → null（交给配置页/完整模式）', () => {
+    assert.equal(withFreshAccountToken({ ...account, authToken: undefined }, null), null);
+  });
+
+  it('普通 API Key 渠道不碰 token', () => {
+    const apiKeySetup: LightEngineSetup = { baseURL: 'https://x/v1', apiKey: 'sk-1', model: 'm' };
+    assert.deepEqual(withFreshAccountToken(apiKeySetup, 't'), apiKeySetup);
   });
 });
