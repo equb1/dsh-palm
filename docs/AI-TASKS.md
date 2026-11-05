@@ -415,6 +415,10 @@ type AttachmentChipsProps = {
   - 仍缺：正文搜索（宿主没有接口）、完整引擎删除。
 - [ ] **E4** 沙箱只有 JS 层路径约束 → 文档别承诺安全边界
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
+  - 2026-11-06 第一步：新增 `scripts/device-regression.ts` + `npm run device:regression`：
+    adb 冷启动 → 会话抽屉（筛选/全部功能入口）→ 全部功能网格 → 文件浏览根目录 → 返回首页 →
+    设置首页 6 组；用 uiautomator 文本断言，失败自动截图。真机一次通过。
+  - 仍只有一条主路径；登录/审批/流式长会话/引擎启停/文件操作等还没进脚本。
 - [ ] **E6** 文档过时 → 每次改动同步四篇文档
 - [x] **E7** 无性能基准 → `scripts/bench-light.ts` 取 P50/P90
 - [x] **E8 签名/发布流程**：固定 keystore、release 签名、正式包/版本号；当前设备包与本机 keystore 不一致，只能靠 Metro 验证

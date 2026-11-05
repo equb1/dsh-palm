@@ -499,6 +499,7 @@ cd app/android && sh gradlew :app:assembleDebug
 
 - 无线 adb（mDNS 或 `adb connect phone:port`）；`adb forward` 断了要重建。
 - 自检/验收脚本：`scripts/device-m1-check.ts`、`scripts/device-real-check.ts`、
+  `scripts/device-regression.ts`（`npm run device:regression`，E5 关键路径）、
   `scripts/mock-model-server.ts`。
 - 首装约 15–25s（解压+引擎），之后秒开；通知权限已接（完成/审批/提问）。
 
