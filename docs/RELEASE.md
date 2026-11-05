@@ -28,6 +28,9 @@
 > 修复：manifest 加 `android:usesCleartextTraffic="true"`，并把首启超时调到 180s。
 > 修复后真机：`本机 dsh · 完整` 就绪；浏览器 OAuth 显示「授权已完成」，账号登录成功，
 > 模型 V4.1-Flash 可选。release 首装链路通过。
+> 2026-11-06 06:10 又修了 release 发消息报错：patch 脚本 CRLF + 完整引擎默认 provider
+> `deepseek-official` 不可路由（缺 `DEEPSEEK_API_KEY`）。现在 bridge 会自动切到
+> `deepseek-account`，真机完整引擎 `hi` 正常回复。
 
 ## 2. 预检（只读，随时可跑）
 
