@@ -441,8 +441,9 @@ type AttachmentChipsProps = {
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
   - 2026-11-06 第一步：新增 `scripts/device-regression.ts` + `npm run device:regression`：
     adb 冷启动 → 会话抽屉（筛选/全部功能入口）→ 全部功能网格 → 文件浏览根目录 → 返回首页 →
-    设置首页 6 组 → 全文搜索（输入 python 等结果）；用 uiautomator 文本断言，失败自动截图。
-    真机一次通过 7 步；键盘弹起时先 `hideKeyboard()` 再按返回，否则第一次返回只收键盘。
+    设置首页 6 组 → 文件操作菜单（docs/weekly.docx 的重命名/分享/删除）→ 设置二级页
+    （账号、引擎页）→ 全文搜索（输入 python 等结果）；用 uiautomator 文本断言，失败自动截图。
+    真机一次通过 9 步；键盘弹起时先 `hideKeyboard()` 再按返回，否则第一次返回只收键盘。
   - 仍只有一条主路径；登录/审批/流式长会话/引擎启停/文件操作等还没进脚本。
 - [ ] **E6** 文档过时 → 每次改动同步四篇文档
 - [x] **E7** 无性能基准 → `scripts/bench-light.ts` 取 P50/P90

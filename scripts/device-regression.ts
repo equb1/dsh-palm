@@ -65,6 +65,18 @@ async function main(): Promise<void> {
     screenshot('ui-regression-files');
   });
 
+  await step('文件操作菜单', async () => {
+    assert.ok(tryTap('docs'), '点不到 docs 目录');
+    assert.ok(await waitFor('weekly.docx', 10), 'docs 目录里没有 weekly.docx');
+    assert.ok(tryTap('weekly.docx 操作'), '点不到文件操作');
+    assert.ok(await waitFor('重命名', 10), '文件操作菜单没出现');
+    assert.ok(hasText('分享'), '菜单缺分享');
+    assert.ok(hasText('删除'), '菜单缺删除');
+    screenshot('ui-regression-file-menu');
+    assert.ok(tryTap('打开目录 工作区'), '回不到文件根目录');
+    assert.ok(await waitFor('uploads', 10), '文件根目录没出现');
+  });
+
   await step('返回首页', async () => {
     keyevent('BACK');
     assert.ok(await waitFor('需要我做点什么？', 10), '返回后没回首页');
@@ -80,6 +92,19 @@ async function main(): Promise<void> {
     assert.ok(hasText('外观'), '外观组缺失');
     assert.ok(hasText('通用'), '通用组缺失');
     screenshot('ui-regression-settings');
+  });
+
+  await step('设置二级页', async () => {
+    assert.ok(tryTap('DeepSeek 账号'), '点不到账号 tile');
+    assert.ok(await waitFor('手机号', 10), '账号二级页没出现');
+    keyevent('BACK');
+    assert.ok(await waitFor('搜索设置', 10), '账号页返回设置失败');
+    assert.ok(tryTap('完整引擎'), '点不到引擎 tile');
+    assert.ok(await waitFor('预热完整引擎', 10), '引擎页没出现');
+    assert.ok(hasText('已停止') || hasText('运行中') || hasText('启动中'), '引擎状态缺失');
+    screenshot('ui-regression-engine');
+    keyevent('BACK');
+    assert.ok(await waitFor('搜索设置', 10), '引擎页返回设置失败');
   });
 
   await step('全文搜索', async () => {
