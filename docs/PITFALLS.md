@@ -577,11 +577,13 @@
 - 现象：轻引擎发消息 1 秒内失败，日志
   `[light] error kind=unauthorized status=401 … Authentication Fails (governor)`；
   ChatScreen 横幅显示「登录或 API Key 无效/已过期（401）」。
-- 原因：轻引擎用账号 token 调模型时返回 401；**但 2026-11-05 复验发现同一账号 token 在完整引擎里是好的**
-  （完整引擎 bash `python3 -c "import docx, openpyxl, pptx"` 正常返回 `1.1.0 3.1.2 1.0.2`），
-  所以不是 token 过期，而是轻引擎账号模式的取 token/鉴权头（`x-dsh-auth-token`）与官方 API 不一致。
-- 处理：临时切完整模式重登或在 LightEngineScreen 配独立 API Key/兼容渠道；
-  2026-11-05 已加恢复入口：ChatScreen 401 横幅「重新登录」→ 切完整 + 打开设置。
-  **真正修复应在 `app/src/engine/light` 的账号 token 读取/请求头**，下一轮先查这里，不要只重登。
-- 验证：401 横幅与 logcat `[light] error kind=unauthorized` 均出现；完整引擎同 token 调用成功。
+- 原因（2026-11-05 已定位并修复）：旧版本保存的轻引擎账号配置可能只有 `baseURL/model`，没有
+  `authMode/authToken`；`resolveLightSetup` 只对 `authMode==='account'` 注入 token，结果轻引擎带着
+  **auth=none** 去请求，必然 401。日志证据：`[light] auth=none base=https://api.deepseek.com/v1`。
+  同一 token 在完整引擎和 PC curl（`x-dsh-auth-token` + `/v1/chat/completions`）都正常，所以不是 token 过期。
+- 处理：`resolveLightSetup` 在“没有 apiKey 也没有 authToken”时自动 `loadAccountToken()` 补齐；
+  并加脱敏日志 `[light] auth=account(n)/apiKey/none base=…`。恢复入口（401 横幅「重新登录」）保留，
+  但它不是根因修复。
+- 验证：修复后真机日志 `[light] auth=account(64) base=https://api.deepseek.com/v1`，ready=19ms；
+  typecheck + verify 209 pass。
 
