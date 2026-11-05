@@ -277,6 +277,12 @@ type AttachmentChipsProps = {
   - 抽屉合并轻/完整两套会话，行上标「轻/完整」；
   - 点另一引擎的会话先切引擎再打开（完整会话需要先起 proot）；
   - 复用 Handoff（摘要 + 最近 8 轮 + 工具结果）做“在另一引擎继续”，原会话只读。
+  - 2026-11-05 第一步：`state/sessionList.ts` 合并当前列表 + 另一个引擎缓存（当前优先、按 id 去重、
+    时间倒序）；`store.sessionCache` 随 `refreshSessions` 更新并进 UI cache，重启不丢；
+    抽屉用 `sessionRows()`，另一个引擎的行标「轻/完整」，点击 `openSessionRow` 先 `switchEngine`
+    再按原 id 打开；长按菜单只对当前引擎行开放。
+    单测 `test/session-list.test.ts` 3 条；typecheck + `npm run verify` 216 pass。
+    **真机待验**（写这段时设备正在跑 90 分钟 soak，不能重启 Metro）；Handoff 继续版仍未做。
 - [ ] **2.7 账号 token 生命周期**
   - 轻引擎 401 时明确提示“账号登录已过期，切完整模式重新登录”；
   - 提供重登入口；不要静默失败。

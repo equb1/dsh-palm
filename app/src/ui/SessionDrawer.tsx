@@ -2,6 +2,7 @@ import React from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { SessionSummary } from '../protocol';
+import type { SessionRow } from '../state/sessionList';
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
 import { EmptyState } from './components';
@@ -48,6 +49,18 @@ function SideTag({ link }: { link?: ConversationLink }): React.ReactElement | nu
         { backgroundColor: full ? colors.blueSoft : colors.glassStrong },
       ]}
     >
+      <Text style={[styles.tagText, { color: full ? colors.blue : colors.textFaint }]}>
+        {full ? '完整' : '轻'}
+      </Text>
+    </View>
+  );
+}
+
+/** 另一个引擎的会话：行上标「轻/完整」，点了先切引擎再打开 */
+function EngineTag({ engine }: { engine: SessionRow['engine'] }): React.ReactElement {
+  const full = engine === 'full';
+  return (
+    <View style={[styles.tag, { backgroundColor: full ? colors.blueSoft : colors.glassStrong }]}>
       <Text style={[styles.tagText, { color: full ? colors.blue : colors.textFaint }]}>
         {full ? '完整' : '轻'}
       </Text>
@@ -124,7 +137,8 @@ export function SessionDrawer({
   if (!mounted) return null;
 
   const presets = state.caps?.presets ?? [];
-  const sessions = state.sessions;
+  const currentEngine = state.engineKind === 'light' ? 'light' : 'full';
+  const sessions = store.sessionRows();
   const keyword = q.trim().toLowerCase();
   const filtered = keyword
     ? sessions.filter((s) => `${s.title}${s.preview}`.toLowerCase().includes(keyword))
@@ -136,15 +150,16 @@ export function SessionDrawer({
   );
   const older = filtered.filter((s) => !running.includes(s) && s.updatedAt < startOfToday());
 
-  const groups: Array<{ title: string; items: SessionSummary[] }> = [
+  const groups: Array<{ title: string; items: SessionRow[] }> = [
     { title: '运行中', items: running },
     { title: '今天', items: today },
     { title: '更早', items: older },
   ].filter((g) => g.items.length > 0);
 
-  const renderRow = (s: SessionSummary): React.ReactElement => {
+  const renderRow = (s: SessionRow): React.ReactElement => {
     const preset = presets.find((p) => p.id === s.presetId);
     const link = state.links.find((item) => item.id === s.id);
+    const otherEngine = s.engine !== currentEngine;
     return (
       <React.Fragment key={s.id}>
       <Pressable
@@ -153,12 +168,16 @@ export function SessionDrawer({
         accessibilityLabel={`会话：${s.title}`}
         onPress={() => {
           onClose();
-          void store.openSession(s.id);
+          void store.openSessionRow(s.id, s.engine);
         }}
-        onLongPress={() => {
-          setMenuFor(menuFor === s.id ? null : s.id);
-          setRenameText(s.title);
-        }}
+        onLongPress={
+          otherEngine
+            ? undefined
+            : () => {
+                setMenuFor(menuFor === s.id ? null : s.id);
+                setRenameText(s.title);
+              }
+        }
         style={({ pressed }) => [styles.row, s.id === state.currentId && styles.rowActive, pressed && styles.rowPressed]}
       >
         <View style={{ flex: 1, gap: 2 }}>
@@ -172,6 +191,7 @@ export function SessionDrawer({
             <Text style={styles.rowPreview} numberOfLines={1}>
               {s.preview || preset?.name || ''}
             </Text>
+            {otherEngine ? <EngineTag engine={s.engine} /> : null}
             <SideTag link={link} />
             <StatusTag s={s} />
           </View>

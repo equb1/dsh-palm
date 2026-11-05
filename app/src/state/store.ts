@@ -51,6 +51,7 @@ import {
   pickAttachments,
 } from '../lib/attachments/intake';
 import { classify, hashPrefix } from '../lib/attachments/classify';
+import { mergeSessionRows, type SessionEngine, type SessionRow } from './sessionList';
 import type { AttachmentEngine, AttachmentKind, IntakeSource } from '../lib/attachments/types';
 import {
   buildSeedText,
@@ -198,6 +199,8 @@ export interface AppState {
   pairCode: string;
   caps: Capabilities | null;
   sessions: SessionSummary[];
+  /** 两个引擎各自的最近会话缓存：统一下拉列表用（M2.6） */
+  sessionCache: Record<SessionEngine, SessionSummary[]>;
   currentId: string | null;
   detail: SessionDetail | null;
   approvals: Record<string, Approval>;
@@ -388,6 +391,7 @@ export class Store {
     pairCode: '',
     caps: hostAvailable ? LOCAL_DEFAULT_CAPS : null,
     sessions: [],
+    sessionCache: { light: [], full: [] },
     currentId: null,
     detail: null,
     approvals: {},
@@ -760,6 +764,10 @@ export class Store {
     try {
       const payload = JSON.stringify({
         sessions: this.state.sessions.slice(0, 60),
+        sessionCache: {
+          light: this.state.sessionCache.light.slice(0, 60),
+          full: this.state.sessionCache.full.slice(0, 60),
+        },
         draftPresetId: this.state.draftPresetId,
         defaultModel: this.state.defaultModel,
         prewarmTier: this.state.prewarmTier,
@@ -782,6 +790,7 @@ export class Store {
       if (rawCache) {
         const parsed = JSON.parse(rawCache) as {
           sessions?: SessionSummary[];
+          sessionCache?: Partial<Record<SessionEngine, SessionSummary[]>>;
           draftPresetId?: string | null;
           defaultModel?: ModelChoice;
           prewarmTier?: PrewarmTier;
@@ -791,6 +800,14 @@ export class Store {
         };
         if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
           nextPatch.sessions = parsed.sessions;
+        }
+        if (parsed.sessionCache && typeof parsed.sessionCache === 'object') {
+          const light = parsed.sessionCache.light;
+          const full = parsed.sessionCache.full;
+          nextPatch.sessionCache = {
+            light: Array.isArray(light) && this.state.sessionCache.light.length === 0 ? light : this.state.sessionCache.light,
+            full: Array.isArray(full) && this.state.sessionCache.full.length === 0 ? full : this.state.sessionCache.full,
+          };
         }
         if (Array.isArray(parsed.links) && this.state.links.length === 0) {
           nextPatch.links = parsed.links.filter(
@@ -1146,11 +1163,46 @@ export class Store {
           }
         }
       }
-      this.patch({ sessions: visible, ...(detail ? { detail } : {}) });
+      this.patch({
+        sessions: visible,
+        ...(this.sessionEngine()
+          ? { sessionCache: { ...this.state.sessionCache, [this.sessionEngine()!]: visible } }
+          : {}),
+        ...(detail ? { detail } : {}),
+      });
       this.persistUiCache();
     } catch (err) {
       this.fail(err);
     }
+  }
+
+  private sessionEngine(): SessionEngine | null {
+    if (this.state.engineKind === 'light') return 'light';
+    if (this.state.engineKind === 'remote') return 'full';
+    return null;
+  }
+
+  /** M2.6：当前引擎列表 + 另一个引擎的缓存，合并后给抽屉用 */
+  sessionRows(): SessionRow[] {
+    const current = this.sessionEngine() ?? 'light';
+    const other: SessionEngine = current === 'light' ? 'full' : 'light';
+    return mergeSessionRows(
+      this.state.sessions,
+      current,
+      this.state.sessionCache[other],
+      other,
+    );
+  }
+
+  /** M2.6：点另一个引擎的会话先切引擎（完整会起 proot），再按原 id 打开 */
+  async openSessionRow(id: string, engine: SessionEngine): Promise<void> {
+    if (!this.client) return;
+    const current = this.sessionEngine();
+    if (current !== engine) {
+      const ok = await this.switchEngine(engine);
+      if (!ok) return;
+    }
+    await this.openSession(id);
   }
 
   async openSession(id: string): Promise<void> {
