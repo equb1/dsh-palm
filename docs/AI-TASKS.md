@@ -216,7 +216,10 @@
   - 2026-11-06 前置：外观组加了「完成后收起过程」开关（`collapseProcess`，默认开，
     持久化在 UI cache）；关掉后完成的回合默认展开思考/工具过程，收起/展开仍可手动点。
     真机：关 → 打开已完成会话，摘要箭头朝上、过程展开；改回开（`146`、`147` 截图）。
-  - 主题仍是浅色固定；深色主题、动效 token 未做。
+  - 主题仍是浅色固定；深色主题未做。
+  - 2026-11-06 动效 token：新增 `ui/components/ScreenFade.tsx`，页面切换按 `motion.duration.base`
+    + `motion.easing.standard` 淡入（App 的 screen 统一包一层）；设置行按压用
+    `motion.duration.fast` 缩到 0.98 回弹（`SettingsTile`）。真机 10 步回归全绿，页面切换无布局跳动。
   - 2026-11-06 字号档：`AppState.chatFontScale`（1 / 1.15 / 1.3，UI cache 持久化）；设置「外观 →
     对话字号」点按循环 标准/大/特大；`MarkdownView` 按倍率重建模块样式（fontSize/lineHeight），
     `TurnView` 用户气泡同步缩放；真机同一会话标准 vs 特大对比（`166-font-standard.png`、

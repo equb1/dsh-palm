@@ -392,6 +392,7 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 | 工作区 `WorkspaceScreen` | 宿主工作区概览（root/会话数/运行中/锦囊数）+ 文件入口（轻引擎单工作区） |
 | 终端 `TerminalScreen` | `shell.run` 只读终端：pwd/ls/cat/grep，写操作被沙箱拒绝，15s/20k |
 | 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区；字号档 `chatFontScale` |
+| 动效 `ScreenFade` | 页面切换淡入（motion.duration.base/standard）；设置行按压 0.98（fast） |
 | 设置 `SettingsScreen` | 6 组首页（搜索 / SettingsTile / 右侧当前值），只做导航 |
 | 设置二级页 | `AccountScreen` / `CredentialsScreen` / `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen` |
 | 引擎 `EngineScreen` | 状态环、启停/重启、失败卡、保活、日志、高级启动命令 |

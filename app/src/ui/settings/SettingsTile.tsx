@@ -1,7 +1,7 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radius, space } from '../theme';
+import { colors, motion, radius, space } from '../theme';
 
 /**
  * 设置首页的分组行（U4）。
@@ -53,33 +53,46 @@ export function SettingsGroup({
 
 export function SettingsTile({ row }: { row: SettingsRow }): React.ReactElement {
   const tone = TONES[row.tone ?? 'slate'];
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const animate = (to: number): void => {
+    Animated.timing(scale, {
+      toValue: to,
+      duration: motion.duration.fast,
+      easing: motion.easing.standard,
+      useNativeDriver: true,
+    }).start();
+  };
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${row.title}${row.value ? `，${row.value}` : ''}`}
-      onPress={row.onPress}
-      style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
-    >
-      <View style={[styles.icon, { backgroundColor: tone.bg }]}>
-        <Text style={[styles.iconGlyph, { color: tone.fg }]}>{row.icon}</Text>
-      </View>
-      <View style={styles.titles}>
-        <Text style={styles.title} numberOfLines={1}>
-          {row.title}
-        </Text>
-        {row.hint ? (
-          <Text style={styles.hint} numberOfLines={1}>
-            {row.hint}
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${row.title}${row.value ? `，${row.value}` : ''}`}
+        onPress={row.onPress}
+        onPressIn={() => animate(0.98)}
+        onPressOut={() => animate(1)}
+        style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
+      >
+        <View style={[styles.icon, { backgroundColor: tone.bg }]}>
+          <Text style={[styles.iconGlyph, { color: tone.fg }]}>{row.icon}</Text>
+        </View>
+        <View style={styles.titles}>
+          <Text style={styles.title} numberOfLines={1}>
+            {row.title}
+          </Text>
+          {row.hint ? (
+            <Text style={styles.hint} numberOfLines={1}>
+              {row.hint}
+            </Text>
+          ) : null}
+        </View>
+        {row.value ? (
+          <Text style={[styles.value, row.warn && { color: colors.warn }]} numberOfLines={1}>
+            {row.value}
           </Text>
         ) : null}
-      </View>
-      {row.value ? (
-        <Text style={[styles.value, row.warn && { color: colors.warn }]} numberOfLines={1}>
-          {row.value}
-        </Text>
-      ) : null}
-      <Text style={styles.chevron}>›</Text>
-    </Pressable>
+        <Text style={styles.chevron}>›</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 

@@ -11,6 +11,7 @@ import { FilesScreen } from './src/ui/FilesScreen';
 import { SearchScreen } from './src/ui/SearchScreen';
 import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
 import { TerminalScreen } from './src/ui/TerminalScreen';
+import { ScreenFade } from './src/ui/components/ScreenFade';
 import { store, useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
@@ -139,12 +140,15 @@ export default function App(): React.ReactElement {
     );
 
   // web 上收成一列手机宽度，两边留黑，看起来才像手机
+  const screenKey = `${state.view}:${state.detail?.id ?? ''}:${state.connectModalOpen ? 'connect' : ''}`;
+  const shown = <ScreenFade trigger={screenKey}>{screen}</ScreenFade>;
+
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webOuter}>
         <StatusBar barStyle="dark-content" />
         <View style={styles.webFrame}>
-          {screen}
+          {shown}
           {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
         </View>
       </View>
@@ -154,7 +158,7 @@ export default function App(): React.ReactElement {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
-      {screen}
+      {shown}
       {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
     </View>
   );
