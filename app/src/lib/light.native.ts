@@ -46,6 +46,16 @@ export async function createLightHost(setup: LightEngineSetup): Promise<LightHos
   const dataBackend = new ExpoBackend({ api: createExpoFsApi(expoDataDir()) });
   const dataFs = await createDataSandbox(dataBackend);
   console.log('[light] workspace=' + mount.workspace.rootLabel + ' model=' + normalized.model);
+  console.log(
+    '[light] auth=' +
+      (normalized.authToken
+        ? 'account(' + normalized.authToken.length + ')'
+        : normalized.apiKey
+          ? 'apiKey'
+          : 'none') +
+      ' base=' +
+      normalized.baseURL,
+  );
   console.log('[light] ready=' + (Date.now() - startedAt) + 'ms image=' + (image ? image.model : 'none'));
 
   return new LightHost({

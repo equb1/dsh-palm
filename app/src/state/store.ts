@@ -2567,6 +2567,12 @@ export class Store {
    */
   private async resolveLightSetup(): Promise<LightEngineSetup | null> {
     let setup = this.lightSetup ?? (await this.engineDeps.loadLightConfig());
+    // 旧版本保存的账号配置可能没有 authMode/authToken：只要没有 API Key，就补账号 token，
+    // 否则会连上一个“无鉴权”的轻引擎，发消息必 401（2026-11-05 真机就是 auth=none）。
+    if (setup && !setup.apiKey && !setup.authToken) {
+      const token = await loadAccountToken();
+      if (token) setup = { ...setup, authMode: 'account', authToken: token };
+    }
     if (setup?.authMode === 'account') {
       const token = setup.authToken ?? (await loadAccountToken());
       setup = token ? { ...setup, authToken: token } : null;
