@@ -9,24 +9,16 @@ import {
   hostAvailable,
   hostBatteryWhitelisted,
   hostLogs,
-  openHostBatterySettings,
-  setHostSafeModeNext,
 } from '../lib/host';
 import { ProvidersCard } from './ProvidersCard';
 import { JustBashProbe } from './JustBashProbe';
 import { LightEngineScreen } from './LightEngineScreen';
+import { EngineScreen } from './EngineScreen';
 import { WebSurface } from './WebSurface';
 import { SettingsGroup, type SettingsRow } from './settings/SettingsTile';
 import { loadAccountPhone, saveAccountPhone } from '../lib/accountPhone';
 
 const REF = 'DEEPSEEK_API_KEY';
-
-/** 预热档位：触发式默认 / 智能预热（充电 + WiFi）/ 常备（高级） */
-const PREWARM_TIERS = [
-  { id: 'trigger' as const, label: '触发式' },
-  { id: 'smart' as const, label: '智能预热' },
-  { id: 'always' as const, label: '常备' },
-];
 
 /** 从宿主日志里捞本机引擎的 token（`dsh web: http://127.0.0.1:8787/?token=…`） */
 async function resolveEngineToken(): Promise<string | null> {
@@ -75,6 +67,8 @@ export function SettingsScreen(): React.ReactElement {
   const [batteryOk, setBatteryOk] = React.useState<boolean | null>(null);
   /** 实验室：L0（WebView 官方前端）/ L1（just-bash 前置）两个 spike */
   const [lab, setLab] = React.useState<'none' | 'web' | 'bash' | 'light'>('none');
+  /** U5：独立引擎页 */
+  const [engineOpen, setEngineOpen] = React.useState(false);
   const [webUrl, setWebUrl] = React.useState<string | null>(null);
   const [labNote, setLabNote] = React.useState<string | null>(null);
   const [phone, setPhone] = React.useState('');
@@ -221,7 +215,7 @@ export function SettingsScreen(): React.ReactElement {
           icon: '全',
           tone: 'green',
           warn: host?.engine === 'failed' || host?.bridge === 'failed',
-          onPress: () => scrollToSection('engine'),
+          onPress: () => setEngineOpen(true),
         },
       ],
     },
@@ -266,7 +260,7 @@ export function SettingsScreen(): React.ReactElement {
           icon: '电',
           tone: 'amber',
           warn: batteryOk === false,
-          onPress: () => scrollToSection('engine'),
+          onPress: () => setEngineOpen(true),
         },
       ],
     },
@@ -280,7 +274,7 @@ export function SettingsScreen(): React.ReactElement {
           value: hostLabel,
           icon: '引',
           tone: 'slate',
-          onPress: () => scrollToSection('engine'),
+          onPress: () => setEngineOpen(true),
         },
         {
           id: 'host-info',
@@ -355,6 +349,9 @@ export function SettingsScreen(): React.ReactElement {
     setLab('web');
   };
 
+  if (engineOpen) {
+    return <EngineScreen onClose={() => setEngineOpen(false)} />;
+  }
   if (lab === 'bash') {
     return <JustBashProbe onClose={() => setLab('none')} />;
   }
@@ -600,178 +597,6 @@ export function SettingsScreen(): React.ReactElement {
             }}
           >
             <ProvidersCard />
-          </View>
-
-          <View
-            style={styles.card}
-            onLayout={(event) => {
-              sectionY.current.engine = event.nativeEvent.layout.y;
-            }}
-          >
-            <View style={styles.rowTop}>
-              <Text style={styles.cardTitle}>本机引擎</Text>
-              <Pill>
-                <Text style={[styles.status, hostReady && { color: colors.ok }]}>{hostLabel}</Text>
-              </Pill>
-            </View>
-            <Text style={styles.hint}>
-              默认轻引擎。完整引擎只在手动切换或预热档位允许时启动；这里的「预热」只 startHost，不会连接。
-            </Text>
-
-            {hostAvailable ? (
-              <>
-                <View style={styles.kv}>
-                  <Text style={styles.k}>当前引擎</Text>
-                  <Text style={styles.v}>{engineLabel}</Text>
-                </View>
-                <View style={styles.kv}>
-                  <Text style={styles.k}>预热档位</Text>
-                  <Text style={styles.v}>
-                    {PREWARM_TIERS.find((tier) => tier.id === state.prewarmTier)?.label}
-                  </Text>
-                </View>
-                <Text style={styles.hint}>
-                  触发式（默认）= 只在你点顶栏「完整」时启动；智能 = 充电且 WiFi 时后台预热；常备 = 开机就预热（更耗电）。
-                </Text>
-                <View style={styles.actions}>
-                  {PREWARM_TIERS.map((tier) => (
-                    <Btn
-                      key={tier.id}
-                      label={tier.label}
-                      kind={state.prewarmTier === tier.id ? 'primary' : 'ghost'}
-                      onPress={() => store.setPrewarmTier(tier.id)}
-                      style={{ flex: 1 }}
-                    />
-                  ))}
-                </View>
-
-                <View style={styles.kv}>
-                  <Text style={styles.k}>引擎</Text>
-                  <Text style={styles.v}>{state.host?.engine ?? 'stopped'}</Text>
-                </View>
-                <View style={styles.kv}>
-                  <Text style={styles.k}>桥</Text>
-                  <Text style={styles.v}>
-                    {(state.host?.bridge ?? 'stopped') + ' · :' + String(state.host?.port ?? 8788)}
-                  </Text>
-                </View>
-                {host?.phase ? (
-                  <Text style={styles.hint}>
-                    {host.phase}
-                    {(host.progress ?? 0) > 0 && (host.progress ?? 0) < 100 ? ` · ${host.progress}%` : ''}
-                  </Text>
-                ) : null}
-                {state.host?.error ? <Text style={styles.error}>{state.host.error}</Text> : null}
-
-                <View style={styles.actions}>
-                  <Btn
-                    label="预热完整引擎"
-                    onPress={() => void store.warmLocalHost()}
-                    disabled={engine.mode !== 'light' || engine.prootWarm}
-                    style={{ flex: 1 }}
-                  />
-                  <Btn
-                    label="停止 proot"
-                    kind="ghost"
-                    onPress={() => void store.reclaimProot('manual')}
-                    disabled={!engine.prootWarm}
-                    style={{ flex: 1 }}
-                  />
-                </View>
-                <Btn
-                  label={engine.mode === 'full' ? '切回轻引擎' : '切到完整引擎'}
-                  onPress={() => void store.switchEngine(engine.mode === 'full' ? 'light' : 'full')}
-                />
-
-                <Text style={styles.hint}>启动命令（留空用默认：proot 里的 dsh + node 桥）</Text>
-                <TextInput
-                  style={styles.input}
-                  value={state.hostEngineCmd}
-                  onChangeText={(t) => store.setHostCommands(t, state.hostBridgeCmd)}
-                  placeholder="引擎命令，例如 sh /data/local/tmp/engine.sh"
-                  placeholderTextColor={colors.textFaint}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  accessibilityLabel="引擎启动命令"
-                />
-                <TextInput
-                  style={styles.input}
-                  value={state.hostBridgeCmd}
-                  onChangeText={(t) => store.setHostCommands(state.hostEngineCmd, t)}
-                  placeholder="桥命令，可用 {token} 和 {port} 占位符"
-                  placeholderTextColor={colors.textFaint}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  accessibilityLabel="桥启动命令"
-                />
-                <View style={styles.kv}>
-                  <Text style={styles.k}>后台保活</Text>
-                  <Text style={[styles.v, batteryOk === false && { color: colors.warn }]}>
-                    {batteryOk == null ? '未知' : batteryOk ? '已放行' : '受限制'}
-                  </Text>
-                </View>
-
-                <View style={styles.actions}>
-                  <Btn
-                    label="刷新状态"
-                    kind="ghost"
-                    onPress={() => void store.refreshHost()}
-                    style={{ flex: 1 }}
-                  />
-                  <Btn
-                    label="看日志"
-                    kind="ghost"
-                    onPress={() => void store.refreshHostLogs()}
-                    style={{ flex: 1 }}
-                  />
-                </View>
-                <View style={styles.actions}>
-                  <Btn
-                    label="导出日志"
-                    kind="ghost"
-                    onPress={() => {
-                      void (async () => {
-                        const lines = await hostLogs();
-                        await Share.share({
-                          message: lines.slice(-300).join('\n') || '（暂无日志）',
-                        }).catch(() => undefined);
-                      })();
-                    }}
-                    style={{ flex: 1 }}
-                  />
-                  <Btn
-                    label="保活设置"
-                    kind="ghost"
-                    onPress={() => void openHostBatterySettings()}
-                    style={{ flex: 1 }}
-                  />
-                </View>
-                <Btn
-                  label="安全模式重启（重置 profiles）"
-                  kind="ghost"
-                  onPress={() => {
-                    void (async () => {
-                      await setHostSafeModeNext(true);
-                      // 回收旧宿主，再重新切完整引擎（失败会自动回轻引擎）
-                      await store.reclaimProot('manual');
-                      await store.switchEngine('full');
-                    })();
-                  }}
-                />
-
-                {state.hostLogs.length > 0 ? (
-                  <View style={styles.logBox}>
-                    {state.hostLogs.slice(-14).map((line, i) => (
-                      <Text key={i} style={styles.logLine} numberOfLines={2}>
-                        {line}
-                      </Text>
-                    ))}
-                  </View>
-                ) : null}
-              </>
-            ) : (
-              <Text style={styles.hint}>当前是 Expo Go / web，起不了本机引擎；需要装原生构建的 APK。</Text>
-            )}
           </View>
 
           <View

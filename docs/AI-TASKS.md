@@ -167,11 +167,17 @@
     「轻引擎渠道」直接进 LightEngineScreen。
   - 外观（主题/字号）与通用（通知）目前只有只读当前值，点按提示“未接后端”；外观的深色/字号档
     属于 U7。二级页（每行独立成页）还没做，详细控制仍在同一页的卡片里。
-  - 真机：首页 6 组、搜索 `deepseek` 过滤出账号/模型提供商/轻引擎渠道、点「完整引擎」tile
-    跳到本机引擎卡、点「轻引擎渠道」进 M1 实验室轻引擎页（`127-settings-home.png`、
-    `128-settings-search.png`、`129-settings-engine-jump.png`、`130-settings-light-engine.png`）；
-    typecheck + verify 全绿。
-- [ ] **U5 引擎页**：状态环、启动/停止/重启、失败卡（重试/安全模式/日志）
+  - 真机：首页 6 组、搜索 `deepseek` 过滤出账号/模型提供商/轻引擎渠道、点「完整引擎」进引擎页、
+    点「轻引擎渠道」进 M1 实验室轻引擎页（`127-settings-home.png`、`128-settings-search.png`、
+    `129-settings-engine-jump.png`、`130-settings-light-engine.png`）；typecheck + verify 全绿。
+- [x] **U5 引擎页**：状态环、启动/停止/重启、失败卡（重试/安全模式/日志）
+  - 2026-11-06：新增 `app/src/ui/EngineScreen.tsx`，设置首页「本机引擎 / 完整引擎 / 后台保活」
+    三个 tile 都进这一页。状态环（已停止/启动中/运行中/出错 + 进度）+ 引擎/桥/当前/保活元信息；
+    预热完整引擎 → 运行中后主按钮变「切到完整引擎」；停止 proot、重新启动、安全模式重启；
+    失败卡（重试/安全模式/看日志）；日志刷新/导出；预热档位；高级启动命令。
+    真机：预热约 20s 后 `engine=ready bridge=ready :8788`、状态环变绿，停止后回 stopped
+    （`131-engine-screen.png`、`132-engine-running.png`、`133-engine-stopped.png`）。
+    失败卡未真机触发（需要坏命令/坏 rootfs），代码路径已接。
 - [ ] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
 - [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
