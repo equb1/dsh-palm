@@ -400,9 +400,12 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 
 ### 8.7 未做
 
-浅色主题、字号档、动效 token、全部功能页、独立引擎页、文件面板、终端、工作区、
+浅色主题、字号档、动效 token、全部功能页、独立引擎页、**U8 的全功能文件面板/终端/工作区**、
 小组件/悬浮球、通知直达会话。对应任务见 [AI-TASKS](AI-TASKS.md) 的 UI 工作流；其中**不冲突、可立即并行**的 UI 项单独列在
 「可并行 UI 项」，附文件禁区与组件契约。
+
+> 注：1.5 的「生成文件」弹层（`GeneratedFilesSheet`，只列本会话工具生成的文件、可打开）已落地，
+> 不等于这里的 U8 全功能文件面板（全工作区浏览/上传管理/重命名/搜索/分享）。
 
 ## 9. 构建与验证
 
@@ -428,10 +431,17 @@ cd app/android && sh gradlew :app:assembleDebug
 
 ### 9.3 打包要点
 
-- `rootfs.bin` / `payload.bin` 走 release（`scripts/setup-android.sh` 校验 sha256）；
+- `rootfs.bin` / `payload.bin` / `python.bin` 走 release（`scripts/setup-android.sh` 校验 sha256）；
+  三个都在 `runtime-v1` release，`python.bin` sha256 `2cc882ce91212fc997c67befbef34dc7ad24d218e856e24f206b6788d13c40c5`；
 - `python.bin` 也是制品（gitignore；36.8MB）；改 `scripts/build-python-layer.sh` 后重打，`RuntimeInstaller.PYTHON_LAYER_VERSION` 同步 +1；
 - `jniLibs/arm64-v8a/{libproot.so,libprootloader.so}` 来自 Termux（`scripts/fetch-proot.sh`）；
 - `debug.keystore` 需生成一次（gitignore）；
+- **release 签名**：`scripts/gen-release-keystore.ps1` 生成 `app/android/keystore/release.jks` 与
+  `app/android/keystore.properties`（都 gitignore）；`app/build.gradle` 检测到 properties 就用 release key，
+  否则退回 debug key（只能本地试装）。`assembleRelease` 后可用
+  `$ANDROID_HOME/build-tools/37.0.0/apksigner.bat verify --print-certs app-release.apk` 核对；
+  版本号可用 `DSH_PALM_VERSION_CODE` / `DSH_PALM_VERSION_NAME` 覆盖。
+  **keystore + 密码必须备份**，丢失后不能覆盖升级。
 - 桥/补丁打进 APK assets，运行时同步进 rootfs（`ensurePatch`），改桥不用重打 payload。
 
 ### 9.4 真机

@@ -40,7 +40,8 @@
 - 轻引擎工具历史已清洗（2026-11-05）：中断/停止后 assistant `tool_calls` 悬空会导致下一次
   请求 400，现于发请求前统一补齐 `[已停止] 未执行` 并丢弃孤立 tool 消息（`light/history.ts`）。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
-- 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
+- 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎附件只给路径，不解析图片/PDF；
+  轻引擎无文档编辑、无 pptx（复杂/编辑/pptx 走完整引擎）。
 
 ## 2. 任务清单
 
@@ -280,7 +281,14 @@ type AttachmentChipsProps = {
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
 - [ ] **E6** 文档过时 → 每次改动同步四篇文档
 - [x] **E7** 无性能基准 → `scripts/bench-light.ts` 取 P50/P90
-- [ ] **E8 签名/发布流程**：固定 keystore、release 签名、正式包/版本号；当前设备包与本机 keystore 不一致，只能靠 Metro 验证
+- [x] **E8 签名/发布流程**：固定 keystore、release 签名、正式包/版本号；当前设备包与本机 keystore 不一致，只能靠 Metro 验证
+  - 2026-11-05：`python.bin` 已上传 `runtime-v1` release（sha256 `2cc882ce…`），`setup-android.sh` 会校验；
+    `scripts/gen-release-keystore.ps1` 生成专属 release keystore + `app/android/keystore.properties`（都 gitignore），
+    `assembleRelease` 走 release 签名（V2，`CN=DSH Palm`，SHA-256 `50de0609…`），版本号可用
+    `DSH_PALM_VERSION_CODE/NAME` 覆盖。产物 `app-release.apk` 243.5MB，含 rootfs/payload/python.bin/index.android.bundle。
+  - 仍需：keystore + 密码备份（丢了不能覆盖升级）；设备上仍是 debug 包，release 包覆盖装需先统一签名/卸载；
+    正式发版前在干净设备走一次首装 + 升级。
+
 
 ## 4. 待决事项
 

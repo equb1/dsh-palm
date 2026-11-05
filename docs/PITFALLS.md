@@ -526,8 +526,10 @@
 - 处理：
   1. **不要直接卸载**（会丢会话/登录）；优先用 Metro 加载 JS 改动：`adb reverse tcp:8081 tcp:8081` + 起 Metro + 重启 App；
   2. 需要整包更新时：`run-as` 备份 `files` 与 `shared_prefs` → 卸载 → 装新包 → 还原数据；
-  3. 长期：固定一台机器/一个 keystore 构建，或把 keystore 纳入发布流程（勿进 git）。
+  3. 长期：固定一台机器/一个 keystore 构建；release 已接专属 keystore（`scripts/gen-release-keystore.ps1`，
+     产物 `keystore/release.jks` + `keystore.properties`，都 gitignore），见 TECHNICAL §9.3。
 - 验证：`dumpsys package` 的 `lastUpdateTime` 更新；App 数据仍在。
+- 注意：debug 包与 release 包仍是两套签名；release 覆盖 debug 包会失败，需按上面 2 或统一签名。
 
 ### I3. 中断后继续问，400 `tool_calls must be followed by tool messages`
 
