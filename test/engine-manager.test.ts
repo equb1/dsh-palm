@@ -40,7 +40,7 @@ test('初始状态：轻引擎默认、触发式预热、不预热 proot', () =>
   assert.equal(initialEngineState.busy, false);
   assert.equal(initialEngineState.attemptId, 0);
   assert.equal(IDLE_RECLAIM_MS, 10 * 60_000);
-  assert.equal(PROOT_BOOT_TIMEOUT_MS, 90_000);
+  assert.equal(PROOT_BOOT_TIMEOUT_MS, 180_000);
 });
 
 test('BOOT 只发 connect-light：永远不 warm-host / connect-proot（回归锁）', () => {
