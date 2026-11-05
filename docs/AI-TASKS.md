@@ -264,8 +264,12 @@ type AttachmentChipsProps = {
 - [ ] **2.3 插件徽章**（矩阵已有，App 入口 + 搜索 + 判定理由）
 - [ ] **2.4 轻引擎附件引用**（图片视觉/路径消费；与 1.3 原生收件不重复）
 - [ ] **2.5 轻引擎多提供商 + 账号模型目录**
-  - 轻引擎实现 `providers.list/save/discover`，设置页复用 ProvidersCard；
-  - 账号模式拉 `/models`，让 V4.1-Flash / V4-Pro 可选（现在只有 `deepseek-chat`）。
+  - [ ] 轻引擎实现 `providers.list/save/discover`，设置页复用 ProvidersCard；
+  - [x] 账号模式拉 `/models`（2026-11-05）：`engine/light/catalog.ts` 用账号 token GET
+    `{baseURL}/models`，`models.list` 返回目录并缓存 5 分钟；普通 API Key 渠道仍只报当前模型。
+    真机：模型面板显示 `deepseek-chat`、`DeepSeek-V4.1-Flash`、`DeepSeek-V4-Pro`；
+    选 V4.1-Flash 后发 `hi`，日志 `[light] … model=deepseek-flash` 三步均命中，run done。
+    单测 `test/light-catalog.test.ts`（URL/解析/去重/失败回退）；`npm run verify` 213 pass。
 - [ ] **2.6 统一会话列表 + 跨引擎继续**
   - 抽屉合并轻/完整两套会话，行上标「轻/完整」；
   - 点另一引擎的会话先切引擎再打开（完整会话需要先起 proot）；

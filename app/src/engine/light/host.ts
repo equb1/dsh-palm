@@ -11,6 +11,7 @@
  */
 import { EngineProtocolError } from '../../lib/client';
 import { AttachmentPathError, promptWithFiles } from '../../lib/attachments/prompt';
+import { listProviderModels } from './catalog';
 import {
   PROTOCOL_VERSION,
   type Approval,
@@ -23,6 +24,7 @@ import {
   type FileRef,
   type HandoffBlockedCall,
   type Method,
+  type ModelOption,
   type PermissionOption,
   type Preset,
   type RequestParams,
@@ -141,6 +143,7 @@ export class LightHost {
   private readonly caps: Capabilities;
   private readonly workspace: Workspace;
   private readyPromise: Promise<void> | null = null;
+  private catalogCache: { at: number; models: ModelOption[] } | null = null;
   private seq = 0;
   private closed = false;
 
@@ -498,18 +501,20 @@ export class LightHost {
         await this.save(session);
         return { ok: true as const };
       },
-      'models.list': async () => ({
-        models: [
-          {
-            provider: this.providerId(),
-            providerName: this.options.model.providerName ?? '轻引擎',
-            id: this.options.model.model,
-            name: this.options.model.model,
-            description: '轻引擎当前使用的模型',
-          },
-        ],
-        default: this.modelChoice(),
-      }),
+      'models.list': async () => {
+        const currentModel: ModelOption = {
+          provider: this.providerId(),
+          providerName: this.options.model.providerName ?? '轻引擎',
+          id: this.options.model.model,
+          name: this.options.model.model,
+          description: '轻引擎当前使用的模型',
+        };
+        const catalog = await this.modelCatalog();
+        const models = catalog.length > 0 ? catalog.slice() : [currentModel];
+        // 旧配置的 deepseek-chat 不在账号目录里，仍然让用户能选回当前值
+        if (!models.some((item) => item.id === currentModel.id)) models.unshift(currentModel);
+        return { models, default: this.modelChoice() };
+      },
       'permissions.list': async () => ({ options: PERMISSIONS, default: 'workspace-write' }),
       'presets.list': async () => ({ presets: PRESETS }),
       'workspaces.list': async () => ({ workspaces: [this.workspace] }),
@@ -805,6 +810,30 @@ export class LightHost {
 
   private providerId(): string {
     return (this.options.model.providerName ?? 'light').toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'light';
+  }
+
+  /**
+   * 账号模式拉一次 `/models` 并缓存 5 分钟；普通 API Key 渠道返回空数组，
+   * 调用方回退到当前模型。网络/解析失败也返回空，不阻塞会话。
+   */
+  private async modelCatalog(): Promise<ModelOption[]> {
+    const config = this.options.model;
+    if (!config.authToken) return [];
+    const now = this.now();
+    if (this.catalogCache && now - this.catalogCache.at < 5 * 60_000) return this.catalogCache.models;
+    const catalog = await listProviderModels({
+      baseURL: config.baseURL,
+      authToken: config.authToken,
+    });
+    const models: ModelOption[] = catalog.map((item) => ({
+      provider: this.providerId(),
+      providerName: config.providerName ?? 'DeepSeek 账号',
+      id: item.id,
+      name: item.name ?? item.id,
+      description: 'DeepSeek 账号模型目录',
+    }));
+    this.catalogCache = { at: now, models };
+    return models;
   }
 
   private modelChoice(): { provider: string; model: string } {
