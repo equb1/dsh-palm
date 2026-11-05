@@ -212,8 +212,8 @@ export interface AppState {
   busy: boolean;
   /** 首页输入框当前选中的锦囊 */
   draftPresetId: string | null;
-  /** 当前页面：主界面 / 设置 */
-  view: 'main' | 'settings';
+  /** 当前页面：主界面 / 设置 / 全部功能 */
+  view: 'main' | 'settings' | 'features';
   /** 模型凭据状态（ref -> 是否已配置） */
   credentials: Record<string, { configured: boolean; writable: boolean }>;
   /** 宿主可用的模型 */
@@ -1421,6 +1421,15 @@ export class Store {
   async openSettings(): Promise<void> {
     this.patch({ view: 'settings', error: null });
     await this.refreshCredentials();
+  }
+
+  /** U6：全部功能页（卡片网格） */
+  openFeatures(): void {
+    this.patch({ view: 'features', error: null });
+  }
+
+  closeFeatures(): void {
+    this.patch({ view: 'main' });
   }
 
   /**

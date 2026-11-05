@@ -6,6 +6,7 @@ import { ConnectScreen } from './src/ui/ConnectScreen';
 import { HomeScreen } from './src/ui/HomeScreen';
 import { LaunchOverlay } from './src/ui/LaunchOverlay';
 import { SettingsScreen } from './src/ui/SettingsScreen';
+import { FeaturesScreen } from './src/ui/FeaturesScreen';
 import { store, useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
@@ -69,6 +70,11 @@ export default function App(): React.ReactElement {
         store.closeSettings();
         return true;
       }
+      // 1b. 全部功能页：返回首页
+      if (state.view === 'features') {
+        store.closeFeatures();
+        return true;
+      }
       // 2. 如果打开了连接面板，关闭连接面板返回首页
       if (state.connectModalOpen) {
         store.closeConnectModal();
@@ -88,7 +94,9 @@ export default function App(): React.ReactElement {
   }, [state.view, state.connectModalOpen, state.detail]);
 
   const screen =
-    state.view === 'settings' ? (
+    state.view === 'features' ? (
+      <FeaturesScreen />
+    ) : state.view === 'settings' ? (
       <SettingsScreen />
     ) : state.connectModalOpen || (!hostAvailable && !state.caps) ? (
       <ConnectScreen />

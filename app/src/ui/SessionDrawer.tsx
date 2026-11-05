@@ -279,7 +279,18 @@ export function SessionDrawer({
       >
         <View style={styles.panelHeader}>
           <Text style={styles.panelTitle}>会话</Text>
-          <IconButton glyph="✕" label="关闭" onPress={onClose} size={32} />
+          <View style={styles.panelHeaderActions}>
+            <IconButton
+              glyph="⊞"
+              label="全部功能"
+              size={32}
+              onPress={() => {
+                onClose();
+                store.openFeatures();
+              }}
+            />
+            <IconButton glyph="✕" label="关闭" onPress={onClose} size={32} />
+          </View>
         </View>
 
         <View style={[styles.searchWrap, searchFocused && styles.searchWrapFocused]}>
@@ -443,6 +454,7 @@ const styles = StyleSheet.create({
     paddingBottom: space.sm,
   },
   panelTitle: { color: colors.text, fontSize: 16, lineHeight: 28, fontWeight: '500', letterSpacing: 0.2 },
+  panelHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
