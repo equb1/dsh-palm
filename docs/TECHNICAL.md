@@ -403,13 +403,14 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 （`Card` / `Chip` / `IconButton` / `Skeleton` / `EmptyState` / `SectionHeader`）与 `SmoothKeyboardAvoid.tsx`；
 Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向滚动）、表格、链接（http/https/mailto/dshpalm）、图片、流式光标（`streaming` 属性，待接线）。
 代码高亮在 `syntax.ts`（js/ts、py、sh、json、html；未知语言回退纯文本）。
-聊天渲染在 `app/src/ui/chat/*`（`TurnView` / `ApprovalCard` / `CapabilityCard`），`ChatScreen.tsx` 只负责顶栏、滚动和 Composer 组装。
+聊天渲染在 `app/src/ui/chat/*`（`TurnView` / `ApprovalCard` / `CapabilityCard` / `ChatCard`），`ChatScreen.tsx` 只负责顶栏、滚动和 Composer 组装。
 生成文件面板在 `GeneratedFilesSheet.tsx`（`lib/generatedFiles.ts` 解析工具结果 + `fileActions.native.ts`
 用 expo File 的 `canPreview/preview` 打开；分享暂未做）。
 
 ### 8.3 聊天页：现状与目标
 
-**现状**：回合按 `role` 分气泡/全宽；思考与工具是行；审批/提问是卡片；
+**现状**：回合按 `role` 分气泡/全宽；思考与工具是行；审批/提问/能力门共用
+`ui/chat/ChatCard.tsx`（20 圆角、16 内边距、tonal hairline；主色只给主按钮）；
 输入区已按 dsh-go 几何：单行 56 / 28 圆角、左右 40 圆键，权限与锦囊在输入框上方，
 模型在顶栏；完成回合有复制/分享，回到底部键在生成中做脉冲描边。
 顶栏已浮动（`position:absolute` + `top:topInset`，0.86/0.97 半透明白 + 滚动后描边/投影），
@@ -428,7 +429,7 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 - `ChatScreen` 使用 `FlatList` + 稳定 key + footer blankSpace；追底是显式 follow 状态机：
   用户真实拖拽离底后冻结，回到底部/点击按钮才恢复。跳到底部按钮位于列表容器内，键盘弹出时不被盖住。
 
-**目标（未做）**：ChatCard 统一、朗读（需要原生 TTS）；90 分钟 soak 与
+**目标（未做）**：朗读（需要原生 TTS）；90 分钟 soak 与
 VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 完整调研见 [archive/19-ui-research.md](archive/19-ui-research.md)，本次修复记录见 [STREAMING-FIX](STREAMING-FIX.md)。
 

@@ -5,7 +5,8 @@ import type { Block } from '../../protocol';
 import { hostAvailable } from '../../lib/host';
 import { store, useStore } from '../useStore';
 import { Btn } from '../parts';
-import { colors, font, radius, space } from '../theme';
+import { colors, font, radius } from '../theme';
+import { ChatCard, ChatCardCodeBox } from './ChatCard';
 
 type CapabilityBlock = Extract<Block, { kind: 'capability' }>;
 
@@ -54,15 +55,48 @@ export function CapabilityCard({ block }: { block: CapabilityBlock }): React.Rea
     return '用完整模式继续';
   })();
 
-  return (
-    <View style={styles.card}>
-      <View style={styles.head}>
-        <Text style={styles.title}>这个操作需要完整引擎</Text>
-        <View style={[styles.chip, { backgroundColor: colors.warnSoft }]}>
-          <Text style={[styles.chipText, { color: colors.warn }]}>缺能力</Text>
-        </View>
-      </View>
+  const hint = (() => {
+    if (settled === 'stay') return '已留在轻引擎；需要时重新点「用完整模式继续」。';
+    if (settled === 'handed' || block.status === 'handed_off') {
+      return '已交接，接下来由完整引擎继续；已完成的步骤不会重做。';
+    }
+    if (!disabled) return undefined;
+    if (!hostAvailable) return '这台设备不支持完整引擎（需要原生构建）';
+    if (busy) return '正在执行回合，等这一轮结束再试';
+    if (approvals > 0) return '还有审批/提问等着处理，处理完再试';
+    if (starting) return '完整引擎正在启动，请稍候';
+    return '交接进行中…';
+  })();
 
+  return (
+    <ChatCard
+      title="这个操作需要完整引擎"
+      tone="warn"
+      badge={{ label: '缺能力', tone: 'warn' }}
+      actions={
+        settled === 'idle' ? (
+          <>
+            <Btn
+              label="留在轻引擎"
+              kind="ghost"
+              disabled={pending}
+              onPress={() => {
+                store.stayOnLight(block);
+                setSettled('stay');
+              }}
+              style={{ flex: 1 }}
+            />
+            <Btn
+              label={primaryLabel}
+              disabled={disabled}
+              onPress={() => void continueHandoff()}
+              style={{ flex: 1.3 }}
+            />
+          </>
+        ) : undefined
+      }
+      hint={hint}
+    >
       <Text style={styles.summary}>{block.summary}</Text>
       {block.reason ? <Text style={styles.reason}>{block.reason}</Text> : null}
 
@@ -76,11 +110,7 @@ export function CapabilityCard({ block }: { block: CapabilityBlock }): React.Rea
         </View>
       ) : null}
 
-      {block.command ? (
-        <View style={styles.codeBox}>
-          <Text style={styles.codeText}>{block.command}</Text>
-        </View>
-      ) : null}
+      {block.command ? <ChatCardCodeBox>{block.command}</ChatCardCodeBox> : null}
 
       {isBash ? (
         <View style={styles.warning}>
@@ -102,65 +132,11 @@ export function CapabilityCard({ block }: { block: CapabilityBlock }): React.Rea
           ) : null}
         </View>
       ) : null}
-
-      {settled === 'stay' ? (
-        <Text style={styles.settled}>已留在轻引擎；需要时重新点「用完整模式继续」。</Text>
-      ) : null}
-      {settled === 'handed' ? (
-        <Text style={styles.settled}>已交接，接下来由完整引擎继续；已完成的步骤不会重做。</Text>
-      ) : null}
-
-      {settled === 'idle' ? (
-        <View style={styles.actions}>
-          <Btn
-            label="留在轻引擎"
-            kind="ghost"
-            disabled={pending}
-            onPress={() => {
-              store.stayOnLight(block);
-              setSettled('stay');
-            }}
-            style={{ flex: 1 }}
-          />
-          <Btn
-            label={primaryLabel}
-            disabled={disabled}
-            onPress={() => void continueHandoff()}
-            style={{ flex: 1.3 }}
-          />
-        </View>
-      ) : null}
-
-      {disabled && settled === 'idle' ? (
-        <Text style={styles.disabledHint}>
-          {!hostAvailable
-            ? '这台设备不支持完整引擎（需要原生构建）'
-            : busy
-              ? '正在执行回合，等这一轮结束再试'
-              : approvals > 0
-                ? '还有审批/提问等着处理，处理完再试'
-                : starting
-                  ? '完整引擎正在启动，请稍候'
-                  : '交接进行中…'}
-        </Text>
-      ) : null}
-    </View>
+    </ChatCard>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.glass,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
-    padding: 14,
-    gap: 10,
-  },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { color: colors.text, fontSize: 14.5, fontWeight: '600', flex: 1 },
-  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
-  chipText: { fontSize: 10.5, fontWeight: '600' },
   summary: { color: colors.text, fontSize: 13, lineHeight: 19 },
   reason: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
   missingRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
@@ -173,14 +149,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgElevated,
   },
   missingText: { color: colors.textDim, fontFamily: font.mono, fontSize: 11 },
-  codeBox: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    padding: 9,
-  },
-  codeText: { fontFamily: font.mono, fontSize: 11.5, color: colors.textDim, lineHeight: 17 },
   warning: {
     backgroundColor: colors.warnSoft,
     borderRadius: radius.md,
@@ -198,7 +166,4 @@ const styles = StyleSheet.create({
     borderColor: colors.warn,
   },
   confirmText: { color: colors.warn, fontSize: 12, fontWeight: '600' },
-  actions: { flexDirection: 'row', gap: space.sm, marginTop: 2 },
-  settled: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
-  disabledHint: { color: colors.textFaint, fontSize: 11.5, lineHeight: 17 },
 });
