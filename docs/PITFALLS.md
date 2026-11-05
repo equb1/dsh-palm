@@ -639,6 +639,15 @@
   用 `dumpsys meminfo`/heap profile 区分「列表驻留」与「RN 泄漏」；必要时改
   `removeClippedSubviews`/窗口大小或给长会话做回合降采样。
 
+### I11. 脚本点真机按钮点空（2026-11-06）
+
+- 现象：`adb shell input tap x y` 看着点在发送/选项/批准上，界面没反应；键盘弹出后更容易点空。
+- 原因：聊天截图预览按比例缩放（1272×2800 → 871×1918），按预览像素估坐标会偏 100+ px；
+  键盘/输入框弹出后布局整体上移，旧坐标直接失效。
+- 处理：先 `adb shell uiautomator dump /sdcard/window.xml` 拉回 XML，按目标节点 `bounds`
+  算中心点再 tap；点击后截图确认状态，不连点。输入用 `adb shell input text`（空格写 `%s`）。
+- 验证：2026-11-06 用 bounds 点发送/选项/批准，提问/审批/能力门三类卡片一次走通。
+
 
 
 
