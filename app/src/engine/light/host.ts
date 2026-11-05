@@ -52,7 +52,9 @@ import type {
 import { streamChat } from './provider';
 import { WORKSPACE_MOUNT } from '../fs/mount';
 import type { SandboxFs } from '../fs/sandbox';
+import { createWorkspaceMount } from '../fs/mount';
 import type { ShellRunner } from '../shell/bash';
+import { ShellRunner as ShellRunnerClass } from '../shell/bash';
 
 export const LIGHT_HOST_ID = 'light-local';
 export const LIGHT_WORKSPACE_ID = 'local';
@@ -142,6 +144,8 @@ export class LightHost {
   private readonly listeners = new Set<Listener>();
   private readonly caps: Capabilities;
   private readonly workspace: Workspace;
+  /** U8 只读终端：与会话 bash 分开，/workspace 挂载为只读，写操作被沙箱拒绝 */
+  private terminalPromise: Promise<ShellRunner> | null = null;
   private readyPromise: Promise<void> | null = null;
   private catalogCache: { at: number; models: ModelOption[] } | null = null;
   private seq = 0;
@@ -545,6 +549,23 @@ export class LightHost {
         this.statuses.delete(session.id);
         await this.repo.remove(session.id);
         return { ok: true as const };
+      },
+      'shell.run': async ({ command }: { command: string }) => {
+        if (!command.trim()) {
+          throw new EngineProtocolError({ code: 'bad_request', message: '命令不能为空' });
+        }
+        if (command.length > 2_000) {
+          throw new EngineProtocolError({ code: 'bad_request', message: '命令太长（最多 2000 字）' });
+        }
+        const result = await (await this.terminalRunner()).run(command);
+        return {
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+          ms: result.ms,
+          timedOut: result.timedOut,
+          truncated: result.truncated,
+        };
       },
       'sessions.search': async ({ query, limit }: { query: string; limit?: number }) => {
         const q = query.trim().toLowerCase();
@@ -1006,6 +1027,26 @@ export class LightHost {
   }
 
   /* --------------------------- 状态映射 --------------------------- */
+
+  /** U8：只读终端用一个独立挂载，避免绕过会话里 bash 的审批 */
+  private terminalRunner(): Promise<ShellRunner> {
+    if (!this.terminalPromise) {
+      this.terminalPromise = createWorkspaceMount({
+        backend: this.options.workspace.backend,
+        readOnly: true,
+      }).then(
+        (mount) =>
+          new ShellRunnerClass({
+            fs: mount.fs,
+            cwd: '/workspace',
+            timeoutMs: 15_000,
+            maxOutputChars: 20_000,
+            beforeRun: () => mount.workspace.refreshIndex(),
+          }),
+      );
+    }
+    return this.terminalPromise;
+  }
 
   private requireSession(id: string): StoredSession {
     const session = this.sessions.get(id);

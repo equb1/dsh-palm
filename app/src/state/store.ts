@@ -214,8 +214,8 @@ export interface AppState {
   busy: boolean;
   /** 首页输入框当前选中的锦囊 */
   draftPresetId: string | null;
-  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 / 搜索 / 工作区 */
-  view: 'main' | 'settings' | 'features' | 'files' | 'search' | 'workspace';
+  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 / 搜索 / 工作区 / 终端 */
+  view: 'main' | 'settings' | 'features' | 'files' | 'search' | 'workspace' | 'terminal';
   /** 模型凭据状态（ref -> 是否已配置） */
   credentials: Record<string, { configured: boolean; writable: boolean }>;
   /** 宿主可用的模型 */
@@ -1491,6 +1491,27 @@ export class Store {
 
   closeWorkspace(): void {
     this.patch({ view: 'main' });
+  }
+
+  /** U8 只读终端 */
+  openTerminal(): void {
+    this.patch({ view: 'terminal', error: null });
+  }
+
+  closeTerminal(): void {
+    this.patch({ view: 'main' });
+  }
+
+  async runShell(command: string): Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+    ms: number;
+    timedOut: boolean;
+    truncated: boolean;
+  }> {
+    if (!this.client) throw new Error('还没连上宿主');
+    return this.client.request('shell.run', { command });
   }
 
   async searchSessions(query: string): Promise<SessionSearchHit[]> {

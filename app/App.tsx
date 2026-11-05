@@ -10,6 +10,7 @@ import { FeaturesScreen } from './src/ui/FeaturesScreen';
 import { FilesScreen } from './src/ui/FilesScreen';
 import { SearchScreen } from './src/ui/SearchScreen';
 import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
+import { TerminalScreen } from './src/ui/TerminalScreen';
 import { store, useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
@@ -93,6 +94,11 @@ export default function App(): React.ReactElement {
         store.closeWorkspace();
         return true;
       }
+      // 1f. 终端页：返回首页
+      if (state.view === 'terminal') {
+        store.closeTerminal();
+        return true;
+      }
       // 2. 如果打开了连接面板，关闭连接面板返回首页
       if (state.connectModalOpen) {
         store.closeConnectModal();
@@ -112,7 +118,9 @@ export default function App(): React.ReactElement {
   }, [state.view, state.connectModalOpen, state.detail]);
 
   const screen =
-    state.view === 'workspace' ? (
+    state.view === 'terminal' ? (
+      <TerminalScreen />
+    ) : state.view === 'workspace' ? (
       <WorkspaceScreen />
     ) : state.view === 'search' ? (
       <SearchScreen />

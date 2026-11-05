@@ -124,11 +124,10 @@ export function FeaturesScreen(): React.ReactElement {
         {
           id: 'terminal',
           title: '终端',
-          hint: 'xterm / 快捷键栏（U8，未接入）',
+          hint: '只读命令 / 输出回看',
           icon: '>_',
           tone: 'violet',
-          disabled: true,
-          onPress: () => flash('终端还没接；现在用轻引擎 bash 的审批卡跑命令。'),
+          onPress: () => store.openTerminal(),
         },
         {
           id: 'workspace',

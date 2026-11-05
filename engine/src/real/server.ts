@@ -1061,6 +1061,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
     'sessions.delete': async () => unsupported('sessions.delete'),
     'sessions.search': async () => unsupported('sessions.search'),
+    'shell.run': async () => unsupported('shell.run'),
 
     'workspaces.list': async () => {
       // workspace/follow 的第一帧是 baseline，里面就是工作区清单

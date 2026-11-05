@@ -746,6 +746,10 @@ const handlers: { [M in Method]: Handler<M> } = {
     throw Object.assign(new Error('mock 宿主没有正文搜索'), { code: 'unsupported' });
   },
 
+  'shell.run': () => {
+    throw Object.assign(new Error('mock 宿主没有终端'), { code: 'unsupported' });
+  },
+
   'providers.remove': ({ id }) => {
     const i = mockProviders.findIndex((p) => p.id === id);
     if (i >= 0) mockProviders.splice(i, 1);

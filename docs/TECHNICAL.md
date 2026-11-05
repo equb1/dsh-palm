@@ -181,6 +181,8 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
 - 文件浏览（U8）：协议 `fs.list` / `fs.rename` / `fs.delete` 由轻宿主用工作区 `SandboxFs` 实现
   （`/` 根、name/kind/size/mtime，500 条上限；根目录不可重命名/删除）；完整引擎（proot）未实现，
   文件页会提示不支持。
+- 只读终端（U8）：`shell.run` 由轻宿主用独立只读挂载（Workspace SandboxFs `readOnly` + MountableFs）
+  跑 ShellRunner，写操作返回 EACCES；15s 超时、20k 输出；完整引擎 unsupported。
 - 会话管理（E3）：轻宿主实现 `sessions.delete`（运行中拒绝）和 `sessions.search`（标题/历史/思考
   正文，返回片段与命中数）；`sessions.pin` 的状态进 `SessionSummary.pinned`，抽屉据此分「置顶」组；
   完整引擎对 delete/search 显式 unsupported。
@@ -382,10 +384,11 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 | 启动层 `LaunchOverlay` | 品牌 + 进度，覆盖首屏，就绪后淡出 |
 | 首页 `HomeScreen` | 品牌、时段问候、最近会话、Composer（权限/锦囊在输入框上方） |
 | 抽屉 `SessionDrawer` | 工作区、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
-| 全部功能 `FeaturesScreen` | 卡片网格：对话/设置/引擎/实验室 + 文件/工作区（可用）+ 终端/插件/社区（未接入标灰） |
+| 全部功能 `FeaturesScreen` | 卡片网格：对话/设置/引擎/实验室 + 文件/工作区/终端（可用）+ 插件/社区（未接入标灰） |
 | 文件 `FilesScreen` | `fs.list` 列 `/workspace`、面包屑、文件名过滤、目录/文件行、`fs.rename`/`fs.delete`、分享（轻引擎） |
 | 搜索 `SearchScreen` | `sessions.search` 全文搜索（标题/历史/思考），命中片段，点开进会话 |
 | 工作区 `WorkspaceScreen` | 宿主工作区概览（root/会话数/运行中/锦囊数）+ 文件入口（轻引擎单工作区） |
+| 终端 `TerminalScreen` | `shell.run` 只读终端：pwd/ls/cat/grep，写操作被沙箱拒绝，15s/20k |
 | 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区 |
 | 设置 `SettingsScreen` | 6 组首页（搜索 / SettingsTile / 右侧当前值），只做导航 |
 | 设置二级页 | `AccountScreen` / `CredentialsScreen` / `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen` |

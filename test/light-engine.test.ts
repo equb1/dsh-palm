@@ -504,6 +504,34 @@ describe('LocalEngineClient', () => {
     );
   });
 
+  it('shell.run 只读终端：pwd/echo 可跑，写操作被拒（U8）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    const pwd = await harness.client.request('shell.run', { command: 'pwd' });
+    assert.equal(pwd.exitCode, 0);
+    assert.equal(pwd.stdout.trim(), '/workspace');
+
+    const echo = await harness.client.request('shell.run', { command: 'echo hello' });
+    assert.equal(echo.exitCode, 0);
+    assert.equal(echo.stdout.trim(), 'hello');
+
+    const ls = await harness.client.request('shell.run', { command: 'ls' });
+    assert.equal(ls.exitCode, 0);
+
+    const write = await harness.client.request('shell.run', {
+      command: 'echo x > /workspace/terminal-write.txt',
+    });
+    assert.notEqual(write.exitCode, 0);
+    assert.match(write.stderr, /read-only|EACCES/i);
+
+    const listing = await harness.client.request('fs.list', { path: '/' });
+    assert.equal(listing.entries.some((entry) => entry.name === 'terminal-write.txt'), false);
+
+    await assert.rejects(
+      harness.client.request('shell.run', { command: '   ' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+  });
+
   it('sessions.pin 后 summary 带 pinned（U6 置顶分组）', async () => {
     const harness = await makeHost([{ text: 'ok' }]);
     const sessionId = await createSession(harness);

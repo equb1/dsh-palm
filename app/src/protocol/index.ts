@@ -612,6 +612,8 @@ export interface RequestParams {
   'sessions.delete': { sessionId: string };
   /** 正文搜索（E3，轻引擎实现；完整引擎暂不支持） */
   'sessions.search': { query: string; limit?: number };
+  /** 只读终端（U8，轻引擎实现；写操作会被沙箱拒绝） */
+  'shell.run': { command: string };
 }
 
 export interface RequestResults {
@@ -656,6 +658,14 @@ export interface RequestResults {
   'sessions.archive': { ok: true };
   'sessions.delete': { ok: true };
   'sessions.search': { results: SessionSearchHit[] };
+  'shell.run': {
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+    ms: number;
+    timedOut: boolean;
+    truncated: boolean;
+  };
 }
 
 export type Method = keyof RequestParams;

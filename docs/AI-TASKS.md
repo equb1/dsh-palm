@@ -237,7 +237,13 @@
     列出宿主报告的工作区（名称/root/会话数/运行中/锦囊数），入口「浏览文件」；
     轻引擎单工作区有说明。真机：本机工作区、`/workspace`、19 个会话 · 2 个锦囊，
     点「浏览文件」进文件页（`158-workspace.png`）。
-  - 未做：终端；多工作区创建/置顶/分组（M2）；完整引擎 fs。
+  - 2026-11-06 第五步：只读终端——协议 `shell.run`；轻宿主用独立挂载（`/workspace` 只读
+    SandboxFs + MountableFs）跑 ShellRunner，与会话 bash 隔离；新增 `ui/TerminalScreen.tsx`：
+    命令输入、快捷命令、stdout/stderr/exit/耗时、15s 超时/20k 截断、清空；全部功能「终端」可点。
+    真机：`pwd` → `/workspace`、`ls` → deepseek-harness/docs/uploads；`touch /workspace/t.txt`
+    → `EACCES: read-only file system`（`164-terminal.png`、`165-terminal-readonly.png`）；
+    单测覆盖 pwd/echo/ls/写拒绝/空命令。
+  - 未做：多工作区创建/置顶/分组（M2）；完整引擎 fs/终端。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）
