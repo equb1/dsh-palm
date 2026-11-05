@@ -597,7 +597,20 @@
 - 处理（2026-11-05 已修）：`ChatScreen` 的 FlatList `keyExtractor` 改为
   `` `${turn.id ?? turn.runId ?? 'turn'}#${index}` ``，同 run 的多个回合不再撞 key；
   提交 `8ef85fa`，typecheck + verify 209 pass。
-- 验证（待真机）：重启 Metro/App 后复现“create docx → 不批准 → 再发一句”，
-  `adb logcat -s ReactNativeJS | grep duplicate` 应为空，审批卡只保留一张。
+- 验证（2026-11-05 真机已完成）：重启 Metro/App 后复现「create docx → 不批准 → 再发 wait」，
+  再点「拒绝」让同一 run 产出第二个回合；`adb logcat -s ReactNativeJS` 全程无 duplicate key，
+  审批卡只保留一张。截图 `scratch/shots/10-rejected.png`。
+
+### I9. 完整引擎切换 approval policy 的提示被当成用户消息（2026-11-05）
+
+- 现象：能力门交接后完整引擎执行完，会话里多出一条用户气泡
+  `The approval policy changed from "ask" to "never" (changed by the user).`；
+  这不是用户输入，用户会以为是自己发的。
+- 原因（初步）：交接把完整引擎 turns 原样并入逻辑会话；DSH 在切 `danger-full-access` 时
+  会往会话历史写一条 user 角色提示，`ConversationLink` 只剥 handoff seed 回合，没过滤这类系统提示。
+- 处理：待定（P3）。可在合并 turns 时按固定文案/前缀过滤，或把它映射成 agent 事件块；
+  不要按 `role === 'user'` 一刀切，避免吞掉真实用户消息。
+- 验证：2026-11-05 真机 1.4 handoff 复现；截图 `scratch/shots/26-handoff-ready.png`。
+
 
 

@@ -106,6 +106,9 @@
     验证：`npm run verify` 166 pass / 0 fail（新增 router/capability/handoff/orchestration 36 条）；
     真机冷启动 322ms、无 proot，抽屉「自动选择引擎」开关可见。未配轻引擎渠道，端到端模型触发的
     CapabilityCard → Handoff 未真机跑（逻辑由单测覆盖）。
+    2026-11-05 真机端到端：关自动选择引擎 → 「Run python3 to print 42」→ 轻引擎 bash 能力门 →
+    CapabilityCard「这个操作需要完整引擎」（python3 -c "print(42)"）→ 勾选知晓 → 确认并交接 →
+    完整引擎（V4.1-Flash）执行输出 42；列表仍只有一条逻辑会话，python 只执行一次，无重复副作用。
 
 - [x] **1.5 M1 收尾剩余**
   - [x] 真生图渠道（`b64_json`/`url` 两种返回）
@@ -121,6 +124,10 @@
     验证：`npm run verify` 209 pass / 0 fail；`npm run bench:light -- --n 3` 输出 P50/P90 JSON；
     mock `MOCK_IMAGE_MODE=url` 手动 smoke 返回 image/png。真机 401 错误横幅已验证；
     受账号 token 过期影响，生图/生成文件/分享/能力门→Handoff 的模型链路仍未端到端跑。
+    2026-11-05 真机端到端：明确指令（Do not ask questions, call create_docx directly）→ 模型直接
+    create_docx → 批准 → `/workspace/docs/weekly.docx`（9541B）→ 「生成文件」面板「打开」进系统文档
+    查看器（Weekly Report / Progress / All milestones are on track.）→「分享」拉起系统分享面板
+    （MIME `…wordprocessingml.document`，9KB）。
 
 ### UI 工作流（与 P0 并行）
 
