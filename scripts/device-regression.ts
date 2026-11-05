@@ -107,6 +107,22 @@ async function main(): Promise<void> {
     assert.ok(await waitFor('搜索设置', 10), '引擎页返回设置失败');
   });
 
+  await step('引擎启停', async () => {
+    assert.ok(tryTap('完整引擎'), '点不到完整引擎 tile');
+    assert.ok(await waitFor('预热完整引擎', 10), '引擎页没出现');
+    if (!hasText('运行中')) {
+      assert.ok(tryTap('预热完整引擎'), '点不到预热按钮');
+      assert.ok(await waitFor('运行中', 90), '完整引擎没起来');
+    }
+    screenshot('ui-regression-engine-running');
+    if (hasText('运行中')) {
+      assert.ok(tryTap('停止 proot'), '点不到停止 proot');
+      assert.ok(await waitFor('已停止', 60), '完整引擎没停下来');
+    }
+    keyevent('BACK');
+    assert.ok(await waitFor('搜索设置', 10), '引擎页返回设置失败');
+  });
+
   await step('全文搜索', async () => {
     keyevent('BACK');
     assert.ok(await waitFor('需要我做点什么？', 10), '设置返回后没回首页');
