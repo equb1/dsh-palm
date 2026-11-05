@@ -1,14 +1,13 @@
 /**
- * 生成文件面板（P0 1.5，open-only MVP）。
+ * 生成文件面板（P0 1.5）。
  *
- * 只做“看这个会话生成了什么 + 用系统查看器打开”：分享暂缓（RN Share 只支持
- * 文本/URL，分享二进制要 expo-sharing 或原生 FileProvider）。
+ * 列出本会话工具生成的文件，可“打开”（系统查看器）或“分享”（原生 ACTION_SEND）。
  * 视觉沿用 `ModelSheet` 的底部弹层。
  */
 import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { openWorkspaceFile } from '../lib/fileActions';
+import { openWorkspaceFile, shareWorkspaceFile } from '../lib/fileActions';
 import {
   generatedFileLabel,
   type GeneratedFile,
@@ -28,16 +27,20 @@ export function GeneratedFilesSheet({
   onClose,
 }: GeneratedFilesSheetProps): React.ReactElement {
   const [opening, setOpening] = React.useState<string | null>(null);
+  const [sharing, setSharing] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (visible) return;
     setOpening(null);
+    setSharing(null);
     setNotice(null);
   }, [visible]);
 
+  const busy = opening !== null || sharing !== null;
+
   const open = async (file: GeneratedFile): Promise<void> => {
-    if (opening) return;
+    if (busy) return;
     setOpening(file.relPath);
     setNotice(null);
     const result = await openWorkspaceFile(file.relPath, file.mime);
@@ -47,6 +50,19 @@ export function GeneratedFilesSheet({
       return;
     }
     setNotice(`已交给系统打开：${file.name}`);
+  };
+
+  const share = async (file: GeneratedFile): Promise<void> => {
+    if (busy) return;
+    setSharing(file.relPath);
+    setNotice(null);
+    const result = await shareWorkspaceFile(file.relPath, file.mime);
+    setSharing(null);
+    if (!result.ok) {
+      setNotice(result.message ?? '分享失败，稍后再试。');
+      return;
+    }
+    setNotice(`已打开系统分享面板：${file.name}`);
   };
 
   return (
@@ -67,9 +83,10 @@ export function GeneratedFilesSheet({
               </Text>
             ) : (
               <>
-                <Text style={styles.count}>共 {files.length} 个文件 · 点击“打开”交给系统查看器</Text>
+                <Text style={styles.count}>共 {files.length} 个文件 · 可打开或分享</Text>
                 {files.map((file) => {
-                  const busy = opening === file.relPath;
+                  const openingThis = opening === file.relPath;
+                  const sharingThis = sharing === file.relPath;
                   return (
                     <View key={file.relPath} style={styles.row}>
                       <View style={styles.badge}>
@@ -83,13 +100,22 @@ export function GeneratedFilesSheet({
                           /workspace/{file.relPath}
                         </Text>
                       </View>
-                      <Btn
-                        label={busy ? '打开中…' : '打开'}
-                        kind="ghost"
-                        disabled={opening !== null}
-                        onPress={() => void open(file)}
-                        style={styles.openBtn}
-                      />
+                      <View style={styles.actions}>
+                        <Btn
+                          label={openingThis ? '打开中…' : '打开'}
+                          kind="ghost"
+                          disabled={busy}
+                          onPress={() => void open(file)}
+                          style={styles.openBtn}
+                        />
+                        <Btn
+                          label={sharingThis ? '分享中…' : '分享'}
+                          kind="ghost"
+                          disabled={busy}
+                          onPress={() => void share(file)}
+                          style={styles.openBtn}
+                        />
+                      </View>
                     </View>
                   );
                 })}
@@ -99,7 +125,7 @@ export function GeneratedFilesSheet({
 
           {notice ? <Text style={styles.notice}>{notice}</Text> : null}
           <Text style={styles.footer}>
-            只读打开；分享暂未接入（等原生分享能力）。文件仍保存在工作区 /workspace 下。
+            “打开”交给系统查看器；“分享”走系统分享面板（带临时读权限）。文件仍保存在工作区 /workspace 下。
           </Text>
         </Pressable>
       </Pressable>
@@ -154,7 +180,8 @@ const styles = StyleSheet.create({
   meta: { flex: 1, gap: 2 },
   name: { color: colors.text, fontSize: 14, fontWeight: '500' },
   path: { color: colors.textFaint, fontSize: 11 },
-  openBtn: { height: 34, paddingHorizontal: space.md },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  openBtn: { height: 34, paddingHorizontal: 8 },
   notice: { color: colors.textDim, fontSize: 12, lineHeight: 18, paddingHorizontal: 18, paddingTop: 6 },
   footer: { color: colors.textFaint, fontSize: 11, lineHeight: 16, paddingHorizontal: 18, paddingTop: 8 },
 });

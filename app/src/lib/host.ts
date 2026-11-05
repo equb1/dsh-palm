@@ -64,6 +64,15 @@ export async function hostLogs(): Promise<string[]> {
   return [];
 }
 
+/** 原生分享工作区文件；非原生端没有这个能力 */
+export async function shareWorkspaceFileNative(
+  _contentUri: string,
+  _mime?: string | null,
+  _title?: string | null,
+): Promise<boolean> {
+  return false;
+}
+
 /** 系统是否已把本应用排除在省电限制外（null = 这台设备问不到） */
 export async function hostBatteryWhitelisted(): Promise<boolean | null> {
   return null;

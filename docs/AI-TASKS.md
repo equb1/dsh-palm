@@ -39,6 +39,8 @@
   用 `x-dsh-auth-token` 调模型，**账号已登录时不需要手动填 API Key**；切回轻引擎也不再报失败。
 - 轻引擎工具历史已清洗（2026-11-05）：中断/停止后 assistant `tool_calls` 悬空会导致下一次
   请求 400，现于发请求前统一补齐 `[已停止] 未执行` 并丢弃孤立 tool 消息（`light/history.ts`）。
+- 真机发现（2026-11-05）：轻引擎账号模式的 token 过期后模型调用返回 401，错误横幅已能显示
+  「登录或 API Key 无效/已过期（401）」，但还没有重登入口（M2.7）。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎附件只给路径，不解析图片/PDF；
   轻引擎无文档编辑、无 pptx（复杂/编辑/pptx 走完整引擎）。
@@ -113,9 +115,11 @@
     b64 支持 data:/URL-safe + 20MB，url 30s/20MB + content-type/魔数校验、跨域不转发 Key、按 MIME 定扩展名；
     模型调用 45s 空闲超时、错误分类（断网/401/429/超时/空响应），`[light] ttft=…` 与 `[light] error kind=…` 日志，
     `run.finished` 错误写回 ChatScreen 横幅；`filenames.ts` 统一清洗文件名并接入生成工具与审批卡；
-    生成文件面板（顶栏入口 + 底部弹层 + 系统查看器打开）为 open-only，**分享延后**（RN Share 只支持文本）。
-    验证：`npm run verify` 206 pass / 0 fail（新增 40）；`npm run bench:light -- --n 3` 输出 P50/P90 JSON；
-    mock `MOCK_IMAGE_MODE=url` 手动 smoke 返回 image/png。真机仍缺轻引擎渠道，生图/错误横幅/面板未端到端跑。
+    生成文件面板（顶栏入口 + 底部弹层 + 系统查看器打开）已落地；**原生分享**（HostModule.shareFile +
+     expo File.contentUri + ACTION_SEND/ClipData）已接，真机分享面板待端到端。
+    验证：`npm run verify` 209 pass / 0 fail；`npm run bench:light -- --n 3` 输出 P50/P90 JSON；
+    mock `MOCK_IMAGE_MODE=url` 手动 smoke 返回 image/png。真机 401 错误横幅已验证；
+    受账号 token 过期影响，生图/生成文件/分享/能力门→Handoff 的模型链路仍未端到端跑。
 
 ### UI 工作流（与 P0 并行）
 
@@ -249,6 +253,8 @@ type AttachmentChipsProps = {
 - [ ] **2.7 账号 token 生命周期**
   - 轻引擎 401 时明确提示“账号登录已过期，切完整模式重新登录”；
   - 提供重登入口；不要静默失败。
+  - 现状（2026-11-05）：401 横幅已能显示（真机验证 `Authentication Fails (governor)`），
+    但没有「切完整模式重新登录 / 重新授权」按钮；账号 token 无 refresh，过期后轻引擎会一直 401。
 
 ### M3 · 未开始
 

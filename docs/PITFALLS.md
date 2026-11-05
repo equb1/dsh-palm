@@ -550,3 +550,36 @@
 - 处理：`PATH="/opt/homebrew/bin:$PATH" npm run verify`（Node 26），或 `nvm use 22`；
   长期在 `package.json` 加 `engines.node >=22`。
 - 验证：e2e 的 before 成功，`npm run verify` 全绿。
+
+### I5. `adb shell input text` 被中文输入法改写（2026-11-05）
+
+- 现象：`input text 'create docx file docs/x.docx'` 落进输入框变成
+  `Create啊small docx file at docs／verify－share。docx`（空格变“啊”、`/` 和 `.` 变全角）。
+- 原因：注入的按键先经过当前中文 IME（Gboard/Sogou），被当作拼音/中文标点处理；`%s` 也会被转换。
+- 处理：验证 UI 前临时禁用 IME：
+  `adb shell ime disable com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME`，
+  输入框仍能收硬件键事件，ASCII 原样落进去；验完 `ime enable` 恢复。
+  更稳的做法是用 mock 模型/深链/直接调 native，不依赖 UI 输入。
+- 验证：`uiautomator dump` 里出现原样的 `create docx file docs/verify-share.docx`。
+
+### I6. release keystore.properties 的 UTF-8 BOM 让 Gradle 报 `Value is null`（2026-11-05）
+
+- 现象：`assembleRelease` 在 `storeFile rootProject.file(keystoreProperties["storeFile"])` 报
+  `A problem occurred evaluating project ':app'. > Value is null`，但 properties 里明明有 `storeFile=`。
+- 原因：Windows PowerShell 5.1 的 `Set-Content -Encoding utf8` 写 BOM；Java `Properties.load`
+  把 BOM 当成第一个 key 的一部分（`\uFEFFstoreFile`），所以取不到值。
+- 处理：用无 BOM 的方式写（`[IO.File]::WriteAllText(..., New-Object Text.UTF8Encoding($false))`）；
+  `scripts/gen-release-keystore.ps1` 已改，旧文件可手工去 BOM。
+- 验证：`assembleRelease` 通过；`apksigner verify --print-certs` 显示 `CN=DSH Palm`。
+
+### I7. 轻引擎账号模式 401（2026-11-05）
+
+- 现象：轻引擎发消息 1 秒内失败，日志
+  `[light] error kind=unauthorized status=401 … Authentication Fails (governor)`；
+  ChatScreen 横幅显示「登录或 API Key 无效/已过期（401）」。
+- 原因：轻引擎复用 `files/home/.dsh/.credentials.yaml` 的账号 token，而 dsh 账号 token 无 refresh；
+  过期后轻引擎不会自动跳登录（M2.7 未做）。
+- 处理：临时切完整模式重新登录 OAuth，或在 LightEngineScreen 配独立 API Key/兼容渠道；
+  长期做 M2.7 的「切完整重登 / 重新授权」入口。
+- 验证：401 横幅与 logcat `[light] error kind=unauthorized` 均出现。
+

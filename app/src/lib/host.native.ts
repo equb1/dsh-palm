@@ -36,6 +36,8 @@ interface HostNativeModule {
   setRunActive?(active: boolean): Promise<boolean>;
   /** 充电 / WiFi 状态（智能预热用） */
   deviceConditions?(): Promise<{ charging: boolean; wifi: boolean }>;
+  /** 分享一个工作区文件（content:// URI，由 expo File.contentUri 生成） */
+  shareFile?(contentUri: string, mime: string | null, title: string | null): Promise<boolean>;
 }
 
 const native: HostNativeModule | null =
@@ -121,6 +123,20 @@ export async function setHostSafeModeNext(enabled: boolean): Promise<boolean> {
 export async function hostLogs(): Promise<string[]> {
   if (!native) return [];
   return await native.logs();
+}
+
+/** 原生分享工作区文件；老 APK 没有 shareFile 时返回 false，由调用方提示 */
+export async function shareWorkspaceFileNative(
+  contentUri: string,
+  mime?: string | null,
+  title?: string | null,
+): Promise<boolean> {
+  if (!native?.shareFile) return false;
+  try {
+    return await native.shareFile(contentUri, mime ?? null, title ?? null);
+  } catch {
+    return false;
+  }
 }
 
 export async function readHostUiCache(): Promise<string | null> {
