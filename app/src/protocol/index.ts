@@ -105,6 +105,8 @@ export interface SessionSummary {
   preview: string;
   /** 运行中时的开始时间，用于顶部计时 */
   runningSince?: number;
+  /** 是否置顶（轻引擎；抽屉里单独一组） */
+  pinned?: boolean;
 }
 
 /** 会话正文搜索命中（E3 / 整页搜索） */

@@ -504,6 +504,18 @@ describe('LocalEngineClient', () => {
     );
   });
 
+  it('sessions.pin 后 summary 带 pinned（U6 置顶分组）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    const sessionId = await createSession(harness);
+    await harness.client.request('sessions.pin', { sessionId, pinned: true });
+    const pinnedList = await harness.client.request('sessions.list', {});
+    assert.equal(pinnedList.sessions.find((session) => session.id === sessionId)?.pinned, true);
+
+    await harness.client.request('sessions.pin', { sessionId, pinned: false });
+    const normalList = await harness.client.request('sessions.list', {});
+    assert.equal(normalList.sessions.find((session) => session.id === sessionId)?.pinned, false);
+  });
+
   it('sessions.search 搜会话正文并返回片段（E3）', async () => {
     const harness = await makeHost([{ text: '你好，这是关于 python 的回复。' }]);
     const sessionId = await createSession(harness);

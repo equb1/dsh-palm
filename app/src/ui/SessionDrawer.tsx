@@ -162,12 +162,16 @@ export function SessionDrawer({
   });
 
   const running = filtered.filter((s) => s.status === 'running' || s.status === 'waiting_approval');
+  const pinned = filtered.filter((s) => s.pinned === true && !running.includes(s));
   const today = filtered.filter(
-    (s) => !running.includes(s) && s.updatedAt >= startOfToday(),
+    (s) => !running.includes(s) && !pinned.includes(s) && s.updatedAt >= startOfToday(),
   );
-  const older = filtered.filter((s) => !running.includes(s) && s.updatedAt < startOfToday());
+  const older = filtered.filter(
+    (s) => !running.includes(s) && !pinned.includes(s) && s.updatedAt < startOfToday(),
+  );
 
   const groups: Array<{ title: string; items: SessionRow[] }> = [
+    { title: '置顶', items: pinned },
     { title: '运行中', items: running },
     { title: '今天', items: today },
     { title: '更早', items: older },

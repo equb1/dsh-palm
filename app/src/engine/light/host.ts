@@ -1109,6 +1109,7 @@ export class LightHost {
       updatedAt: session.updatedAt,
       unread: 0,
       preview: this.previewOf(session),
+      pinned: session.pinned,
       ...(status === 'running' ? { runningSince: session.updatedAt } : {}),
     };
   }
