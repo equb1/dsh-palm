@@ -612,8 +612,9 @@
   `The approval policy changed` 开头的 user 回合；只匹配这句固定文案，真实用户消息不删。
   原生完整会话（不经 ConversationLink）也在 `ChatScreen` 用 `stripEngineNoticeTurns` 过滤展示。
   单测 `handoff.test.ts` 两条：合并不误删真实用户消息、展示层只去 policy 提示。
-- 验证：`npm run verify` 217 pass / 0 fail；真机原生完整会话截图 `scratch/shots/90-full-opened2.png`
-  里还能看到旧提示（代码未重载），soak 结束后重启 Metro 复验。
+- 验证：`npm run verify` 217 pass / 0 fail。真机 2026-11-05 23:59 重启 Metro/App 后打开原会话
+  「检查 python 文档库版本」，policy 气泡已消失（截图 `scratch/shots/102-i9-filtered.png`）；
+  原生完整会话与 handoff 合并两条路径都过滤。
 
 ### I10. 长会话 soak 内存（2026-11-05，观察）
 
@@ -621,7 +622,10 @@
   485 MB（12 回合）→ 531 MB（21 回合）→ 623 MB（33 回合）。Native 282→312 MB，Java 48→54 MB。
 - 40 分钟复核（2026-11-05 22:08–22:48，新会话、deepseek-chat、chat-only 提示，49 轮）：
   PSS 461 MB 起步，稳定在 **430–501 MB**（37 分钟时 431 MB），RSS 600–683 MB，无 OOM/崩溃。
-  说明 20 分钟那次的 623 MB 更像峰值/GC 抖动，不是线性泄漏；仍需 90 分钟确认。
+- 42.5 分钟复核（2026-11-05 22:58–23:40，用户要用手机主动停；52 轮、43 次采样）：
+  PSS 391 MB 起步 → 30 分钟 524 MB → 峰值 546 MB（23:38）→ 结束 465 MB；RSS 566→722→638 MB；
+  无 OOM/崩溃。两次 40 分钟级运行都是“涨一段再回落”，没有单调线性上涨。
+- 说明 20 分钟那次的 623 MB 更像峰值/GC 抖动，不是线性泄漏；**单会话 90 分钟仍未完成**。
 - 附带：`VirtualizedList: You have a large list that is slow to update` 在 20 分钟那次出现 1 次
   （dt 1109ms，prevDt 24543ms）；duplicate key 全程 0。
 - 推测：长回答（20 分钟那次最后一次 in:37155 tokens）留在 JS 状态与 Markdown 视图里，
