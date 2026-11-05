@@ -91,6 +91,7 @@ import type {
   RequestResults,
   ApprovalDecision,
   SessionDetail,
+  SessionSearchHit,
   SessionSummary,
   Turn,
   Workspace,
@@ -213,8 +214,8 @@ export interface AppState {
   busy: boolean;
   /** 首页输入框当前选中的锦囊 */
   draftPresetId: string | null;
-  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 */
-  view: 'main' | 'settings' | 'features' | 'files';
+  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 / 搜索 */
+  view: 'main' | 'settings' | 'features' | 'files' | 'search';
   /** 模型凭据状态（ref -> 是否已配置） */
   credentials: Record<string, { configured: boolean; writable: boolean }>;
   /** 宿主可用的模型 */
@@ -1454,6 +1455,21 @@ export class Store {
 
   closeFiles(): void {
     this.patch({ view: 'main' });
+  }
+
+  /** E3 / 整页搜索：全文搜索会话 */
+  openSearch(): void {
+    this.patch({ view: 'search', error: null });
+  }
+
+  closeSearch(): void {
+    this.patch({ view: 'main' });
+  }
+
+  async searchSessions(query: string): Promise<SessionSearchHit[]> {
+    if (!this.client) throw new Error('还没连上宿主');
+    const { results } = await this.client.request('sessions.search', { query });
+    return results;
   }
 
   async listWorkspace(path = '/'): Promise<{ path: string; entries: WorkspaceEntry[] }> {

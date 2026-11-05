@@ -320,6 +320,17 @@ export function SessionDrawer({
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
           />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="搜索全部会话正文"
+            hitSlop={6}
+            onPress={() => {
+              onClose();
+              store.openSearch();
+            }}
+          >
+            <Text style={styles.searchAll}>全文</Text>
+          </Pressable>
         </View>
 
         <View style={styles.filters}>
@@ -488,6 +499,7 @@ const styles = StyleSheet.create({
   },
   searchIcon: { color: colors.textFaint, fontSize: 13 },
   search: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 20, paddingVertical: 0 },
+  searchAll: { color: colors.blue, fontSize: 11.5, fontWeight: '600' },
   filters: {
     flexDirection: 'row',
     gap: 6,

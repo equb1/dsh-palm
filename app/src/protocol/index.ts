@@ -107,6 +107,16 @@ export interface SessionSummary {
   runningSince?: number;
 }
 
+/** 会话正文搜索命中（E3 / 整页搜索） */
+export interface SessionSearchHit {
+  sessionId: string;
+  title: string;
+  /** 第一处命中附近的短片段，已去掉换行 */
+  snippet: string;
+  updatedAt: number;
+  matches: number;
+}
+
 export type ToolState = 'running' | 'done' | 'error';
 
 export type Block =
@@ -598,6 +608,8 @@ export interface RequestParams {
   'sessions.archive': { sessionId: string; archived: boolean };
   /** 删除会话（E3，轻引擎实现；完整引擎暂不支持） */
   'sessions.delete': { sessionId: string };
+  /** 正文搜索（E3，轻引擎实现；完整引擎暂不支持） */
+  'sessions.search': { query: string; limit?: number };
 }
 
 export interface RequestResults {
@@ -641,6 +653,7 @@ export interface RequestResults {
   'sessions.pin': { ok: true };
   'sessions.archive': { ok: true };
   'sessions.delete': { ok: true };
+  'sessions.search': { results: SessionSearchHit[] };
 }
 
 export type Method = keyof RequestParams;

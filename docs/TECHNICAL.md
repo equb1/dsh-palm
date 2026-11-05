@@ -181,6 +181,8 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
 - 文件浏览（U8）：协议 `fs.list` / `fs.rename` / `fs.delete` 由轻宿主用工作区 `SandboxFs` 实现
   （`/` 根、name/kind/size/mtime，500 条上限；根目录不可重命名/删除）；完整引擎（proot）未实现，
   文件页会提示不支持。
+- 会话管理（E3）：轻宿主实现 `sessions.delete`（运行中拒绝）和 `sessions.search`（标题/历史/思考
+  正文，返回片段与命中数）；完整引擎对两者显式 unsupported。
 - 限制：单次读 10MB；软链 EPERM；chmod/utimes 只内存；bash 无 python/js/网络。
 
 ### 5.2 模型调用
@@ -380,6 +382,7 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 | 抽屉 `SessionDrawer` | 工作区、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
 | 全部功能 `FeaturesScreen` | 卡片网格：对话/设置/引擎/实验室 + 文件/终端/工作区/插件/社区（未接入标灰） |
 | 文件 `FilesScreen` | `fs.list` 列 `/workspace`、面包屑、目录/文件行、`fs.rename`/`fs.delete`、分享（轻引擎） |
+| 搜索 `SearchScreen` | `sessions.search` 全文搜索（标题/历史/思考），命中片段，点开进会话 |
 | 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区 |
 | 设置 `SettingsScreen` | 6 组首页（搜索 / SettingsTile / 右侧当前值），只做导航 |
 | 设置二级页 | `AccountScreen` / `CredentialsScreen` / `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen` |
@@ -440,7 +443,7 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 - 外观/通用部分只读（主题浅色、字号标准、通知系统管理），点按提示未接后端（深色/字号在 U7）；
 - 「完成后收起过程」是可用开关（`collapseProcess`，UI cache 持久化）：关掉后完成回合默认展开过程。
 - 抽屉分组：运行中 / 今天 / 更早；筛选胶囊「全部 / 运行中 / 待确认 / 未读」；行尾最多一个状态标记；
-  长按出「置顶/取消置顶/归档/改名/删除」；标题右侧 ⊞ 进「全部功能」卡片网格；
+  长按出「置顶/取消置顶/归档/改名/删除」；搜索框右侧「全文」进 SearchScreen；标题右侧 ⊞ 进「全部功能」；
 - 底部主机条：本机 dsh + 引擎版本 + 模型与凭据 + 断开/设置。
 
 ### 8.6 无障碍与文案

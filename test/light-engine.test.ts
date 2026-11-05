@@ -504,6 +504,25 @@ describe('LocalEngineClient', () => {
     );
   });
 
+  it('sessions.search 搜会话正文并返回片段（E3）', async () => {
+    const harness = await makeHost([{ text: '你好，这是关于 python 的回复。' }]);
+    const sessionId = await createSession(harness);
+    const finished = nextEvent(harness, 'run.finished');
+    await harness.client.request('sessions.send', { sessionId, text: '聊聊 python' });
+    await finished;
+
+    const { results } = await harness.client.request('sessions.search', { query: 'python' });
+    assert.equal(results.length, 1);
+    assert.equal(results[0]?.sessionId, sessionId);
+    assert.match(results[0]?.snippet ?? '', /python/i);
+    assert.ok((results[0]?.matches ?? 0) >= 1);
+
+    await assert.rejects(
+      harness.client.request('sessions.search', { query: '   ' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+  });
+
   it('sessions.delete 删除会话，运行中的会话拒绝删除（E3）', async () => {
     const harness = await makeHost([{ text: 'ok' }]);
     const a = await createSession(harness);

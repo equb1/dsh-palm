@@ -189,7 +189,11 @@
     插件 / 社区 / 帮助与关于；未接后端的卡片标「未接入」，点按只提示。抽屉标题右侧加 ⊞ 入口，
     `view` 增加 `features`，安卓返回回首页。
     真机：网格、未接入提示、设置跳转（`141-features-grid.png`、`142-features-disabled-notice.png`）。
-  - 未做：文件夹分组、整页搜索；卡片里的文件/终端/工作区/插件/社区仍等 U8。
+  - 2026-11-06 第三步：正文搜索——协议 `sessions.search`（轻宿主扫标题/历史消息/思考正文，
+    返回片段/命中数，20 条上限）；抽屉搜索框加「全文」，新 `ui/SearchScreen.tsx`（250ms 防抖、
+    命中卡片、点开直接进会话）。真机搜 `python` 命中 3 条会话、点结果打开原会话
+    （`153-search-results.png`、`154-search-open-session.png`）；单测覆盖命中/空词拒绝。
+  - 未做：文件夹分组；正文搜索只覆盖轻引擎本地会话，完整引擎显式 unsupported。
 - [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
   - 2026-11-06 前置：外观组加了「完成后收起过程」开关（`collapseProcess`，默认开，
     持久化在 UI cache）；关掉后完成的回合默认展开思考/工具过程，收起/展开仍可手动点。
@@ -412,7 +416,7 @@ type AttachmentChipsProps = {
     完整引擎显式 unsupported。真机删掉「Do not ask questions」测试会话，
     其他会话不受影响（`148-drawer-longpress-menu.png`、`149-drawer-after-delete.png`）；
     单测覆盖删除与运行中拒绝。
-  - 仍缺：正文搜索（宿主没有接口）、完整引擎删除。
+  - 仍缺：完整引擎删除与正文搜索（轻引擎已支持删除 + `sessions.search` 全文搜索）。
 - [ ] **E4** 沙箱只有 JS 层路径约束 → 文档别承诺安全边界
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
   - 2026-11-06 第一步：新增 `scripts/device-regression.ts` + `npm run device:regression`：

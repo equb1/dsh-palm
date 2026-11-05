@@ -546,6 +546,53 @@ export class LightHost {
         await this.repo.remove(session.id);
         return { ok: true as const };
       },
+      'sessions.search': async ({ query, limit }: { query: string; limit?: number }) => {
+        const q = query.trim().toLowerCase();
+        if (!q) throw new EngineProtocolError({ code: 'bad_request', message: '搜索词不能为空' });
+        if (q.length > 100) throw new EngineProtocolError({ code: 'bad_request', message: '搜索词太长' });
+        const max = Math.min(Math.max(Math.trunc(limit ?? 20), 1), 50);
+        const results: Array<{
+          sessionId: string;
+          title: string;
+          snippet: string;
+          updatedAt: number;
+          matches: number;
+        }> = [];
+        for (const session of this.sessions.values()) {
+          const parts: string[] = [session.title];
+          for (const message of session.history) {
+            if (typeof message.content === 'string' && message.content) parts.push(message.content);
+          }
+          for (const turn of session.turns) {
+            for (const block of turn.blocks) {
+              if (block.kind === 'text' || block.kind === 'thinking') parts.push(block.text);
+            }
+          }
+          const text = parts.join('\n');
+          const lower = text.toLowerCase();
+          const first = lower.indexOf(q);
+          if (first < 0) continue;
+          let matches = 0;
+          let at = first;
+          while (at >= 0) {
+            matches += 1;
+            at = lower.indexOf(q, at + q.length);
+          }
+          const snippet = text
+            .slice(Math.max(0, first - 50), Math.max(0, first - 50) + 140)
+            .replace(/\s+/g, ' ')
+            .trim();
+          results.push({
+            sessionId: session.id,
+            title: session.title,
+            snippet,
+            updatedAt: session.updatedAt,
+            matches,
+          });
+        }
+        results.sort((a, b) => b.updatedAt - a.updatedAt);
+        return { results: results.slice(0, max) };
+      },
       'models.list': async () => {
         const currentModel: ModelOption = {
           provider: this.providerId(),
