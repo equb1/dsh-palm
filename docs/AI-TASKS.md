@@ -238,7 +238,16 @@ type AttachmentChipsProps = {
 - [ ] **2.2 会话迁移完整版**（事件回放/结构化交接；P0 的 1.4 只做 v1）
 - [ ] **2.3 插件徽章**（矩阵已有，App 入口 + 搜索 + 判定理由）
 - [ ] **2.4 轻引擎附件引用**（图片视觉/路径消费；与 1.3 原生收件不重复）
-- [ ] **2.5 轻引擎多提供商**（`providers.list/save/discover` + ProvidersCard）
+- [ ] **2.5 轻引擎多提供商 + 账号模型目录**
+  - 轻引擎实现 `providers.list/save/discover`，设置页复用 ProvidersCard；
+  - 账号模式拉 `/models`，让 V4.1-Flash / V4-Pro 可选（现在只有 `deepseek-chat`）。
+- [ ] **2.6 统一会话列表 + 跨引擎继续**
+  - 抽屉合并轻/完整两套会话，行上标「轻/完整」；
+  - 点另一引擎的会话先切引擎再打开（完整会话需要先起 proot）；
+  - 复用 Handoff（摘要 + 最近 8 轮 + 工具结果）做“在另一引擎继续”，原会话只读。
+- [ ] **2.7 账号 token 生命周期**
+  - 轻引擎 401 时明确提示“账号登录已过期，切完整模式重新登录”；
+  - 提供重登入口；不要静默失败。
 
 ### M3 · 未开始
 
@@ -251,6 +260,16 @@ type AttachmentChipsProps = {
 - [ ] relay / WebRTC DataChannel
 - [ ] iOS 遥控器 + Share Extension / Live Activity
 - [ ] L1 插件自动转译（`phone-bundle`）
+
+### 已知缺口（未成任务）
+
+- bridge 对非流式 `assistant/message` 可能漏转；
+- follow WS 没有 `onclose/onerror` 自动重连（靠进会话重建）；
+- 图片渲染未做系统真机验收；
+- 历史“已回答”问题没有官方那种只读问答卡；
+- TTS/朗读未接（需要原生 TTS）；
+- 轻引擎账号 token 读自明文 YAML，安全模型需在文档里说清；
+- 发布签名/正式包流程（见 E8）。
 
 ## 3. 工程债
 

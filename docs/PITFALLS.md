@@ -480,15 +480,16 @@
 
 本轮真机已验证：工具密集回合无重复思考；流式中上滑 6 秒内容不动；回到底部按钮可见且可点击；退出重进无重复。
 
-### H8. 切到轻引擎默认后“未连接”（2026-11-04）
+### H8. 切到轻引擎默认后“未连接”（2026-11-04，2026-11-05 已修）
 
 - 现象：旧设备只配过 proot 账号/凭据，没有轻引擎渠道；冷启动首页显示「轻引擎未就绪」，
   `onTrimMemory`/空闲回收掉 proot 后界面停在「重连中」。
 - 原因：轻引擎是独立的 OpenAI 兼容渠道（SecureStore 里的 baseURL/apiKey/model），
   旧版本默认直连 proot，从来没配过；不是 1.2 的回归。
-- 处理：首页横幅「轻引擎未就绪 · 点这里配置模型渠道」进 `LightEngineScreen`；配置后轻引擎 connected。
-  不要为了这个把 proot 改回自动连接（违反 1.2 验收）；首次引导放到后续打磨。
-- 验证：未配置时仍可手动切「完整」并正常对话；配置轻渠道后角标回「轻」、可发消息。
+- 处理（2026-11-05 已修）：无配置冷启动自动打开配置页；账号已登录时直接读 dsh 账号 token
+  （`x-dsh-auth-token`），**不需要 API Key**；也可点「先用完整模式」并记住选择。
+  不要为了这个把 proot 改回自动连接（违反 1.2 验收）。
+- 验证：无配置自动弹页；账号模式 `[light] ttft=1296ms`；切回轻引擎成功。
 
 ## G. 调试
 
@@ -505,7 +506,9 @@
 - 桥 8788（WS）、dsh 8787（HTTP）。
 - 本机调试：`adb forward tcp:18788 tcp:8788` / `tcp:18787 tcp:8787`。
 
-### H7. debug APK 改了 JS 但界面没变
+## I. 构建、安装与运行时补充
+
+### I1. debug APK 改了 JS 但界面没变
 
 - 现象：`assembleDebug` + `install -r` 后，代码改动没生效；设备上仍是旧界面。
 - 原因：debug 包优先加载 Metro 缓存的 `files/BridgelessReactNativeDevBundle.js`，
@@ -516,7 +519,7 @@
   3. 发布/独立使用打 release，避免 dev bundle 依赖。
 - 验证：删缓存 + 无 Metro 启动，界面仍是新代码。
 
-### H8. `INSTALL_FAILED_UPDATE_INCOMPATIBLE`（签名不一致）
+### I2. `INSTALL_FAILED_UPDATE_INCOMPATIBLE`（签名不一致）
 
 - 现象：`adb install -r app-debug.apk` 报签名不一致，无法覆盖；`dumpsys package` 的 `lastUpdateTime` 不变。
 - 原因：手机上装的包与本机 `debug.keystore` 不是同一套签名（换机器/换 agent 构建常见）。
@@ -526,7 +529,7 @@
   3. 长期：固定一台机器/一个 keystore 构建，或把 keystore 纳入发布流程（勿进 git）。
 - 验证：`dumpsys package` 的 `lastUpdateTime` 更新；App 数据仍在。
 
-### H9. 中断后继续问，400 `tool_calls must be followed by tool messages`
+### I3. 中断后继续问，400 `tool_calls must be followed by tool messages`
 
 - 现象：在审批卡/工具执行时点「结束回话」，再继续提问，模型返回
   `400 An assistant message with 'tool_calls' must be followed by tool messages…`。
@@ -535,3 +538,13 @@
 - 处理：`light/history.ts` 在每次请求前清洗——给缺失的调用补
   `{role:'tool', content:'[已停止] 未执行'}`，丢弃孤立 tool 消息；中断时也主动补齐。
 - 验证：原会话继续发消息不再 400，能正常进入 `list_dir` / `bash` 审批卡。
+
+### I4. 默认 PATH 的 Node 20 让 e2e 的 before hook 不执行
+
+- 现象：`npm run verify` 卡住或 e2e 报 `Cannot read properties of undefined (reading 'request')`，
+  但单跑部分测试正常。
+- 原因：当前 shell 的 `node` 可能指向 20.13（`/usr/local/bin/node`），
+  `node:test` 的 `before` hook 在该组合下没有正常执行；项目要求 Node 22+。
+- 处理：`PATH="/opt/homebrew/bin:$PATH" npm run verify`（Node 26），或 `nvm use 22`；
+  长期在 `package.json` 加 `engines.node >=22`。
+- 验证：e2e 的 before 成功，`npm run verify` 全绿。
