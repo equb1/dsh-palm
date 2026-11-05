@@ -71,8 +71,23 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const readOnly = link ? isConversationReadOnly(link, state.engine.mode) : !state.currentId;
   const readOnlyText =
     link?.activeSide === 'full' && state.engine.mode !== 'full'
-      ? '完整引擎已停止，这个会话只读；点这里回首页，需要继续时在顶栏重新切到完整模式 ›'
-      : '已切换引擎，这个会话只读；点这里回首页新建会话继续 ›';
+      ? '完整引擎已停止，这个会话只读；点这里切到完整模式继续 ›'
+      : '已切换引擎，这个会话只读；点这里切回原引擎继续 ›';
+  // M2.6：只读横幅一键回到会话所在的引擎并重开（完整侧会先起 proot）
+  const resumeOnActiveSide = React.useCallback((): void => {
+    if (!link) {
+      store.closeSession();
+      return;
+    }
+    const target = link.activeSide === 'full' ? 'full' : 'light';
+    if (target === state.engine.mode) {
+      void store.openSession(link.id);
+      return;
+    }
+    void store.switchEngine(target).then((ok) => {
+      if (ok) void store.openSession(link.id);
+    });
+  }, [link, state.engine.mode]);
   // 完整引擎在切 approval policy 时会写一条 user 角色提示，原生完整会话也不显示（I9）
   const turns = React.useMemo(
     () => (state.engineKind === 'remote' ? stripEngineNoticeTurns(session.turns) : session.turns),
@@ -277,7 +292,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
 
       <SmoothKeyboardAvoid style={[styles.bodyWrap, { marginTop: headerH }]}>
         {readOnly ? (
-          <Pressable onPress={() => store.closeSession()}>
+          <Pressable onPress={resumeOnActiveSide}>
             <Text style={styles.readOnly}>{readOnlyText}</Text>
           </Pressable>
         ) : null}

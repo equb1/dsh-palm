@@ -291,6 +291,10 @@ type AttachmentChipsProps = {
     并打开原会话；轻引擎抽屉里能看到完整会话并标「完整」，点「检查 python 文档库版本」切到完整引擎
     （proot）并打开。截图 `scratch/shots/85-drawer-full.png`、`86-light-opened.png`、`90-full-opened2.png`。
     Handoff 继续版仍未做。
+  - 2026-11-05 追加：只读横幅一键回到会话主动侧——`ChatScreen.resumeOnActiveSide` 里读
+    `ConversationLink.activeSide`，`switchEngine` 后按逻辑 id `openSession`。真机：轻引擎打开
+    「Run python3」只读会话 → 点「切到完整模式继续」→ 完整引擎起 proot 并恢复到同一会话
+    （截图 `scratch/shots/110-resumed-full2.png`）。
 - [ ] **2.7 账号 token 生命周期**
   - 轻引擎 401 时明确提示“账号登录已过期，切完整模式重新登录”；
   - 提供重登入口；不要静默失败。

@@ -302,6 +302,8 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 - 抽屉用 `store.sessionRows()`；另一个引擎的行标「轻/完整」，长按菜单只对当前引擎行开放。
 - 点击 `store.openSessionRow(id, engine)`：engine 不同先 `switchEngine`（完整会起 proot），
   成功后按原 id `openSession`；失败时回落到 `switchEngine` 的错误提示。
+- 只读横幅同样一键继续：`ChatScreen.resumeOnActiveSide` 按 `ConversationLink.activeSide`
+  切引擎后 `openSession(link.id)`，不用再回首页手动切。
 - 仍需：跨引擎 Handoff 继续（在另一引擎续聊、原会话只读）、按引擎过滤搜索、缓存失效/归档同步。
 
 ## 7. 登录与配对
