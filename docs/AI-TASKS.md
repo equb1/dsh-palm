@@ -147,6 +147,9 @@
     横幅「请求太频繁或额度不足（429）：rate limit exceeded」；停 mock、移除 adb reverse 再发 →
     「连不上模型服务（网络错误）…」；每次都用 LightEngineScreen 断开 +「用账号连接」恢复，
     真模型 `hi` 正常（`160-429.png`、`161-offline.png`）。超时仍只有单测（45s 空闲）。
+  - 2026-11-06 追加超时真机：本机 SSE mock 先回一个 chunk 再挂 60s → 45s 后横幅
+    「模型服务 45 秒没有新响应…」、日志 `kind=timeout`；恢复账号模式后真模型 `hi` 正常
+    （`171-timeout.png`）。20MB/魔数仍只有单测。
 
 ### UI 工作流（与 P0 并行）
 
