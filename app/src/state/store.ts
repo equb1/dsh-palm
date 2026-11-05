@@ -15,6 +15,7 @@ import {
   type HostStatus,
 } from '../lib/host';
 import { loadHostCommands, saveHostCommands } from '../lib/hostCmd';
+import { loadAccountToken } from '../lib/accountToken';
 import { humanizeError } from '../lib/errors';
 import {
   createLightHost,
@@ -2473,6 +2474,8 @@ export class Store {
       return false;
     }
     this.noteUserActivity();
+    // 用户主动切轻引擎：清掉「先用完整模式」的跳过标记，下次启动回轻引擎
+    if (target === 'light') void saveLightSetupSkipped(false);
     const effects = this.emitEngine({ type: 'SWITCH', target, now: this.now() });
     if (effects.length === 0) {
       this.setError('现在不能切换引擎');
@@ -2511,7 +2514,11 @@ export class Store {
           if (!ok && target === 'light') {
             // 轻引擎没接上就别停 proot；状态机也退回"完整引擎"，链路还在
             this.emitEngine({ type: 'PROOT_CONNECTED' });
-            this.setError('切回轻引擎失败，仍停留在完整引擎');
+            this.setError(
+              this.state.lightSetupOpen
+                ? '先配置轻引擎渠道（或登录 DeepSeek 账号），再切回轻引擎'
+                : '切回轻引擎失败，仍停留在完整引擎',
+            );
             return false;
           }
           break;
@@ -2529,12 +2536,40 @@ export class Store {
     return target === 'full' ? this.state.engine.mode === 'full' : this.state.engine.mode === 'light';
   }
 
+  /**
+   * 解析轻引擎渠道：
+   * 1. 已保存的配置；
+   * 2. 没有配置时，若 dsh 账号已登录，自动用账号 token（不需要 API Key）；
+   * 3. 账号 token 过期/不存在，才要求用户配置或切完整模式。
+   */
+  private async resolveLightSetup(): Promise<LightEngineSetup | null> {
+    let setup = this.lightSetup ?? (await this.engineDeps.loadLightConfig());
+    if (setup?.authMode === 'account') {
+      const token = setup.authToken ?? (await loadAccountToken());
+      setup = token ? { ...setup, authToken: token } : null;
+    }
+    if (!setup) {
+      const token = await loadAccountToken();
+      if (token) {
+        setup = {
+          baseURL: 'https://api.deepseek.com/v1',
+          apiKey: '',
+          model: 'deepseek-chat',
+          providerName: 'DeepSeek 账号',
+          authMode: 'account',
+          authToken: token,
+        };
+      }
+    }
+    return setup;
+  }
+
   /** 确保轻引擎在线（已经连着就什么都不做）；返回是否就绪 */
   private async connectLightEffect(): Promise<boolean> {
     if (this.state.engine.lightReady && this.state.engineKind === 'light' && this.state.conn === 'connected') {
       return true;
     }
-    const setup = this.lightSetup ?? (await this.engineDeps.loadLightConfig());
+    const setup = await this.resolveLightSetup();
     if (!setup) {
       // 没有渠道 = 轻引擎不可用；先回到未连接态，再引导配置（只自动弹一次）
       this.patch({ conn: 'closed', engineKind: null });

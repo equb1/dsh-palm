@@ -14,6 +14,8 @@ export interface LightModelConfig {
   /** 例如 https://api.deepseek.com/v1（不带 /chat/completions） */
   baseURL: string;
   apiKey: string;
+  /** 账号模式的 token（`x-dsh-auth-token`），与 apiKey 二选一 */
+  authToken?: string;
   model: string;
   /** 展示名，例如 DeepSeek */
   providerName?: string;

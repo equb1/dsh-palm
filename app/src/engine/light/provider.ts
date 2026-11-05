@@ -63,7 +63,7 @@ export function describeHttpError(status: number, statusText: string, body?: str
   switch (status) {
     case 401:
     case 403:
-      return `API Key 无效或没有权限（${status}）${suffix}`;
+      return `登录或 API Key 无效/已过期（${status}）${suffix}`;
     case 404:
       return `接口或模型不存在（404）。检查 Base URL 是否要带 /v1，模型名是否写错${suffix}`;
     case 429:
@@ -194,7 +194,11 @@ export async function streamChat(
     url: completionsUrl(config.baseURL),
     headers: {
       'Content-Type': 'application/json',
-      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+      ...(config.authToken
+        ? { 'x-dsh-auth-token': config.authToken }
+        : config.apiKey
+          ? { Authorization: `Bearer ${config.apiKey}` }
+          : {}),
     },
     body: JSON.stringify(body),
     onData,

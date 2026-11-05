@@ -515,3 +515,13 @@
   2. 或删掉 `files/BridgelessReactNativeDevBundle.js` 后重启（会回退到 APK 内 bundle）；
   3. 发布/独立使用打 release，避免 dev bundle 依赖。
 - 验证：删缓存 + 无 Metro 启动，界面仍是新代码。
+
+### H8. `INSTALL_FAILED_UPDATE_INCOMPATIBLE`（签名不一致）
+
+- 现象：`adb install -r app-debug.apk` 报签名不一致，无法覆盖；`dumpsys package` 的 `lastUpdateTime` 不变。
+- 原因：手机上装的包与本机 `debug.keystore` 不是同一套签名（换机器/换 agent 构建常见）。
+- 处理：
+  1. **不要直接卸载**（会丢会话/登录）；优先用 Metro 加载 JS 改动：`adb reverse tcp:8081 tcp:8081` + 起 Metro + 重启 App；
+  2. 需要整包更新时：`run-as` 备份 `files` 与 `shared_prefs` → 卸载 → 装新包 → 还原数据；
+  3. 长期：固定一台机器/一个 keystore 构建，或把 keystore 纳入发布流程（勿进 git）。
+- 验证：`dumpsys package` 的 `lastUpdateTime` 更新；App 数据仍在。

@@ -55,6 +55,7 @@ export async function createLightHost(setup: LightEngineSetup): Promise<LightHos
     model: {
       baseURL: normalized.baseURL,
       apiKey: normalized.apiKey,
+      ...(normalized.authToken ? { authToken: normalized.authToken } : {}),
       model: normalized.model,
       ...(normalized.providerName ? { providerName: normalized.providerName } : {}),
     },
@@ -96,7 +97,9 @@ export async function loadLightConfig(): Promise<LightEngineSetup | null> {
 
 export async function saveLightConfig(setup: LightEngineSetup): Promise<void> {
   try {
-    await SecureStore.setItemAsync(LIGHT_CONFIG_KEY, JSON.stringify(normalizeSetup(setup)));
+    // token 只在运行时用，不落盘
+    const { authToken: _token, ...persisted } = normalizeSetup(setup);
+    await SecureStore.setItemAsync(LIGHT_CONFIG_KEY, JSON.stringify(persisted));
   } catch (error) {
     console.warn('[light] 保存配置失败', error);
   }

@@ -10,6 +10,7 @@
 import React from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { loadAccountToken } from '../lib/accountToken';
 import {
   loadLightConfig,
   runWorkspaceSelfCheck,
@@ -45,8 +46,10 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
   const [checking, setChecking] = React.useState(false);
   const [check, setCheck] = React.useState<WorkspaceSelfCheck | null>(null);
   const [connecting, setConnecting] = React.useState(false);
+  const [accountToken, setAccountToken] = React.useState<string | null>(null);
 
   React.useEffect(() => {
+    void loadAccountToken().then(setAccountToken);
     void loadLightConfig().then((config) => {
       if (!config) return;
       setBaseURL(config.baseURL);
@@ -114,6 +117,35 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
     }
   };
 
+  const connectAccount = async (): Promise<void> => {
+    if (!accountToken) return;
+    setConnecting(true);
+    setNote('正在用 DeepSeek 账号连接…');
+    await store.connectLight({
+      baseURL: 'https://api.deepseek.com/v1',
+      apiKey: '',
+      model: 'deepseek-chat',
+      providerName: 'DeepSeek 账号',
+      authMode: 'account',
+      authToken: accountToken,
+    });
+    setConnecting(false);
+    const snapshot = store.getSnapshot();
+    if (snapshot.conn === 'connected' && snapshot.engineKind === 'light') {
+      await saveLightConfig({
+        baseURL: 'https://api.deepseek.com/v1',
+        apiKey: '',
+        model: 'deepseek-chat',
+        providerName: 'DeepSeek 账号',
+        authMode: 'account',
+      });
+      setNote('已用 DeepSeek 账号连上轻引擎。');
+      onClose();
+    } else {
+      setNote(snapshot.error ?? '连接失败');
+    }
+  };
+
   const fillDefault = (): void => {
     setBaseURL(DEEPSEEK_DEFAULT.baseURL);
     setModel(DEEPSEEK_DEFAULT.model);
@@ -138,16 +170,27 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
           {!connected ? (
             <Card>
               <View style={styles.rowTop}>
-                <Text style={styles.cardTitle}>先配一个模型渠道</Text>
+                <Text style={styles.cardTitle}>
+                  {accountToken ? '用 DeepSeek 账号连接' : '先配一个模型渠道'}
+                </Text>
                 <Pill>
-                  <Text style={styles.badge}>必填</Text>
+                  <Text style={styles.badge}>{accountToken ? '已登录' : '必填'}</Text>
                 </Pill>
               </View>
               <Text style={styles.hint}>
-                轻引擎不依赖 dsh 账号，需要一个 OpenAI 兼容渠道：Base URL、模型、API Key。
-                没有 Key 也可以先用完整模式（用 dsh 账号登录，不需要另配渠道）。
+                {accountToken
+                  ? '检测到 dsh 账号已登录，轻引擎可以直接复用账号 token，不需要再填 API Key。'
+                  : '轻引擎不依赖 dsh 账号，需要一个 OpenAI 兼容渠道：Base URL、模型、API Key。没有 Key 也可以先用完整模式。'}
               </Text>
               <View style={styles.actions}>
+                {accountToken ? (
+                  <Btn
+                    label={connecting ? '连接中…' : '用账号连接'}
+                    onPress={() => void connectAccount()}
+                    disabled={connecting}
+                    style={{ flex: 1.2 }}
+                  />
+                ) : null}
                 <Btn
                   label="先用完整模式"
                   kind="ghost"
