@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -457,5 +457,26 @@ describe('LocalEngineClient', () => {
     await assert.rejects(harness.client.request('providers.save', { mode: 'custom', id: 'x', baseURL: 'https://x', api: 'openai-completions', models: [] }), (error: unknown) => {
       return (error as { code?: string }).code === 'unsupported';
     });
+  });
+
+  it('fs.list 列出工作区目录和文件大小，越界路径报错（U8）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    await mkdir(join(harness.workspaceRoot, 'docs'), { recursive: true });
+    await writeFile(join(harness.workspaceRoot, 'docs', 'a.txt'), 'hello');
+
+    const root = await harness.client.request('fs.list', { path: '/' });
+    assert.equal(root.path, '/');
+    const docs = root.entries.find((entry) => entry.name === 'docs');
+    assert.equal(docs?.kind, 'dir');
+
+    const inner = await harness.client.request('fs.list', { path: '/docs' });
+    const file = inner.entries.find((entry) => entry.name === 'a.txt');
+    assert.equal(file?.kind, 'file');
+    assert.equal(file?.size, 5);
+
+    await assert.rejects(
+      harness.client.request('fs.list', { path: '/nope' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
   });
 });

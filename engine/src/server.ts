@@ -742,6 +742,10 @@ const handlers: { [M in Method]: Handler<M> } = {
     if (i >= 0) mockProviders.splice(i, 1);
     return { providers: mockProviders.map((p) => ({ ...p })) };
   },
+
+  'fs.list': () => {
+    throw Object.assign(new Error('mock 宿主没有工作区文件'), { code: 'unsupported' });
+  },
 };
 
 /* ------------------------------------------------------------------ *

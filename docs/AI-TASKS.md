@@ -192,6 +192,15 @@
   - 未做：文件夹分组、整页搜索；卡片里的文件/终端/工作区/插件/社区仍等 U8。
 - [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
+  - 2026-11-06 第一步：轻宿主加 `fs.list`（列 `/workspace` 目录，返回 name/kind/size/mtime，
+    子项 500 条上限、单子项 stat 失败不拖垮整页）；新增 `ui/FilesScreen.tsx` 文件浏览器
+    （面包屑、目录/文件行、刷新、空目录/错误提示），文件用系统查看器打开（复用
+    `openWorkspaceFile`）。全部功能页的「文件」卡已可点，`view` 增加 `files`。
+  - 真机：根目录列出 `deepseek-harness / docs / uploads`，进 `docs` 看到 weekly.docx 9.3KB，
+    点开进系统文档查看器显示 Weekly Report（`143-files-root.png`、`144-files-docs.png`、
+    `145-files-open-docx.png`）；单测覆盖 fs.list 目录/大小/不存在目录。
+  - 未做：终端、工作区管理（多工作区）、重命名/删除/搜索/分享；完整引擎（proot）未实现
+    `fs.list`，连完整引擎时文件页会提示不支持。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）

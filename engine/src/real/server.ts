@@ -1426,6 +1426,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { providers: await providerRows() };
     },
 
+    'fs.list': async () => unsupported('fs.list'),
+
     'account.signOut': async () => {
       const account = asAccountState(await accountRpc('account/signOut', { client: accountClient() }));
       if (!account) throw Object.assign(new Error('宿主返回了无法识别的账号状态'), { code: 'internal' satisfies ProtocolError['code'] });

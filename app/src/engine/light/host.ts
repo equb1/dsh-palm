@@ -557,6 +557,48 @@ export class LightHost {
           hint: '工作区目录是 App 私有目录里的 <filesDir>/workspace；多工作区在 M2 做',
         });
       },
+      'fs.list': async ({ path }: { path?: string }) => {
+        const raw = (path ?? '/').trim() || '/';
+        const target = raw.startsWith('/')
+          ? raw.replace(/\/+$/, '') || '/'
+          : `/${raw.replace(/\/+$/, '')}`;
+        try {
+          const stat = await this.options.workspace.stat(target);
+          if (!stat.isDirectory) {
+            throw new EngineProtocolError({ code: 'bad_request', message: '这不是目录' });
+          }
+          const items = await this.options.workspace.readdirWithFileTypes(target);
+          const entries: Array<{ name: string; kind: 'file' | 'dir'; size: number; mtime: number }> = [];
+          for (const item of items.slice(0, 500)) {
+            const child = target === '/' ? `/${item.name}` : `${target}/${item.name}`;
+            let size = 0;
+            let mtime = 0;
+            try {
+              const info = await this.options.workspace.stat(child);
+              size = info.size;
+              mtime = info.mtime.getTime();
+            } catch {
+              // 单个子项 stat 失败（刚删除/没权限）不该让整页失败
+            }
+            entries.push({
+              name: item.name,
+              kind: item.isDirectory ? 'dir' : 'file',
+              size,
+              mtime,
+            });
+          }
+          entries.sort((a, b) =>
+            a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1,
+          );
+          return { path: target, entries };
+        } catch (error) {
+          if (error instanceof EngineProtocolError) throw error;
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: `读不了这个目录：${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      },
       'approvals.list': async ({ sessionId }: { sessionId?: string }) => ({
         approvals: [...this.approvals.values()]
           .map((pending) => pending.approval)

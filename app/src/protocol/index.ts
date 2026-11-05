@@ -411,6 +411,15 @@ export interface FileRef {
   hash?: string;
 }
 
+/** 工作区文件浏览（U8）：一个目录项 */
+export interface WorkspaceEntry {
+  name: string;
+  kind: 'file' | 'dir';
+  size: number;
+  /** 毫秒时间戳 */
+  mtime: number;
+}
+
 /* ------------------------------------------------------------------ *
  * Handoff v1（轻引擎 → 完整引擎）
  *
@@ -578,6 +587,9 @@ export interface RequestParams {
       };
   'providers.remove': { id: string };
 
+  /** 工作区文件浏览（U8，轻引擎实现；完整引擎未接） */
+  'fs.list': { path?: string };
+
   /** 会话管理：改名、置顶、归档（真宿主接口） */
   'sessions.rename': { sessionId: string; title: string };
   'sessions.pin': { sessionId: string; pinned: boolean };
@@ -618,6 +630,7 @@ export interface RequestResults {
   'providers.discover': { models: ProviderModel[] };
   'providers.save': { providers: ProviderRow[] };
   'providers.remove': { providers: ProviderRow[] };
+  'fs.list': { path: string; entries: WorkspaceEntry[] };
   'sessions.rename': { session: SessionDetail };
   'sessions.pin': { ok: true };
   'sessions.archive': { ok: true };

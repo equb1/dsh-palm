@@ -94,6 +94,7 @@ import type {
   SessionSummary,
   Turn,
   Workspace,
+  WorkspaceEntry,
 } from '../protocol';
 import {
   findRunTurnIndex,
@@ -212,8 +213,8 @@ export interface AppState {
   busy: boolean;
   /** 首页输入框当前选中的锦囊 */
   draftPresetId: string | null;
-  /** 当前页面：主界面 / 设置 / 全部功能 */
-  view: 'main' | 'settings' | 'features';
+  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 */
+  view: 'main' | 'settings' | 'features' | 'files';
   /** 模型凭据状态（ref -> 是否已配置） */
   credentials: Record<string, { configured: boolean; writable: boolean }>;
   /** 宿主可用的模型 */
@@ -1430,6 +1431,20 @@ export class Store {
 
   closeFeatures(): void {
     this.patch({ view: 'main' });
+  }
+
+  /** U8 第一步：工作区文件浏览（轻引擎实现，完整引擎暂不支持） */
+  openFiles(): void {
+    this.patch({ view: 'files', error: null });
+  }
+
+  closeFiles(): void {
+    this.patch({ view: 'main' });
+  }
+
+  async listWorkspace(path = '/'): Promise<{ path: string; entries: WorkspaceEntry[] }> {
+    if (!this.client) throw new Error('还没连上宿主');
+    return this.client.request('fs.list', { path });
   }
 
   /**

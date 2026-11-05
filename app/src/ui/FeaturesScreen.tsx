@@ -116,11 +116,10 @@ export function FeaturesScreen(): React.ReactElement {
         {
           id: 'files',
           title: '文件',
-          hint: '工作区浏览（U8，未接入）',
+          hint: '浏览 /workspace，打开文件',
           icon: '▤',
           tone: 'violet',
-          disabled: true,
-          onPress: () => flash('文件面板依赖 U8 的全工作区接口，还没接。'),
+          onPress: () => store.openFiles(),
         },
         {
           id: 'terminal',
