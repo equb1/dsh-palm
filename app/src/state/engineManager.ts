@@ -85,8 +85,8 @@ export interface EngineStep {
 
 /** 空闲 10 分钟回收 proot */
 export const IDLE_RECLAIM_MS = 10 * 60_000;
-/** 完整引擎启动超时：HostRuntime 自己有退避重试，90 秒还没好就回轻引擎 */
-export const PROOT_BOOT_TIMEOUT_MS = 90_000;
+/** 完整引擎启动超时：HostRuntime 自带退避重试；首次装包要解压 rootfs，给 3 分钟 */
+export const PROOT_BOOT_TIMEOUT_MS = 180_000;
 /** 空闲巡检间隔 */
 export const IDLE_SWEEP_MS = 60_000;
 

@@ -8,7 +8,7 @@
 | 项 | 值 |
 |---|---|
 | APK | `app/android/app/build/outputs/apk/release/app-release.apk` |
-| 大小 / sha256 | 243.6 MiB（255,472,278 B）/ `89F9F424D4C7044B5DA25A35093A5EEC89AE96D8E6CCF262834CC96EEFE1049D` |
+| 大小 / sha256 | 243.6 MiB（255,472,374 B）/ `B1319A93D0E7026B01BD639999F03FEDD39EC5DE41E0C162CC919A525240C6EF` |
 | applicationId | `cool.cnb.dshpalm` |
 | versionName / versionCode | `0.1.0` / `1` |
 | 签名 | V2，`CN=DSH Palm`，证书 SHA-256 `50de0609c1f781651301906c0781fe0dd039288bd5efc32883d03b9dac86628c` |
@@ -20,6 +20,11 @@
 
 > 2026-11-06 05:05 用合并后的 `feat/settings-pages`（含 U2/U4/U5/U6/U8/E2/E3/E5）重新构建，
 > 新 sha256 见上表；versionCode 仍是 1，首装可用，覆盖升级前必须 bump。
+>
+> 2026-11-06 05:20 真机首装已执行（用户确认）：debug 卸载 → release 安装成功，首启解压
+> runtime 约 46s；**发现 release 完整引擎桥卡在 95%，90 秒超时回轻引擎**。已把
+> `PROOT_BOOT_TIMEOUT_MS` 调到 180s 并 rebuild + `install -r` 升级，仍卡 95%（待查）。
+> 这阻塞了 release 上的账号 OAuth；下次需带 logcat 继续查 `[bridge]`/HostService。
 
 ## 2. 预检（只读，随时可跑）
 
