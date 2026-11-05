@@ -25,8 +25,8 @@
 | E5 device 回归 | ✅ | 10 步脚本 + 手工审批路径；`169`–`170` |
 | 1.5 401/429/断网/超时 | ✅ 真机 | `159`–`161`、`171` |
 | 1.5 20MB/魔数 | ✅ 单测 | 真机未单独造 20MB 图 |
-| M2.7 浏览器 OAuth | ⏸ 需用户 | release 首装后完整引擎桥卡 95%，登录入口无法发起；debug 上代码路径已验 |
-| release 首装/升级 | ⚠ 首装完成，全链路未过 | release 已装上（签名 `55df28b9`），首启解压 46s；完整引擎启动卡 95%，待查 |
+| M2.7 浏览器 OAuth | ✅ 真机 | release 上打开浏览器授权，页面显示「授权已完成」；回 App 已登录、模型可选 |
+| release 首装/升级 | ✅ 首装通过 | release 签名 `55df28b9`，首启解压 46s；cleartext 修复后完整引擎就绪、OAuth 成功 |
 | MR 合 develop | ⏸ 待操作 | 描述见 [MR-feat-settings-pages](MR-feat-settings-pages.md) |
 
 ## 结论

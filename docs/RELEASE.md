@@ -8,7 +8,7 @@
 | 项 | 值 |
 |---|---|
 | APK | `app/android/app/build/outputs/apk/release/app-release.apk` |
-| 大小 / sha256 | 243.6 MiB（255,472,374 B）/ `B1319A93D0E7026B01BD639999F03FEDD39EC5DE41E0C162CC919A525240C6EF` |
+| 大小 / sha256 | 243.6 MiB（255,472,406 B）/ `BD99C90761F9336ABCA5DB2D523B15E5A869307C643B83ED725FACD96137DE29` |
 | applicationId | `cool.cnb.dshpalm` |
 | versionName / versionCode | `0.1.0` / `1` |
 | 签名 | V2，`CN=DSH Palm`，证书 SHA-256 `50de0609c1f781651301906c0781fe0dd039288bd5efc32883d03b9dac86628c` |
@@ -22,9 +22,12 @@
 > 新 sha256 见上表；versionCode 仍是 1，首装可用，覆盖升级前必须 bump。
 >
 > 2026-11-06 05:20 真机首装已执行（用户确认）：debug 卸载 → release 安装成功，首启解压
-> runtime 约 46s；**发现 release 完整引擎桥卡在 95%，90 秒超时回轻引擎**。已把
-> `PROOT_BOOT_TIMEOUT_MS` 调到 180s 并 rebuild + `install -r` 升级，仍卡 95%（待查）。
-> 这阻塞了 release 上的账号 OAuth；下次需带 logcat 继续查 `[bridge]`/HostService。
+> runtime 约 46s；**发现 release 完整引擎桥卡在 95%，90 秒超时回轻引擎**。
+> 根因：release 的 `android:usesCleartextTraffic` 默认 false，Java 健康检查访问
+> `http://127.0.0.1:8788/health` 被系统拦掉；debug manifest 允许 cleartext，所以只在 release 复现。
+> 修复：manifest 加 `android:usesCleartextTraffic="true"`，并把首启超时调到 180s。
+> 修复后真机：`本机 dsh · 完整` 就绪；浏览器 OAuth 显示「授权已完成」，账号登录成功，
+> 模型 V4.1-Flash 可选。release 首装链路通过。
 
 ## 2. 预检（只读，随时可跑）
 
