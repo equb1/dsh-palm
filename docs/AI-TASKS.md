@@ -35,6 +35,8 @@
   跑 Python/Office 命令需把会话切「完全权限」。
 - 轻引擎无渠道的引导已补（2026-11-05）：冷启动自动打开配置页，并提供「先用完整模式」
   （记住选择，下次直接起 proot）；连接失败不再停在「连接中」。
+- 轻引擎支持账号模式（2026-11-05）：读 `files/home/.dsh/.credentials.yaml` 的账号 token，
+  用 `x-dsh-auth-token` 调模型，**账号已登录时不需要手动填 API Key**；切回轻引擎也不再报失败。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
 
@@ -67,7 +69,8 @@
     `am send-trim-memory … RUNNING_LOW` 停 proot、撤通知、回「轻」；force-stop 后重开不再拉起 HostService。
     2026-11-05 补：无渠道冷启动自动打开配置页；「先用完整模式」会持久化跳过（`dsh-palm.light.setup.skipped`），
     下次冷启动直接起 proot；连接失败清理链路，不再停在「连接中」。
-    真机验证：无配置自动弹页、skip 后冷启动直接完整模式、独立 debug 包（无 Metro）生效。
+    2026-11-05 账号模式：轻引擎读取 dsh 账号 token（`x-dsh-auth-token`），账号已登录时无需 API Key；
+    真机验证 `[light] ttft=1296ms model=deepseek-chat`，完整↔轻双向切换通过。
 
 - [x] **1.3 附件收件管线（原生）**
   - [x] 分享/相册/文件选择器 → `workspace/uploads/<hash>-<name>`

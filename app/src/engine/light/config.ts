@@ -10,6 +10,10 @@ export interface LightEngineSetup {
   baseURL: string;
   apiKey: string;
   model: string;
+  /** apiKey：普通 OpenAI 兼容渠道；account：复用 dsh 官方账号 token */
+  authMode?: 'apiKey' | 'account';
+  /** 账号 token，只在运行时传入，不落 SecureStore */
+  authToken?: string;
   /** 展示名，例如 DeepSeek / OpenRouter */
   providerName?: string;
   /** 可选：生图渠道 */
@@ -41,6 +45,8 @@ export function normalizeSetup(input: Partial<LightEngineSetup>): LightEngineSet
     baseURL,
     apiKey: (input.apiKey ?? '').trim(),
     model: (input.model ?? '').trim(),
+    ...(input.authMode === 'account' ? { authMode: 'account' } : {}),
+    ...(input.authToken?.trim() ? { authToken: input.authToken.trim() } : {}),
     ...(input.providerName?.trim() ? { providerName: input.providerName.trim() } : {}),
     ...(imageBaseURL ? { imageBaseURL } : {}),
     ...(imageApiKey ? { imageApiKey } : {}),
@@ -59,7 +65,7 @@ export function normalizeResponseFormat(value: unknown): ImageResponseFormat {
 export function setupProblem(setup: LightEngineSetup): string | null {
   if (!/^https?:\/\//i.test(setup.baseURL)) return 'Base URL 要以 http:// 或 https:// 开头';
   if (!setup.model) return '模型名不能为空';
-  if (!setup.apiKey) return 'API Key 不能为空（模型服务都需要）';
+  if (!setup.apiKey && setup.authMode !== 'account') return 'API Key 不能为空（或改用 DeepSeek 账号）';
   const imageFields = [setup.imageBaseURL, setup.imageModel, setup.imageApiKey];
   if (imageFields.some((value) => Boolean(value)) && imageFields.some((value) => !value)) {
     return '生图渠道要么全填（Base URL / 模型 / Key），要么全空';
