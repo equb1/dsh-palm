@@ -273,7 +273,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             style={styles.list}
             data={turns}
             renderItem={renderTurn}
-            keyExtractor={(turn) => turn.runId ?? turn.id}
+            keyExtractor={(turn, index) => `${turn.id ?? turn.runId ?? 'turn'}#${index}`}
             extraData={state.approvals}
             ItemSeparatorComponent={TurnSeparator}
             ListEmptyComponent={renderEmpty}
