@@ -168,7 +168,8 @@
   - 外观（主题/字号）与通用（通知）目前只有只读当前值，点按提示“未接后端”；外观的深色/字号档
     属于 U7。二级页（每行独立成页）还没做，详细控制仍在同一页的卡片里。
   - 真机：首页 6 组、搜索 `deepseek` 过滤出账号/模型提供商/轻引擎渠道、点「完整引擎」tile
-    跳到本机引擎卡（`127-settings-home.png`、`128-settings-search.png`、`129-settings-engine-jump.png`）；
+    跳到本机引擎卡、点「轻引擎渠道」进 M1 实验室轻引擎页（`127-settings-home.png`、
+    `128-settings-search.png`、`129-settings-engine-jump.png`、`130-settings-light-engine.png`）；
     typecheck + verify 全绿。
 - [ ] **U5 引擎页**：状态环、启动/停止/重启、失败卡（重试/安全模式/日志）
 - [ ] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
