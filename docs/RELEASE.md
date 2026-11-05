@@ -8,7 +8,7 @@
 | 项 | 值 |
 |---|---|
 | APK | `app/android/app/build/outputs/apk/release/app-release.apk` |
-| 大小 / sha256 | 243.5 MB / `AB5CDE5661AE6C443C35AC331720D04BAD2A65727246D96A59D4AFD4A7474FC1` |
+| 大小 / sha256 | 243.6 MiB（255,472,278 B）/ `89F9F424D4C7044B5DA25A35093A5EEC89AE96D8E6CCF262834CC96EEFE1049D` |
 | applicationId | `cool.cnb.dshpalm` |
 | versionName / versionCode | `0.1.0` / `1` |
 | 签名 | V2，`CN=DSH Palm`，证书 SHA-256 `50de0609c1f781651301906c0781fe0dd039288bd5efc32883d03b9dac86628c` |
@@ -17,6 +17,9 @@
 
 构建：`cd app/android && sh gradlew :app:assembleRelease`；版本号用
 `DSH_PALM_VERSION_CODE` / `DSH_PALM_VERSION_NAME` 覆盖（升级 release 必须递增 versionCode）。
+
+> 2026-11-06 05:05 用合并后的 `feat/settings-pages`（含 U2/U4/U5/U6/U8/E2/E3/E5）重新构建，
+> 新 sha256 见上表；versionCode 仍是 1，首装可用，覆盖升级前必须 bump。
 
 ## 2. 预检（只读，随时可跑）
 

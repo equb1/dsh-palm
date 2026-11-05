@@ -497,6 +497,8 @@ type AttachmentChipsProps = {
   - 关键修正（推翻旧想法）：release 默认 `debuggable=false`，装完 `run-as` 不可用；且 debug 与 release
     证书不同。所以这台设备 debug → release **必然丢 App 数据**，「卸前 tar 备份 files/shared_prefs、
     装 release 再还原」走不通。首装/升级仍等用户确认后执行（路径 A 干净首装 / 路径 B 同签名升级）。
+  - 2026-11-06 重新构建：`gradlew :app:assembleRelease` 7m51s 成功，新 APK 243.6MiB、
+    sha256 `89F9F424…`、证书 `50de0609…`；`npm run release:preflight` 全 PASS，首装仍等用户确认。
 
 
 ## 4. 待决事项
