@@ -12,6 +12,16 @@ import { colors, motion, radius, semantic, space, topInset } from './theme';
 
 const PANEL_WIDTH = 302;
 
+/** U6：抽屉筛选胶囊（文件夹/整页搜索还没做） */
+type SessionFilter = 'all' | 'running' | 'waiting' | 'unread';
+
+const FILTERS: Array<{ id: SessionFilter; label: string }> = [
+  { id: 'all', label: '全部' },
+  { id: 'running', label: '运行中' },
+  { id: 'waiting', label: '待确认' },
+  { id: 'unread', label: '未读' },
+];
+
 function relTime(ts: number): string {
   const min = Math.round((Date.now() - ts) / 60_000);
   if (min < 1) return '刚刚';
@@ -112,6 +122,7 @@ export function SessionDrawer({
     : 'DeepSeek 账号';
   const [mounted, setMounted] = React.useState(visible);
   const [q, setQ] = React.useState('');
+  const [filter, setFilter] = React.useState<SessionFilter>('all');
   const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
@@ -140,9 +151,15 @@ export function SessionDrawer({
   const currentEngine = state.engineKind === 'light' ? 'light' : 'full';
   const sessions = store.sessionRows();
   const keyword = q.trim().toLowerCase();
-  const filtered = keyword
+  const matched = keyword
     ? sessions.filter((s) => `${s.title}${s.preview}`.toLowerCase().includes(keyword))
     : sessions;
+  const filtered = matched.filter((s) => {
+    if (filter === 'running') return s.status === 'running' || s.status === 'waiting_approval';
+    if (filter === 'waiting') return s.status === 'waiting_approval';
+    if (filter === 'unread') return s.unread > 0;
+    return true;
+  });
 
   const running = filtered.filter((s) => s.status === 'running' || s.status === 'waiting_approval');
   const today = filtered.filter(
@@ -279,6 +296,26 @@ export function SessionDrawer({
           />
         </View>
 
+        <View style={styles.filters}>
+          {FILTERS.map((item) => {
+            const active = filter === item.id;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityLabel={`筛选：${item.label}`}
+                accessibilityState={{ selected: active }}
+                onPress={() => setFilter(item.id)}
+                style={[styles.filterPill, active && styles.filterPillActive]}
+              >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         <View style={styles.workspaceBlock}>
           <Text style={styles.workspaceLabel}>工作区</Text>
           {state.workspaces.length === 0 ? (
@@ -323,8 +360,20 @@ export function SessionDrawer({
           {groups.length === 0 ? (
             <EmptyState
               glyph="🗂"
-              title={keyword ? '没有匹配的会话' : '还没有会话'}
-              description={keyword ? '换个关键词试试。' : '发第一条消息，或从锦囊里选一个开始。'}
+              title={
+                keyword
+                  ? '没有匹配的会话'
+                  : filter !== 'all'
+                    ? '没有符合条件的会话'
+                    : '还没有会话'
+              }
+              description={
+                keyword
+                  ? '换个关键词试试。'
+                  : filter !== 'all'
+                    ? '换个筛选，或点「全部」看所有会话。'
+                    : '发第一条消息，或从锦囊里选一个开始。'
+              }
               style={styles.emptyState}
             />
           ) : (
@@ -412,6 +461,23 @@ const styles = StyleSheet.create({
   },
   searchIcon: { color: colors.textFaint, fontSize: 13 },
   search: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 20, paddingVertical: 0 },
+  filters: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+  },
+  filterPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  filterPillActive: { backgroundColor: colors.blueSoft, borderColor: colors.blue },
+  filterText: { color: colors.textDim, fontSize: 11.5 },
+  filterTextActive: { color: colors.blue, fontWeight: '600' },
   listScroll: { flex: 1 },
   list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
   workspaceBlock: {
