@@ -54,6 +54,8 @@ import { classify, hashPrefix } from '../lib/attachments/classify';
 import { mergeSessionRows, type SessionEngine, type SessionRow } from './sessionList';
 import type { AttachmentEngine, AttachmentKind, IntakeSource } from '../lib/attachments/types';
 import {
+  buildHandoff,
+  buildReverseSeedText,
   buildSeedText,
   detailHasSeedMarker,
   findSeedTurnId,
@@ -64,6 +66,7 @@ import {
   mapPresetForTarget,
   mergeDetail,
   physicalIdFor,
+  turnDetailToHistory,
   upsertConversationLink,
   type ConversationLink,
 } from '../lib/handoff';
@@ -1203,6 +1206,78 @@ export class Store {
       if (!ok) return;
     }
     await this.openSession(id);
+  }
+
+  /** M2.6：完整会话 → 轻引擎继续（摘要 + 最近 8 轮 + 工具结果，原完整会话之后只读） */
+  async continueFullInLight(fullSessionId: string): Promise<boolean> {
+    if (this.state.engine.mode !== 'full') {
+      this.setError('请先切到完整引擎，再发起「在轻引擎继续」');
+      return false;
+    }
+    this.noteUserActivity();
+    let fullDetail: SessionDetail;
+    try {
+      const result = await this.requestFull('sessions.get', { sessionId: fullSessionId });
+      fullDetail = result.session;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
+    const userText = lastUserTextFromDetail(fullDetail);
+    const assistantText = lastAssistantTextFromDetail(fullDetail);
+    const handoff = buildHandoff({
+      conversationId: fullSessionId,
+      reason: 'continue_in_light',
+      from: { engine: 'full', sessionId: fullSessionId },
+      presetId: fullDetail.presetId,
+      history: turnDetailToHistory(fullDetail.turns),
+      turns: fullDetail.turns,
+      ...(userText ? { userText } : {}),
+      ...(assistantText ? { assistantText } : {}),
+      limit: 8,
+    });
+    const seed = buildReverseSeedText(handoff);
+
+    const switched = await this.switchToLightForHandoff();
+    if (!switched) {
+      this.setError('轻引擎没连上，反向交接已取消');
+      return false;
+    }
+    try {
+      const { session: imported } = await this.requestLight('sessions.import', {
+        presetId: fullDetail.presetId,
+        title: fullDetail.title,
+        text: seed,
+      });
+      const { session: lightDetail } = await this.requestLight('sessions.get', {
+        sessionId: imported.id,
+      });
+      const seedTurnId = findSeedTurnId(lightDetail, handoff.seedMarker);
+      const link: ConversationLink = {
+        id: imported.id,
+        lightSessionId: imported.id,
+        fullSessionId,
+        title: fullDetail.title,
+        presetId: fullDetail.presetId,
+        activeSide: 'light',
+        status: 'active',
+        handoffId: handoff.handoffId,
+        seedMarker: handoff.seedMarker,
+        ...(seedTurnId ? { seedTurnId } : {}),
+        updatedAt: this.now(),
+      };
+      this.patch({
+        links: upsertConversationLink(this.state.links, link),
+        currentId: link.id,
+        detail: mergeDetail(link, lightDetail, fullDetail),
+        error: null,
+      });
+      await this.refreshSessions();
+      return true;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
   }
 
   async openSession(id: string): Promise<void> {

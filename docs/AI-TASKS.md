@@ -278,7 +278,7 @@ type AttachmentChipsProps = {
     真机：模型面板显示 `deepseek-chat`、`DeepSeek-V4.1-Flash`、`DeepSeek-V4-Pro`；
     选 V4.1-Flash 后发 `hi`，日志 `[light] … model=deepseek-flash` 三步均命中，run done。
     单测 `test/light-catalog.test.ts`（URL/解析/去重/失败回退）；`npm run verify` 213 pass。
-- [ ] **2.6 统一会话列表 + 跨引擎继续**
+- [x] **2.6 统一会话列表 + 跨引擎继续**
   - 抽屉合并轻/完整两套会话，行上标「轻/完整」；
   - 点另一引擎的会话先切引擎再打开（完整会话需要先起 proot）；
   - 复用 Handoff（摘要 + 最近 8 轮 + 工具结果）做“在另一引擎继续”，原会话只读。
@@ -290,11 +290,17 @@ type AttachmentChipsProps = {
     真机（2026-11-05）：完整引擎抽屉里能看到轻会话并标「轻」，点「Read the attached…」自动切回轻引擎
     并打开原会话；轻引擎抽屉里能看到完整会话并标「完整」，点「检查 python 文档库版本」切到完整引擎
     （proot）并打开。截图 `scratch/shots/85-drawer-full.png`、`86-light-opened.png`、`90-full-opened2.png`。
-    Handoff 继续版仍未做。
   - 2026-11-05 追加：只读横幅一键回到会话主动侧——`ChatScreen.resumeOnActiveSide` 里读
     `ConversationLink.activeSide`，`switchEngine` 后按逻辑 id `openSession`。真机：轻引擎打开
     「Run python3」只读会话 → 点「切到完整模式继续」→ 完整引擎起 proot 并恢复到同一会话
     （截图 `scratch/shots/110-resumed-full2.png`）。
+  - 2026-11-06 Handoff 继续版完成（完整 → 轻）：完整引擎长按完整会话 →「在轻引擎继续（摘要交接）」→
+    `continueFullInLight` 用 `turnDetailToHistory` + `buildHandoff` 生成摘要/最近 8 轮/工具结果 →
+    切轻引擎 → 轻宿主 `sessions.import` 建带 seed 的会话（不跑模型）→ link(activeSide='light') →
+    打开逻辑会话。真机：轻引擎里发「summarize this session」正确总结出三个附件（in:3772，
+    `model=deepseek-chat`），seed 气泡被 strip；原完整会话在完整引擎里变只读。
+    单测 `turnDetailToHistory`/`buildReverseSeedText`；`npm run verify` 218 pass。
+    截图 `scratch/shots/114-reverse-handoff.png`、`115-reverse-continued.png`。
 - [ ] **2.7 账号 token 生命周期**
   - 轻引擎 401 时明确提示“账号登录已过期，切完整模式重新登录”；
   - 提供重登入口；不要静默失败。

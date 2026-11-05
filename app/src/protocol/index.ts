@@ -484,6 +484,11 @@ export interface RequestParams {
   'sessions.list': { cursor?: string; limit?: number };
   'sessions.get': { sessionId: string };
   'sessions.create': { presetId: string; workspaceId?: string; title?: string };
+  /**
+   * 轻引擎专用：直接建一个带 seed 用户消息的会话（不触发模型），
+   * 供完整引擎 → 轻引擎的 Handoff 继续使用（M2.6）。
+   */
+  'sessions.import': { presetId?: string; title?: string; text: string; workspaceId?: string };
   'sessions.send': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
   'sessions.steer': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
   /**
@@ -584,6 +589,7 @@ export interface RequestResults {
   'sessions.list': { sessions: SessionSummary[]; nextCursor?: string };
   'sessions.get': { session: SessionDetail };
   'sessions.create': { session: SessionSummary };
+  'sessions.import': { session: SessionSummary };
   'sessions.send': { accepted: true; runId: string };
   'sessions.steer': { accepted: true };
   'sessions.handoff': HandoffV1;

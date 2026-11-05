@@ -465,6 +465,10 @@ const handlers: { [M in Method]: Handler<M> } = {
     return { session: state.summary };
   },
 
+  'sessions.import': () => {
+    throw new Error('sessions.import 只在轻引擎可用');
+  },
+
   'sessions.send': ({ sessionId, text }) => {
     const s = requireSession(sessionId);
     const userTurn: Turn = {

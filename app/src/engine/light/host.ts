@@ -309,6 +309,38 @@ export class LightHost {
         this.emit('session.created', { session: this.summary(session) });
         return { session: this.summary(session) };
       },
+      'sessions.import': async ({
+        presetId,
+        title,
+        text,
+      }: {
+        presetId?: string;
+        title?: string;
+        text: string;
+        workspaceId?: string;
+      }) => {
+        const body = text.trim();
+        if (!body) throw new EngineProtocolError({ code: 'bad_request', message: '交接 seed 为空' });
+        const preset = PRESETS.find((candidate) => candidate.id === presetId) ?? PRESETS[0]!;
+        const session: StoredSession = {
+          id: newSessionId(),
+          title: title?.trim() || '继续的会话',
+          presetId: preset.id,
+          workspaceId: LIGHT_WORKSPACE_ID,
+          createdAt: this.now(),
+          updatedAt: this.now(),
+          pinned: false,
+          archived: false,
+          permission: preset.id === 'reader' ? 'read-only' : 'workspace-write',
+          model: this.modelChoice(),
+          turns: [],
+          history: [],
+        };
+        this.sessions.set(session.id, session);
+        this.appendUserMessage(session, body);
+        await this.repo.save(session);
+        return { session: this.summary(session) };
+      },
       'sessions.send': async ({
         sessionId,
         text,

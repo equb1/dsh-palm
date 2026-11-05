@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 
 import {
   buildHandoff,
+  buildReverseSeedText,
   buildSeedText,
   detailHasSeedMarker,
   logicalIdFor,
@@ -14,6 +15,7 @@ import {
   seedMarkerFor,
   stripEngineNoticeTurns,
   truncateTurns,
+  turnDetailToHistory,
   type ConversationLink,
   type HandoffHistoryMessage,
 } from '../app/src/lib/handoff';
@@ -304,6 +306,56 @@ describe('Handoff · 纯函数', () => {
     ];
     const out = stripEngineNoticeTurns(turns);
     assert.deepEqual(out.map((turn) => turn.id), ['u1', 'u2', 'a1']);
+  });
+
+  it('turnDetailToHistory + buildHandoff：完整会话的工具结果进摘要/最近轮次', () => {
+    const turns: Turn[] = [
+      {
+        id: 'u1',
+        role: 'user',
+        createdAt: 1,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b1', text: '整理报告' }],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: 2,
+        status: 'done',
+        blocks: [
+          { kind: 'text', id: 'b2', text: '我来读文件' },
+          {
+            kind: 'tool',
+            id: 'tool1',
+            name: 'read_file',
+            summary: '读取 docs/a.docx',
+            state: 'done',
+            detail: '正文内容',
+          },
+        ],
+      },
+      {
+        id: 'u2',
+        role: 'user',
+        createdAt: 3,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b3', text: '再导出' }],
+      },
+    ];
+    const history = turnDetailToHistory(turns);
+    assert.deepEqual(history.map((message) => message.role), ['user', 'assistant', 'tool', 'user']);
+    const handoff = buildHandoff({
+      conversationId: 's_full',
+      reason: 'continue_in_light',
+      from: { engine: 'full', sessionId: 's_full' },
+      presetId: 'standard',
+      history,
+      turns,
+    });
+    assert.equal(handoff.completedSteps.length, 1);
+    assert.equal(handoff.completedSteps[0]?.name, 'read_file');
+    assert.match(buildReverseSeedText(handoff), /回到手机轻引擎/);
+    assert.equal(buildReverseSeedText(handoff).includes(handoff.seedMarker), true);
   });
 
   it('logical / physical 映射：两个物理 id 都归到一条逻辑会话', () => {

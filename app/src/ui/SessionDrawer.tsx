@@ -200,6 +200,17 @@ export function SessionDrawer({
 
       {menuFor === s.id ? (
         <View style={styles.menu}>
+          {currentEngine === 'full' ? (
+            <Pressable
+              onPress={() => {
+                setMenuFor(null);
+                onClose();
+                void store.continueFullInLight(s.id);
+              }}
+            >
+              <Text style={styles.menuItem}>在轻引擎继续（摘要交接）</Text>
+            </Pressable>
+          ) : null}
           <Pressable onPress={() => { void store.setSessionPinned(s.id, true); setMenuFor(null); }}>
             <Text style={styles.menuItem}>置顶</Text>
           </Pressable>

@@ -963,6 +963,10 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { session };
     },
 
+    'sessions.import': async () => {
+      throw new Error('sessions.import 只在轻引擎可用');
+    },
+
     // 真引擎的发消息：session/prompt。mode=queue 排队，steer 立刻插入当前回合。
     'sessions.send': async ({ sessionId, text, attachments, files }) => {
       startFollow(sessionId);

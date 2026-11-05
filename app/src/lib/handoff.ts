@@ -9,6 +9,7 @@
  * 真正的副作用（启 proot、建会话、发 seed、回滚）在 store.ts。
  */
 import type {
+  Block,
   FileRef,
   HandoffBlockedCall,
   HandoffCompletedStep,
@@ -351,6 +352,37 @@ export function buildHandoff(input: BuildHandoffInput): HandoffV1 {
   };
 }
 
+/** 完整引擎会话 → Handoff 历史消息（工具 block 当 tool 结果，供摘要/最近轮次用） */
+export function turnDetailToHistory(turns: Turn[]): HandoffHistoryMessage[] {
+  const out: HandoffHistoryMessage[] = [];
+  for (const turn of turns) {
+    if (turn.role === 'user') {
+      const text = turn.blocks
+        .map((block) => (block.kind === 'text' ? block.text : ''))
+        .join('')
+        .trim();
+      if (text) out.push({ role: 'user', content: text });
+      continue;
+    }
+    const text = turn.blocks
+      .filter((block): block is Extract<Block, { kind: 'text' }> => block.kind === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim();
+    if (text) out.push({ role: 'assistant', content: text });
+    for (const block of turn.blocks) {
+      if (block.kind !== 'tool') continue;
+      out.push({
+        role: 'tool',
+        tool_call_id: `t_${block.id}`,
+        name: block.name,
+        content: block.detail?.trim() || block.summary || block.state,
+      });
+    }
+  }
+  return out;
+}
+
 /** 交给完整引擎的第一条消息；只给"不要重做"的指令和上下文，不重放工具。 */
 export function buildSeedText(handoff: HandoffV1): string {
   const lines: string[] = [];
@@ -418,6 +450,14 @@ export function buildSeedText(handoff: HandoffV1): string {
     lines.push(handoff.pendingIntent.assistantText);
   }
   return lines.join('\n');
+}
+
+/** 完整 → 轻的 seed：结构与正向一致，只换交接方向说明（M2.6 继续版）。 */
+export function buildReverseSeedText(handoff: HandoffV1): string {
+  return buildSeedText(handoff).replace(
+    '这是一次从手机轻引擎到完整引擎的交接。不要重做已完成步骤，只继续未执行的步骤。',
+    '这是从完整引擎回到手机轻引擎的继续会话。不要重做已完成步骤；需要跑 Python/Office/长任务时再切回完整引擎。',
+  );
 }
 
 /* ------------------------------------------------------------------ *

@@ -304,6 +304,9 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
   成功后按原 id `openSession`；失败时回落到 `switchEngine` 的错误提示。
 - 只读横幅同样一键继续：`ChatScreen.resumeOnActiveSide` 按 `ConversationLink.activeSide`
   切引擎后 `openSession(link.id)`，不用再回首页手动切。
+- 反向继续（完整 → 轻）：完整会话长按「在轻引擎继续（摘要交接）」→ `turnDetailToHistory`
+  + `buildHandoff` 生成摘要/最近 8 轮/工具结果 → 切轻引擎 → 轻宿主 `sessions.import`
+  创建带 seed 的会话（不触发模型）→ `ConversationLink(activeSide='light')`；seed 由合并层 strip。
 - 仍需：跨引擎 Handoff 继续（在另一引擎续聊、原会话只读）、按引擎过滤搜索、缓存失效/归档同步。
 
 ## 7. 登录与配对
