@@ -11,6 +11,7 @@ import {
   Text,
   View,
   type StyleProp,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 
@@ -690,14 +691,18 @@ export interface MarkdownViewProps {
   streaming?: boolean;
   /** 兼容 isStreaming 属性 */
   isStreaming?: boolean;
+  /** U7 对话字号倍率（1 = 标准） */
+  fontScale?: number;
 }
 
 const MarkdownBlock = React.memo(function MarkdownBlock({
   block,
   trailingCursor,
+  fontScale: _fontScale,
 }: {
   block: BlockItem;
   trailingCursor?: boolean;
+  fontScale?: number;
 }): React.ReactElement {
   switch (block.type) {
     case 'h1':
@@ -776,10 +781,12 @@ const BlockList = React.memo(function BlockList({
   blocks,
   prefix,
   streaming = false,
+  fontScale = 1,
 }: {
   blocks: BlockItem[];
   prefix: string;
   streaming?: boolean;
+  fontScale?: number;
 }): React.ReactElement {
   return (
     <>
@@ -788,6 +795,7 @@ const BlockList = React.memo(function BlockList({
           key={`${prefix}:${index}`}
           block={block}
           trailingCursor={streaming && index === blocks.length - 1 && block.type === 'p'}
+          fontScale={fontScale}
         />
       ))}
     </>
@@ -799,7 +807,9 @@ function MarkdownViewImpl({
   style,
   streaming,
   isStreaming,
+  fontScale = 1,
 }: MarkdownViewProps): React.ReactElement {
+  applyFontScale(fontScale);
   const activeStreaming = Boolean(streaming || isStreaming);
   const { stable, tail } = splitStableMarkdown(text);
   const stableBlocks = React.useMemo(
@@ -814,8 +824,8 @@ function MarkdownViewImpl({
 
   return (
     <View style={[styles.root, style]}>
-      <BlockList blocks={stableBlocks} prefix="stable" />
-      <BlockList blocks={tailBlocks} prefix="tail" streaming={activeStreaming} />
+      <BlockList blocks={stableBlocks} prefix="stable" fontScale={fontScale} />
+      <BlockList blocks={tailBlocks} prefix="tail" streaming={activeStreaming} fontScale={fontScale} />
       {activeStreaming && (!tailEndsWithParagraph || !lastIsParagraph) ? (
         <View style={styles.trailingCursorWrap}>
           <StreamingCursor />
@@ -827,7 +837,7 @@ function MarkdownViewImpl({
 
 export const MarkdownView = React.memo(MarkdownViewImpl);
 
-const styles = StyleSheet.create({
+let styles = StyleSheet.create({
   root: { gap: space.sm },
   bold: { fontWeight: '700', color: colors.text },
   italic: { fontStyle: 'italic', color: colors.text },
@@ -1030,3 +1040,34 @@ const styles = StyleSheet.create({
   tableHeaderText: { color: colors.text, fontSize: 12, fontWeight: '500', lineHeight: 18 },
   tableCellText: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
 });
+
+/**
+ * U7 字号档：MarkdownView 的样式是模块级常量、子组件直接读 `styles`。
+ * 用一份按倍率重建的样式表替换 `styles`，再靠 BlockList/MarkdownBlock 的
+ * fontScale prop 穿透 memo 触发重渲染；聊天里所有 Markdown 共用同一倍率。
+ */
+const baseStyles = styles;
+let scaledFor = 1;
+
+function scaleStyles(scale: number): typeof baseStyles {
+  if (scale <= 1) return baseStyles;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(baseStyles) as Array<keyof typeof baseStyles>) {
+    const flat = StyleSheet.flatten(baseStyles[key]) as TextStyle | undefined;
+    out[key] =
+      flat && (flat.fontSize !== undefined || flat.lineHeight !== undefined)
+        ? {
+            ...flat,
+            ...(flat.fontSize !== undefined ? { fontSize: flat.fontSize * scale } : {}),
+            ...(flat.lineHeight !== undefined ? { lineHeight: flat.lineHeight * scale } : {}),
+          }
+        : baseStyles[key];
+  }
+  return out as typeof baseStyles;
+}
+
+function applyFontScale(scale: number): void {
+  if (scale === scaledFor) return;
+  scaledFor = scale;
+  styles = scaleStyles(scale);
+}

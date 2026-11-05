@@ -168,10 +168,15 @@ export function SettingsScreen(): React.ReactElement {
         {
           id: 'font',
           title: '对话字号',
-          value: '标准',
+          value:
+            state.chatFontScale >= 1.3
+              ? '特大'
+              : state.chatFontScale >= 1.15
+                ? '大'
+                : '标准',
           icon: 'A',
           tone: 'violet',
-          onPress: () => flash('字号档在 U7 做；当前固定为官方标准字号。'),
+          onPress: () => store.cycleChatFontScale(),
         },
         {
           id: 'collapse',

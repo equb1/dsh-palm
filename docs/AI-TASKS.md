@@ -216,7 +216,11 @@
   - 2026-11-06 前置：外观组加了「完成后收起过程」开关（`collapseProcess`，默认开，
     持久化在 UI cache）；关掉后完成的回合默认展开思考/工具过程，收起/展开仍可手动点。
     真机：关 → 打开已完成会话，摘要箭头朝上、过程展开；改回开（`146`、`147` 截图）。
-  - 主题仍是浅色固定；字号档、深色主题、动效 token 未做。
+  - 主题仍是浅色固定；深色主题、动效 token 未做。
+  - 2026-11-06 字号档：`AppState.chatFontScale`（1 / 1.15 / 1.3，UI cache 持久化）；设置「外观 →
+    对话字号」点按循环 标准/大/特大；`MarkdownView` 按倍率重建模块样式（fontSize/lineHeight），
+    `TurnView` 用户气泡同步缩放；真机同一会话标准 vs 特大对比（`166-font-standard.png`、
+    `167-font-large.png`、`168-settings-font.png`）。
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
   - 2026-11-06 第一步：轻宿主加 `fs.list`（列 `/workspace` 目录，返回 name/kind/size/mtime，
     子项 500 条上限、单子项 stat 失败不拖垮整页）；新增 `ui/FilesScreen.tsx` 文件浏览器

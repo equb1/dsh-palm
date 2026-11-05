@@ -202,7 +202,8 @@ function renderBlock(
   block: Block,
   approvals: Record<string, Approval>,
   onToggleThinking?: () => void,
-  live?: boolean
+  live?: boolean,
+  fontScale = 1
 ): React.ReactElement | null {
   switch (block.kind) {
     case 'thinking':
@@ -212,7 +213,7 @@ function renderBlock(
     case 'tool':
       return <ToolRow key={block.id} block={block} />;
     case 'text':
-      return <MarkdownView key={block.id} text={block.text} streaming={live} />;
+      return <MarkdownView key={block.id} text={block.text} streaming={live} fontScale={fontScale} />;
     case 'approval': {
       const approval = approvals[block.approvalId];
       return approval ? <ApprovalCard key={block.id} approval={approval} /> : null;
@@ -286,6 +287,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
   onToggleThinking,
   fallbackDurationMs,
   expandProcess,
+  fontScale = 1,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
@@ -293,6 +295,8 @@ const AssistantTurn = React.memo(function AssistantTurn({
   fallbackDurationMs?: number;
   /** 外观设置「完成后收起过程」关掉时，完成的回合默认展开思考/工具 */
   expandProcess?: boolean;
+  /** U7 对话字号倍率 */
+  fontScale?: number;
 }): React.ReactElement {
   const [open, setOpen] = React.useState(expandProcess === true);
   const completed = turn.status !== 'streaming';
@@ -349,7 +353,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
             <ToolGroupRow key={entry.key} tools={entry.tools} />
           ) : (
             <React.Fragment key={entry.key}>
-              {renderBlock(entry.block, approvals, onToggleThinking, false)}
+              {renderBlock(entry.block, approvals, onToggleThinking, false, fontScale)}
             </React.Fragment>
           ),
         )}
@@ -358,12 +362,12 @@ const AssistantTurn = React.memo(function AssistantTurn({
         ? [
             ...noticeBlocks.map((b, i) => (
               <React.Fragment key={`notice-${b.id}-${i}`}>
-                {renderBlock(b, approvals, onToggleThinking)}
+                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale)}
               </React.Fragment>
             )),
             ...answerBlocks.map((b, i) => (
               <React.Fragment key={`${b.id}-${i}`}>
-                {renderBlock(b, approvals, onToggleThinking)}
+                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale)}
               </React.Fragment>
             )),
           ]
@@ -373,7 +377,8 @@ const AssistantTurn = React.memo(function AssistantTurn({
                 b,
                 approvals,
                 onToggleThinking,
-                turn.status === 'streaming' && i === visibleBlocks.length - 1
+                turn.status === 'streaming' && i === visibleBlocks.length - 1,
+                fontScale
               )}
             </React.Fragment>
           ))}
@@ -389,12 +394,14 @@ function TurnViewImpl({
   onToggleThinking,
   fallbackDurationMs,
   expandProcess,
+  fontScale = 1,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
   onToggleThinking?: () => void;
   fallbackDurationMs?: number;
   expandProcess?: boolean;
+  fontScale?: number;
 }): React.ReactElement {
   if (turn.role === 'user') {
     const text = turn.blocks
@@ -404,7 +411,14 @@ function TurnViewImpl({
     return (
       <View style={styles.userRow}>
         <View style={styles.userBubble}>
-          <Text style={styles.userText}>{text}</Text>
+          <Text
+            style={[
+              styles.userText,
+              fontScale !== 1 && { fontSize: 14 * fontScale, lineHeight: 22 * fontScale },
+            ]}
+          >
+            {text}
+          </Text>
         </View>
       </View>
     );
@@ -417,6 +431,7 @@ function TurnViewImpl({
       onToggleThinking={onToggleThinking}
       fallbackDurationMs={fallbackDurationMs}
       expandProcess={expandProcess}
+      fontScale={fontScale}
     />
   );
 }

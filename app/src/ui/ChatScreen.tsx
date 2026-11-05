@@ -235,6 +235,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         approvals={state.approvals}
         onToggleThinking={handleToggleThinking}
         expandProcess={!state.collapseProcess}
+        fontScale={state.chatFontScale}
         fallbackDurationMs={
           index === lastAssistantIndex && item.status !== 'streaming' && session.updatedAt > item.createdAt
             ? session.updatedAt - item.createdAt

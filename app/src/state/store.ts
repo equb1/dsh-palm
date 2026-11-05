@@ -274,6 +274,8 @@ export interface AppState {
   autoRoute: boolean;
   /** 完成的回合默认收起思考/工具过程（外观设置，持久化在 UI cache） */
   collapseProcess: boolean;
+  /** U7 对话字号倍率：1 / 1.15 / 1.3（持久化在 UI cache） */
+  chatFontScale: number;
 }
 
 /**
@@ -437,6 +439,7 @@ export class Store {
     sessionFolders: {},
     autoRoute: true,
     collapseProcess: true,
+    chatFontScale: 1,
   };
 
   private readonly engineDeps: EngineDeps;
@@ -741,6 +744,15 @@ export class Store {
     this.persistUiCache();
   }
 
+  /** U7 对话字号：标准 → 大 → 特大 → 标准 */
+  cycleChatFontScale(): void {
+    const steps = [1, 1.15, 1.3];
+    const index = steps.findIndex((step) => Math.abs(step - this.state.chatFontScale) < 0.01);
+    const next = steps[(index + 1) % steps.length] ?? 1;
+    this.patch({ chatFontScale: next });
+    this.persistUiCache();
+  }
+
   /**
    * 会话级 pin：'light' 表示以后不再自动切完整；null 清除。
    * TODO(1.4): 还没做 pin 的 UI 入口（按裁剪顺序最后补；规则与持久化已就绪）。
@@ -804,6 +816,7 @@ export class Store {
         sessionFolders: this.state.sessionFolders,
         autoRoute: this.state.autoRoute,
         collapseProcess: this.state.collapseProcess,
+        chatFontScale: this.state.chatFontScale,
       });
       void writeHostUiCache(payload);
     } catch {
@@ -829,6 +842,7 @@ export class Store {
           sessionFolders?: Record<string, string>;
           autoRoute?: boolean;
           collapseProcess?: boolean;
+          chatFontScale?: number;
         };
         if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
           nextPatch.sessions = parsed.sessions;
@@ -858,6 +872,9 @@ export class Store {
         }
         if (typeof parsed.collapseProcess === 'boolean') {
           nextPatch.collapseProcess = parsed.collapseProcess;
+        }
+        if (typeof parsed.chatFontScale === 'number' && parsed.chatFontScale >= 1) {
+          nextPatch.chatFontScale = Math.min(parsed.chatFontScale, 1.3);
         }
         if (parsed.draftPresetId && !this.state.draftPresetId) {
           nextPatch.draftPresetId = parsed.draftPresetId;
