@@ -191,6 +191,7 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
 OpenAI 兼容 `/chat/completions`，SSE 流；45s 空闲超时（每分片重置）；
 成功每次调用打一行 `[light] ttft=<ms> stream=<ms> model=… step=… first=content|tool tools=… usage=… run=…`，
 失败打 `[light] error kind=timeout|offline|unauthorized|rate_limited|… status=… run=…`；
+错误消息优先取服务端 JSON 的 `error.message`/`message`（`describeHttpError`），不把整段 JSON 塞进横幅；
 错误经 `lib/errors.ts` 人话化后写回当前会话（ChatScreen 横幅）。
 渠道配置存 SecureStore（baseURL/apiKey/model/image），支持 `dshpalm://light?...` 深链覆盖。
 账号模式的模型目录（M2.5）：`engine/light/catalog.ts` 用 `x-dsh-auth-token` GET `{baseURL}/models`，

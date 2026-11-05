@@ -138,6 +138,11 @@
     create_docx → 批准 → `/workspace/docs/weekly.docx`（9541B）→ 「生成文件」面板「打开」进系统文档
     查看器（Weekly Report / Progress / All milestones are on track.）→「分享」拉起系统分享面板
     （MIME `…wordprocessingml.document`，9KB）。
+  - 2026-11-06 异常路径真机：轻引擎临时指向本机 401 mock（`127.0.0.1:8800`）→ 发消息，
+    横幅显示「登录或 API Key 无效/已过期（401）：Authentication Fails (governor)」+「重新登录」；
+    `describeHttpError` 现在只取 JSON 的 `error.message`/`message`，不再把整段 JSON 塞进横幅
+    （`test/light-errors.test.ts` 3 条）。随后 LightEngineScreen「用账号连接」恢复，
+    日志回到 `auth=account(64)`，真模型 `hi` 正常（`159-401-humanized.png`）。
 
 ### UI 工作流（与 P0 并行）
 
