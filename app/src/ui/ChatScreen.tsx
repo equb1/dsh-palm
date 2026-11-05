@@ -16,7 +16,7 @@ import { store, useStore } from './useStore';
 import { IconButton, Pill } from './parts';
 import { EngineBadge } from './EngineBadge';
 import { badgeFor, canSwitch } from '../state/engineManager';
-import { isConversationReadOnly } from '../lib/handoff';
+import { isConversationReadOnly, stripEngineNoticeTurns } from '../lib/handoff';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { ModelSheet } from './ModelSheet';
@@ -73,7 +73,11 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     link?.activeSide === 'full' && state.engine.mode !== 'full'
       ? '完整引擎已停止，这个会话只读；点这里回首页，需要继续时在顶栏重新切到完整模式 ›'
       : '已切换引擎，这个会话只读；点这里回首页新建会话继续 ›';
-  const turns = session.turns;
+  // 完整引擎在切 approval policy 时会写一条 user 角色提示，原生完整会话也不显示（I9）
+  const turns = React.useMemo(
+    () => (state.engineKind === 'remote' ? stripEngineNoticeTurns(session.turns) : session.turns),
+    [session.turns, state.engineKind],
+  );
   // 生成文件面板：只解析当前会话的工具结果，不额外请求宿主
   const generatedFiles = React.useMemo(() => collectGeneratedFiles(session.turns), [session.turns]);
   let lastAssistantIndex = -1;

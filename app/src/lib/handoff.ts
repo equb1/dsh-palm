@@ -489,6 +489,11 @@ function fullSideTurns(turns: Turn[], seedMarker: string, seedTurnId?: string): 
   return stripSeedTurns(turns, seedMarker, seedTurnId).filter((turn) => !isEngineNoticeTurn(turn));
 }
 
+/** 原生完整会话展示层也过滤引擎提示（不进 ConversationLink 的会话同样适用） */
+export function stripEngineNoticeTurns(turns: Turn[]): Turn[] {
+  return turns.filter((turn) => !isEngineNoticeTurn(turn));
+}
+
 
 /**
  * 逻辑会话详情 = 轻引擎缓存回合 + 完整引擎回合（去掉 seed 用户消息）。

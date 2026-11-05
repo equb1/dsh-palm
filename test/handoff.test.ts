@@ -12,6 +12,7 @@ import {
   mergeDetail,
   physicalIdFor,
   seedMarkerFor,
+  stripEngineNoticeTurns,
   truncateTurns,
   type ConversationLink,
   type HandoffHistoryMessage,
@@ -285,6 +286,24 @@ describe('Handoff · 纯函数', () => {
     assert.equal(texts.some((text) => text.includes('approval policy changed')), false);
     assert.equal(texts.some((text) => text.includes('再加一页')), true);
     assert.equal(texts.some((text) => text.includes('完整引擎输出 42')), true);
+  });
+
+  it('stripEngineNoticeTurns：完整引擎的 policy 提示不显示，真实用户消息保留', () => {
+    const user = (id: string, text: string): Turn => ({
+      id,
+      role: 'user',
+      createdAt: 1,
+      status: 'done',
+      blocks: [{ kind: 'text', id: `${id}-b`, text }],
+    });
+    const turns: Turn[] = [
+      user('u1', 'hi'),
+      user('notice', 'The approval policy changed from "ask" to "never" (changed by the user).'),
+      user('u2', 'please continue'),
+      { id: 'a1', role: 'assistant', createdAt: 2, status: 'done', blocks: [] },
+    ];
+    const out = stripEngineNoticeTurns(turns);
+    assert.deepEqual(out.map((turn) => turn.id), ['u1', 'u2', 'a1']);
   });
 
   it('logical / physical 映射：两个物理 id 都归到一条逻辑会话', () => {

@@ -610,8 +610,10 @@
   会往会话历史写一条 user 角色提示，`ConversationLink` 只剥 handoff seed 回合，没过滤这类系统提示。
 - 处理（2026-11-05 已修）：`handoff.ts` 增加 `fullSideTurns`，合并完整引擎回合时过滤掉以
   `The approval policy changed` 开头的 user 回合；只匹配这句固定文案，真实用户消息不删。
-  单测 `handoff.test.ts` 新增「过滤完整引擎的 approval policy 提示，不误删真实用户消息」。
-- 验证：`npm run verify` 210 pass / 0 fail；真机下次 handoff 时复看一眼（本轮只做了单测）。
+  原生完整会话（不经 ConversationLink）也在 `ChatScreen` 用 `stripEngineNoticeTurns` 过滤展示。
+  单测 `handoff.test.ts` 两条：合并不误删真实用户消息、展示层只去 policy 提示。
+- 验证：`npm run verify` 217 pass / 0 fail；真机原生完整会话截图 `scratch/shots/90-full-opened2.png`
+  里还能看到旧提示（代码未重载），soak 结束后重启 Metro 复验。
 
 ### I10. 长会话 soak 内存（2026-11-05，观察）
 
