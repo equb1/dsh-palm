@@ -90,6 +90,12 @@
     真机：文件选择器选图落到 `uploads/910fd81f6ca0de0e-dsh-trim.png`，chip 显示文件名；
     文字分享冷启动直接进输入框（`最终分享验证 2026`）；`HostModule` 里 base64 路径已删。
     分享 `content://` 时若对方没给读权限，错误条给人话（不再未捕获 rejection）。
+    2026-11-05 真机：文件选择器多选「测试 报告#1%.pdf / big-video.mp4 / plain note.txt」→
+    `uploads/02536eb9753aae8a-测试 报告_1_.pdf`（中文+空格保留，`#`/`%`→`_`）、
+    `394c345f0b0c63ee-big-video.mp4`（25MB）、`7fa36b95d5c98859-plain note.txt`；chip 标「完整」，
+    提示「PDF 暂不解析，只保存文件路径」「25 MB，超过 20MB，只按路径引用」；完整引擎模型列出三件并读回 txt。
+    系统分享入口：文档查看器「以 PDF 格式分享」→ 选锦囊 → chip 复用同一文件（uploads 无重复），
+    提示同上。
 
 - [x] **1.4 预路由 + 能力门 + Handoff v1**
   - [x] 发送前按 R2/R3 预路由（代码/后台/转格式 → proot）
@@ -137,7 +143,10 @@
 - [ ] **U1 聊天页重排**：浮动顶栏、Composer 28 圆角/40 键、错误横幅、回到底部键
   - 部分完成：Composer、回到底部、模型顶栏；浮动玻璃顶栏/错误横幅未做。
 - [ ] **U2 消息层**：思考 3 行实时窗、工具行合并、整轮折叠、ChatCard 统一
-  - 部分完成：思考按 block、工具行、完成摘要/整轮折叠；ChatCard 统一卡片/完整过程分组未做。
+  - 部分完成：思考按 block、工具行、完成摘要/整轮折叠；ChatCard 统一卡片未做。
+  - 2026-11-05：思考实时窗改 3 行（只跟最后 240 字）；完整过程展开后相邻 ≥2 个工具合并成
+    「N 个工具 · a · b」一行，可再展开逐条详情（`TurnView.tsx` 的 `groupProcessBlocks`）。
+    真机 weekly.docx 会话验证：折叠行显示「2 个工具 create_docx · read_docx」，展开后两条工具行都在。
 - [x] **U3 流式性能**：按帧合并 + 活跃 block 局部更新 + stable/tail Markdown + 空 block 修复；
   90 分钟 soak 待补
 - [ ] **U4 设置 IA**：6 组、SettingsTile、右侧当前值、搜索
