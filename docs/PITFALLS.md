@@ -594,8 +594,10 @@
   create_docx 行/两张审批卡，点“批准”很容易点错/失效。
 - 原因：先生成的 assistant 回合和随后补发的回合共用同一个 runId（`r_…`），FlatList/TurnView 的 key
   用了 runId；`turnIdsFor`/`cleanTurns` 没有为“同 run 的后续回合”生成唯一 key。
-- 处理（待做）：给 turn key 加序号/role 后缀（如 `runId#turnIndex`），或在发送新消息前把旧 run 的
-  pending 审批/回合收口；复现步骤：发“create docx” → 不点批准 → 再发一句 → 看 logcat duplicate key。
-- 验证（待）：同一操作 logcat 无 duplicate key，审批卡只保留一张。
+- 处理（2026-11-05 已修）：`ChatScreen` 的 FlatList `keyExtractor` 改为
+  `` `${turn.id ?? turn.runId ?? 'turn'}#${index}` ``，同 run 的多个回合不再撞 key；
+  提交 `8ef85fa`，typecheck + verify 209 pass。
+- 验证（待真机）：重启 Metro/App 后复现“create docx → 不批准 → 再发一句”，
+  `adb logcat -s ReactNativeJS | grep duplicate` 应为空，审批卡只保留一张。
 
 
