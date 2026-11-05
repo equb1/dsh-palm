@@ -214,8 +214,8 @@ export interface AppState {
   busy: boolean;
   /** 首页输入框当前选中的锦囊 */
   draftPresetId: string | null;
-  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 / 搜索 */
-  view: 'main' | 'settings' | 'features' | 'files' | 'search';
+  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 / 搜索 / 工作区 */
+  view: 'main' | 'settings' | 'features' | 'files' | 'search' | 'workspace';
   /** 模型凭据状态（ref -> 是否已配置） */
   credentials: Record<string, { configured: boolean; writable: boolean }>;
   /** 宿主可用的模型 */
@@ -1463,6 +1463,15 @@ export class Store {
   }
 
   closeSearch(): void {
+    this.patch({ view: 'main' });
+  }
+
+  /** U8：工作区页（轻引擎只有单工作区，先做只读概览 + 文件入口） */
+  openWorkspace(): void {
+    this.patch({ view: 'workspace', error: null });
+  }
+
+  closeWorkspace(): void {
     this.patch({ view: 'main' });
   }
 

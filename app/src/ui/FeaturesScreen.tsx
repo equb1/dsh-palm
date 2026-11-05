@@ -133,11 +133,10 @@ export function FeaturesScreen(): React.ReactElement {
         {
           id: 'workspace',
           title: '工作区',
-          hint: '置顶 / 分组 / 会话数（U8，未接入）',
+          hint: '概览 / 会话数 / 文件入口',
           icon: '▢',
           tone: 'violet',
-          disabled: true,
-          onPress: () => flash('工作区管理还只有单工作区，多工作区在 M2。'),
+          onPress: () => store.openWorkspace(),
         },
         {
           id: 'plugins',

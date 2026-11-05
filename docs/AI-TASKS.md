@@ -219,7 +219,11 @@
   - 2026-11-06 第三步：文件搜索——FilesScreen 头部加 ⌕，按文件名过滤当前目录，
     无匹配显示「没有匹配的文件」，清空恢复。真机 docs 目录输 `zz` 空结果、清空输 `week`
     只剩 weekly.docx（`156-files-search-empty.png`、`157-files-search-match.png`）。
-  - 未做：终端、工作区管理；完整引擎（proot）未实现 fs 系列，连完整引擎时会提示不支持。
+  - 2026-11-06 第四步：工作区页——全部功能「工作区」卡可点，新增 `ui/WorkspaceScreen.tsx`：
+    列出宿主报告的工作区（名称/root/会话数/运行中/锦囊数），入口「浏览文件」；
+    轻引擎单工作区有说明。真机：本机工作区、`/workspace`、19 个会话 · 2 个锦囊，
+    点「浏览文件」进文件页（`158-workspace.png`）。
+  - 未做：终端；多工作区创建/置顶/分组（M2）；完整引擎 fs。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）
