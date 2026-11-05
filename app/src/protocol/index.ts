@@ -594,6 +594,8 @@ export interface RequestParams {
   'sessions.rename': { sessionId: string; title: string };
   'sessions.pin': { sessionId: string; pinned: boolean };
   'sessions.archive': { sessionId: string; archived: boolean };
+  /** 删除会话（E3，轻引擎实现；完整引擎暂不支持） */
+  'sessions.delete': { sessionId: string };
 }
 
 export interface RequestResults {
@@ -634,6 +636,7 @@ export interface RequestResults {
   'sessions.rename': { session: SessionDetail };
   'sessions.pin': { ok: true };
   'sessions.archive': { ok: true };
+  'sessions.delete': { ok: true };
 }
 
 export type Method = keyof RequestParams;

@@ -479,4 +479,24 @@ describe('LocalEngineClient', () => {
       (error: unknown) => (error as { code?: string }).code === 'bad_request',
     );
   });
+
+  it('sessions.delete 删除会话，运行中的会话拒绝删除（E3）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    const a = await createSession(harness);
+    const b = await createSession(harness);
+    await harness.client.request('sessions.delete', { sessionId: a });
+    const list = await harness.client.request('sessions.list', {});
+    assert.equal(list.sessions.some((session) => session.id === a), false);
+    assert.equal(list.sessions.some((session) => session.id === b), true);
+
+    const busy = await makeHost([{ waitForAbort: true }]);
+    const running = await createSession(busy);
+    await busy.client.request('sessions.send', { sessionId: running, text: '慢慢跑' });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await assert.rejects(
+      busy.client.request('sessions.delete', { sessionId: running }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+    await busy.client.request('sessions.stop', { sessionId: running });
+  });
 });

@@ -1059,6 +1059,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { ok: true as const };
     },
 
+    'sessions.delete': async () => unsupported('sessions.delete'),
+
     'workspaces.list': async () => {
       // workspace/follow 的第一帧是 baseline，里面就是工作区清单
       type WorkspaceView = { workspaceId?: string; path?: string; title?: string };

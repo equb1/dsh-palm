@@ -737,6 +737,11 @@ const handlers: { [M in Method]: Handler<M> } = {
     return { ok: true as const };
   },
 
+  'sessions.delete': ({ sessionId }) => {
+    sessions.delete(sessionId);
+    return { ok: true as const };
+  },
+
   'providers.remove': ({ id }) => {
     const i = mockProviders.findIndex((p) => p.id === id);
     if (i >= 0) mockProviders.splice(i, 1);

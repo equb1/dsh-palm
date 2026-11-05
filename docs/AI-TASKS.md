@@ -403,6 +403,12 @@ type AttachmentChipsProps = {
 - [ ] **E1** JS bundle 4.2MB，Metro 不拆包 → 按需资源包
 - [ ] **E2** 一会话一 run，无队列 → 并发上限 + 排队
 - [ ] **E3** 宿主缺会话删除/正文搜索 → 等上游或自建索引
+  - 2026-11-06：轻引擎实现 `sessions.delete`（运行中的会话拒绝删除），抽屉长按菜单加「删除」
+    + 二次确认；store 删除后关闭当前会话、清理 ConversationLink、刷新列表。mock 宿主同样支持，
+    完整引擎显式 unsupported。真机删掉「Do not ask questions」测试会话，
+    其他会话不受影响（`148-drawer-longpress-menu.png`、`149-drawer-after-delete.png`）；
+    单测覆盖删除与运行中拒绝。
+  - 仍缺：正文搜索（宿主没有接口）、完整引擎删除。
 - [ ] **E4** 沙箱只有 JS 层路径约束 → 文档别承诺安全边界
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
 - [ ] **E6** 文档过时 → 每次改动同步四篇文档

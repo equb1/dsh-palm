@@ -2263,6 +2263,28 @@ export class Store {
     }
   }
 
+  /** E3：删除会话（轻引擎实现；完整引擎会报不支持） */
+  async deleteSession(id: string): Promise<void> {
+    if (!this.client) return;
+    const logicalId = this.linkForSession(id)?.id ?? id;
+    const physicalId = this.physicalIdFor(logicalId);
+    try {
+      await this.client.request('sessions.delete', { sessionId: physicalId });
+      if (this.state.currentId === logicalId) this.closeSession();
+      const links = this.state.links.filter(
+        (link) =>
+          link.id !== logicalId &&
+          link.lightSessionId !== physicalId &&
+          link.fullSessionId !== physicalId,
+      );
+      if (links.length !== this.state.links.length) this.patch({ links });
+      this.baseDetails.delete(logicalId);
+      await this.refreshSessions();
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
   async setPreset(presetId: string): Promise<void> {
     const { currentId, caps } = this.state;
     if (!this.client || !currentId) return;

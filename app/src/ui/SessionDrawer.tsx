@@ -1,5 +1,5 @@
 import React from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { SessionSummary } from '../protocol';
 import type { SessionRow } from '../state/sessionList';
@@ -236,6 +236,21 @@ export function SessionDrawer({
           </Pressable>
           <Pressable onPress={() => { void store.archiveSession(s.id, true); setMenuFor(null); }}>
             <Text style={[styles.menuItem, { color: colors.danger }]}>归档</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setMenuFor(null);
+              Alert.alert('删除会话', `删除「${s.title}」？只删会话记录，不影响工作区文件。`, [
+                { text: '取消', style: 'cancel' },
+                {
+                  text: '删除',
+                  style: 'destructive',
+                  onPress: () => void store.deleteSession(s.id),
+                },
+              ]);
+            }}
+          >
+            <Text style={[styles.menuItem, { color: colors.danger }]}>删除</Text>
           </Pressable>
           <View style={styles.renameRow}>
             <TextInput

@@ -533,6 +533,19 @@ export class LightHost {
         await this.save(session);
         return { ok: true as const };
       },
+      'sessions.delete': async ({ sessionId }: { sessionId: string }) => {
+        const session = this.requireSession(sessionId);
+        if (this.runs.has(session.id)) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: '这个会话正在运行，先停止再删除',
+          });
+        }
+        this.sessions.delete(session.id);
+        this.statuses.delete(session.id);
+        await this.repo.remove(session.id);
+        return { ok: true as const };
+      },
       'models.list': async () => {
         const currentModel: ModelOption = {
           provider: this.providerId(),
