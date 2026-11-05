@@ -608,9 +608,10 @@
   这不是用户输入，用户会以为是自己发的。
 - 原因（初步）：交接把完整引擎 turns 原样并入逻辑会话；DSH 在切 `danger-full-access` 时
   会往会话历史写一条 user 角色提示，`ConversationLink` 只剥 handoff seed 回合，没过滤这类系统提示。
-- 处理：待定（P3）。可在合并 turns 时按固定文案/前缀过滤，或把它映射成 agent 事件块；
-  不要按 `role === 'user'` 一刀切，避免吞掉真实用户消息。
-- 验证：2026-11-05 真机 1.4 handoff 复现；截图 `scratch/shots/26-handoff-ready.png`。
+- 处理（2026-11-05 已修）：`handoff.ts` 增加 `fullSideTurns`，合并完整引擎回合时过滤掉以
+  `The approval policy changed` 开头的 user 回合；只匹配这句固定文案，真实用户消息不删。
+  单测 `handoff.test.ts` 新增「过滤完整引擎的 approval policy 提示，不误删真实用户消息」。
+- 验证：`npm run verify` 210 pass / 0 fail；真机下次 handoff 时复看一眼（本轮只做了单测）。
 
 
 

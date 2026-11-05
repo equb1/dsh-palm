@@ -469,6 +469,28 @@ export function stripSeedTurns(turns: Turn[], seedMarker: string, seedTurnId?: s
 }
 
 /**
+ * 完整引擎在切 approval policy 时会往历史里写一条 user 角色提示
+ * （"The approval policy changed from … to …"），它不是用户发的，别显示成用户气泡。
+ * 只按这句固定文案过滤，避免误吞真实用户消息（见 PITFALLS I9）。
+ */
+const ENGINE_NOTICE_PATTERN = /^The approval policy changed\b/i;
+
+function isEngineNoticeTurn(turn: Turn): boolean {
+  if (turn.role !== 'user') return false;
+  const text = turn.blocks
+    .map((block) => (block.kind === 'text' ? block.text : ''))
+    .join('')
+    .trim();
+  return ENGINE_NOTICE_PATTERN.test(text);
+}
+
+/** 完整引擎侧回合：去 seed + 去引擎自动提示 */
+function fullSideTurns(turns: Turn[], seedMarker: string, seedTurnId?: string): Turn[] {
+  return stripSeedTurns(turns, seedMarker, seedTurnId).filter((turn) => !isEngineNoticeTurn(turn));
+}
+
+
+/**
  * 逻辑会话详情 = 轻引擎缓存回合 + 完整引擎回合（去掉 seed 用户消息）。
  * 任一侧缺失时退回另一侧，UI 永远只看到一条会话。
  */
@@ -489,10 +511,10 @@ export function mergeDetail(
       id: link.id,
       title: link.title || target.title,
       presetId: link.presetId || target.presetId,
-      turns: stripSeedTurns(target.turns, link.seedMarker, link.seedTurnId),
+      turns: fullSideTurns(target.turns, link.seedMarker, link.seedTurnId),
     };
   }
-  const turns = [...base.turns, ...stripSeedTurns(target.turns, link.seedMarker, link.seedTurnId)];
+  const turns = [...base.turns, ...fullSideTurns(target.turns, link.seedMarker, link.seedTurnId)];
   return {
     ...target,
     id: link.id,

@@ -230,6 +230,63 @@ describe('Handoff · 纯函数', () => {
     assert.equal(detailHasSeedMarker(full, marker), true);
   });
 
+  it('mergeDetail：过滤完整引擎的 approval policy 提示，不误删真实用户消息', () => {
+    const light = baseDetail(CONVERSATION, [
+      {
+        id: 'u1',
+        role: 'user',
+        createdAt: 1,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b1', text: '运行 python3' }],
+      },
+    ]);
+    const marker = '[dsh-handoff:h_test]';
+    const full = baseDetail('s_full_1', [
+      {
+        id: 'seed',
+        role: 'user',
+        createdAt: 2,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b2', text: `${marker}\n交接说明` }],
+      },
+      {
+        id: 'notice',
+        role: 'user',
+        createdAt: 3,
+        status: 'done',
+        blocks: [
+          {
+            kind: 'text',
+            id: 'b3',
+            text: 'The approval policy changed from "ask" to "never" (changed by the user).',
+          },
+        ],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: 4,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b4', text: '完整引擎输出 42' }],
+      },
+      {
+        id: 'u2',
+        role: 'user',
+        createdAt: 5,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b5', text: '再加一页' }],
+      },
+    ]);
+    const merged = mergeDetail(link(), light, full);
+    assert.ok(merged);
+    const texts = merged!.turns.map((turn) =>
+      turn.blocks.map((block) => (block.kind === 'text' ? block.text : '')).join(''),
+    );
+    assert.equal(texts.some((text) => text.includes('approval policy changed')), false);
+    assert.equal(texts.some((text) => text.includes('再加一页')), true);
+    assert.equal(texts.some((text) => text.includes('完整引擎输出 42')), true);
+  });
+
   it('logical / physical 映射：两个物理 id 都归到一条逻辑会话', () => {
     const current = link();
     assert.equal(physicalIdFor(current, 'light'), CONVERSATION);
