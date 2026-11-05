@@ -1,9 +1,10 @@
 # 锦囊 · AI 维护清单
 
-> 状态：2026-11-03。**本文件是任务状态、规则和命令的唯一来源**。
-> 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)。
-> 长会话流式专项方案与验证记录见 [STREAMING-FIX](STREAMING-FIX.md)；2026-11-04 完整交接见
-> [archive/29-handoff-2026-11-04](archive/29-handoff-2026-11-04.md)。
+> 状态：2026-11-05。**本文件是任务状态、规则和命令的唯一来源**。
+> 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)，
+> 长会话流式见 [STREAMING-FIX](STREAMING-FIX.md)。交接：2026-11-04 见
+> [archive/29-handoff-2026-11-04](archive/29-handoff-2026-11-04.md)，2026-11-05 见
+> [archive/31-handoff-2026-11-05](archive/31-handoff-2026-11-05.md)。
 > **每次做完任务，必须回来勾选/更新这里**；不要另开任务文档。
 
 ## 1. 当前基线
