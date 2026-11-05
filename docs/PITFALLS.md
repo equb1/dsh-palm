@@ -578,8 +578,9 @@
   `[light] error kind=unauthorized status=401 … Authentication Fails (governor)`；
   ChatScreen 横幅显示「登录或 API Key 无效/已过期（401）」。
 - 原因：轻引擎复用 `files/home/.dsh/.credentials.yaml` 的账号 token，而 dsh 账号 token 无 refresh；
-  过期后轻引擎不会自动跳登录（M2.7 未做）。
+  过期后轻引擎不会自动跳登录。
 - 处理：临时切完整模式重新登录 OAuth，或在 LightEngineScreen 配独立 API Key/兼容渠道；
-  长期做 M2.7 的「切完整重登 / 重新授权」入口。
-- 验证：401 横幅与 logcat `[light] error kind=unauthorized` 均出现。
+  2026-11-05 已加最小恢复入口：ChatScreen 401 横幅「重新登录」→ 切完整 + 打开设置，
+  账号卡也提供「重新登录」（退出后重走 OAuth）；重登后点「切回轻引擎」会用新 token 重建。
+- 验证：401 横幅与 logcat `[light] error kind=unauthorized` 均出现；恢复入口见 AI-TASKS 2.7。
 
