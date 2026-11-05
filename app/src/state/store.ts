@@ -16,7 +16,14 @@ import {
 } from '../lib/host';
 import { loadHostCommands, saveHostCommands } from '../lib/hostCmd';
 import { humanizeError } from '../lib/errors';
-import { createLightHost, loadLightConfig, saveLightConfig, type LightEngineSetup } from '../lib/light';
+import {
+  createLightHost,
+  loadLightConfig,
+  loadLightSetupSkipped,
+  saveLightConfig,
+  saveLightSetupSkipped,
+  type LightEngineSetup,
+} from '../lib/light';
 import {
   canSwitch,
   IDLE_RECLAIM_MS,
@@ -303,6 +310,8 @@ export interface EngineDeps {
   deviceConditions: () => Promise<DeviceConditions | null>;
   setRunActive: (active: boolean) => void | Promise<unknown>;
   loadLightConfig: () => Promise<LightEngineSetup | null>;
+  /** 用户是否选过「先用完整模式」；没有配置时用它决定冷启动直接起 proot */
+  loadLightSetupSkipped: () => Promise<boolean>;
   now: () => number;
 }
 
@@ -429,6 +438,7 @@ export class Store {
       deviceConditions: hostDeviceConditions,
       setRunActive: setNativeHostRunActive,
       loadLightConfig,
+      loadLightSetupSkipped,
       now: () => Date.now(),
       ...engineDeps,
     };
@@ -453,6 +463,8 @@ export class Store {
 
   /* ------------------------ EngineManager 内部状态 ------------------------ */
   private engineStarted = false;
+  /** 每次冷启动最多自动弹一次配置页，避免用户切到完整模式后还被反复打断 */
+  private lightSetupPrompted = false;
   /** 同一时刻只跑一次 warm；切换/智能预热都走它 */
   private warming: Promise<boolean> | null = null;
   /** 同一时刻只跑一次完整引擎握手（状态轮询和 warm 循环可能同时触发） */
@@ -962,10 +974,15 @@ export class Store {
       this.lightHost = host;
       this.client = client;
       const ok = await this.attach(client, 'light', 'light', caps);
-      if (ok) await saveLightConfig(setup);
+      if (ok) {
+        await saveLightConfig(setup);
+        await saveLightSetupSkipped(false);
+      }
     } catch (err) {
       client?.close();
       host?.close();
+      // 失败别停在「连接中」；清掉引擎链路，回退逻辑才会重新连
+      this.patch({ conn: 'closed', engineKind: null });
       this.fail(err);
       this.emitEngine({ type: 'LIGHT_FAILED', error: humanizeError(err) });
     }
@@ -2294,6 +2311,26 @@ export class Store {
     this.engineStarted = true;
     await this.hydrateLocalCache();
     void ensureNotificationPermission();
+    // 没有轻引擎配置、且用户上次选了「先用完整模式」：直接起完整引擎，不再弹配置页
+    if (!this.lightSetup) {
+      const saved = await this.engineDeps.loadLightConfig().catch(() => null);
+      if (!saved) {
+        const skipped = await this.engineDeps.loadLightSetupSkipped().catch(() => false);
+        if (skipped && this.engineDeps.hostAvailable) {
+          this.emitEngine({ type: 'BOOT', tier: this.state.prewarmTier, now: this.now() });
+          this.startIdleSweeper();
+          const ok = await this.switchEngine('full');
+          if (ok) {
+            this.closeLightSetup();
+            this.closeSettings();
+          } else {
+            this.openLightSetup();
+          }
+          return;
+        }
+      }
+    }
+
     const effects = this.emitEngine({ type: 'BOOT', tier: this.state.prewarmTier, now: this.now() });
     this.startIdleSweeper();
     await this.runEngineEffects(effects);
@@ -2323,6 +2360,25 @@ export class Store {
 
   closeLightSetup(): void {
     this.patch({ lightSetupOpen: false });
+  }
+
+  /**
+   * 用户没配轻引擎渠道、选择「先用完整模式」：
+   * 记住选择（下次启动直接起 proot），关掉配置页并切完整引擎。
+   */
+  async skipLightSetup(): Promise<void> {
+    this.closeLightSetup();
+    this.closeSettings();
+    this.patch({ error: null });
+    await saveLightSetupSkipped(true);
+    if (!this.engineDeps.hostAvailable) {
+      this.setError('这台设备不支持完整引擎（需要原生构建，Expo Go 不行）');
+      return;
+    }
+    const ok = await this.switchEngine('full');
+    if (!ok) {
+      this.setError('完整引擎没启动起来，稍后可以再试，或重新配置轻引擎。');
+    }
   }
 
   /**
@@ -2480,10 +2536,19 @@ export class Store {
     }
     const setup = this.lightSetup ?? (await this.engineDeps.loadLightConfig());
     if (!setup) {
+      // 没有渠道 = 轻引擎不可用；先回到未连接态，再引导配置（只自动弹一次）
+      this.patch({ conn: 'closed', engineKind: null });
       this.emitEngine({
         type: 'LIGHT_FAILED',
-        error: '轻引擎还没配置：点首页「配置轻引擎」填 Base URL / 模型 / Key',
+        error: '轻引擎还没配置模型渠道：填 Base URL / 模型 / Key，或先用完整模式。',
       });
+      if (!this.lightSetupPrompted) {
+        const skipped = await this.engineDeps.loadLightSetupSkipped().catch(() => false);
+        if (!skipped) {
+          this.lightSetupPrompted = true;
+          this.openLightSetup();
+        }
+      }
       return false;
     }
     this.lightSetup = setup;

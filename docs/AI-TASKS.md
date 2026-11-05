@@ -32,7 +32,9 @@
 - M1 收尾（2026-11-04）：生图 b64/url 自动降级与 url 校验、45s 空闲超时 + `[light] ttft`/`[light] error`、
   文件名统一清洗、生成文件面板（打开；分享延后）；`npm run verify` 206 pass（见 P0 1.5）。
 - 已知缺口：完整引擎默认 `workspace-write` 跑不了 bash（无 bwrap/Landlock，见 PITFALLS F8），
-  跑 Python/Office 命令需把会话切「完全权限」；轻引擎渠道没配置时轻引擎显示未就绪。
+  跑 Python/Office 命令需把会话切「完全权限」。
+- 轻引擎无渠道的引导已补（2026-11-05）：冷启动自动打开配置页，并提供「先用完整模式」
+  （记住选择，下次直接起 proot）；连接失败不再停在「连接中」。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎无附件、无编辑、无 pptx。
 
@@ -63,7 +65,9 @@
   - 结果（2026-11-04）：`app/src/state/engineManager.ts` 纯 reducer + `store` 执行 effects；
     冷启动 `am start -W` 296–385ms，`ps` 无 proot/HostService；角标点按切完整 14s 内 ready 并显示「完整」；
     `am send-trim-memory … RUNNING_LOW` 停 proot、撤通知、回「轻」；force-stop 后重开不再拉起 HostService。
-    已知缺口：本机还没配轻引擎渠道时，回退轻引擎会停在「重连中」，首页有「配置模型渠道」入口。
+    2026-11-05 补：无渠道冷启动自动打开配置页；「先用完整模式」会持久化跳过（`dsh-palm.light.setup.skipped`），
+    下次冷启动直接起 proot；连接失败清理链路，不再停在「连接中」。
+    真机验证：无配置自动弹页、skip 后冷启动直接完整模式、独立 debug 包（无 Metro）生效。
 
 - [x] **1.3 附件收件管线（原生）**
   - [x] 分享/相册/文件选择器 → `workspace/uploads/<hash>-<name>`

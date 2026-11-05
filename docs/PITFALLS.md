@@ -504,3 +504,14 @@
 
 - 桥 8788（WS）、dsh 8787（HTTP）。
 - 本机调试：`adb forward tcp:18788 tcp:8788` / `tcp:18787 tcp:8787`。
+
+### H7. debug APK 改了 JS 但界面没变
+
+- 现象：`assembleDebug` + `install -r` 后，代码改动没生效；设备上仍是旧界面。
+- 原因：debug 包优先加载 Metro 缓存的 `files/BridgelessReactNativeDevBundle.js`，
+  不是 APK 里的 `assets/index.android.bundle`；缓存时间可能早于改动。
+- 处理：
+  1. 起 Metro（`npm --prefix app start`）+ `adb reverse tcp:8081 tcp:8081`，再重启 App；
+  2. 或删掉 `files/BridgelessReactNativeDevBundle.js` 后重启（会回退到 APK 内 bundle）；
+  3. 发布/独立使用打 release，避免 dev bundle 依赖。
+- 验证：删缓存 + 无 Metro 启动，界面仍是新代码。
