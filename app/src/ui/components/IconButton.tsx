@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { semantic } from '../theme';
+import { useThemedStyles, type Theme } from '../theme';
 
 export interface IconButtonProps {
   glyph: string;
@@ -21,6 +21,7 @@ export function IconButton({
   tone = 'default',
   disabled = false,
 }: IconButtonProps): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   return (
     <Pressable
       accessibilityRole="button"
@@ -41,14 +42,15 @@ export function IconButton({
   );
 }
 
-const styles = StyleSheet.create({
-  button: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accent: { backgroundColor: semantic.accentSoft },
-  pressed: { backgroundColor: 'rgba(0,0,0,0.06)' },
-  disabled: { opacity: 0.4 },
-  glyph: { color: semantic.textSecondary, fontSize: 16 },
-  glyphAccent: { color: semantic.accent },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    button: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    accent: { backgroundColor: c.blueSoft },
+    pressed: { backgroundColor: c.pressedOverlay },
+    disabled: { opacity: 0.4 },
+    glyph: { color: c.textDim, fontSize: 16 },
+    glyphAccent: { color: c.blue },
+  });

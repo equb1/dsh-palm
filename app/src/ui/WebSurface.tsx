@@ -8,9 +8,11 @@ import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { colors, font, radius, space, topInset } from './theme';
+import { font, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 export function WebSurface({ url, onClose }: { url: string; onClose: () => void }): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -23,7 +25,7 @@ export function WebSurface({ url, onClose }: { url: string; onClose: () => void 
         <Text style={styles.title} numberOfLines={1}>
           {url.replace(/\?.*$/, '')}
         </Text>
-        {loading ? <ActivityIndicator size="small" color={colors.blue} /> : null}
+        {loading ? <ActivityIndicator size="small" color={palette.blue} /> : null}
       </View>
 
       {error ? <Text style={styles.error}>加载失败：{error}</Text> : null}
@@ -48,8 +50,9 @@ export function WebSurface({ url, onClose }: { url: string; onClose: () => void 
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -57,8 +60,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  close: { color: colors.blue, fontSize: 15 },
-  title: { flex: 1, color: colors.textDim, fontSize: 12, fontFamily: font.mono },
-  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.lg, paddingVertical: 6 },
-  web: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md },
+  close: { color: c.blue, fontSize: 15 },
+  title: { flex: 1, color: c.textDim, fontSize: 12, fontFamily: font.mono },
+  error: { color: c.danger, fontSize: 12, paddingHorizontal: space.lg, paddingVertical: 6 },
+  web: { flex: 1, backgroundColor: c.bg, borderRadius: radius.md },
 });

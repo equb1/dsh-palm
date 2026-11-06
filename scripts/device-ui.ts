@@ -43,9 +43,27 @@ function decodeAttr(value: string): string {
     .replace(/&amp;/g, '&');
 }
 
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 export function dumpNodes(): UiNode[] {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return dumpNodesOnce();
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) sleepSync(250);
+    }
+  }
+  throw lastError;
+}
+
+function dumpNodesOnce(): UiNode[] {
   adb(['shell', 'uiautomator', 'dump', '/sdcard/ui.xml']);
   const xml = String(adb(['exec-out', 'cat', '/sdcard/ui.xml']));
+  if (!xml.includes('<hierarchy')) throw new Error('uiautomator dump 没有返回 hierarchy');
   const nodes: UiNode[] = [];
   for (const match of xml.matchAll(/<node\b([^>]*)>/g)) {
     const attrs = match[1] ?? '';

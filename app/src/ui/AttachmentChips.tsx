@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { AttachmentEngine, AttachmentKind } from '../lib/attachments/types';
-import { radius, semantic, space, typography } from './theme';
+import { radius, space, typography, useThemedStyles, type Theme } from './theme';
 
 export type { AttachmentEngine, AttachmentKind };
 
@@ -37,6 +37,7 @@ export function AttachmentChips({
   onRemove,
   onPress,
 }: AttachmentChipsProps): React.ReactElement | null {
+  const styles = useThemedStyles(createStyles);
   if (items.length === 0) return null;
 
   return (
@@ -95,32 +96,33 @@ export function AttachmentChips({
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: space.sm, paddingVertical: 2 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: semantic.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: semantic.border,
-    borderRadius: radius.pill,
-    paddingLeft: 10,
-    paddingRight: 6,
-    maxWidth: 240,
-  },
-  main: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
-  glyph: { fontSize: 13 },
-  name: { ...typography.caption, color: semantic.textPrimary, flexShrink: 1 },
-  engine: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radius.pill,
-    backgroundColor: semantic.cardStrong,
-  },
-  engineLight: { backgroundColor: semantic.accentSoft },
-  engineText: { ...typography.micro, color: semantic.textSecondary },
-  engineTextLight: { color: semantic.accent },
-  remove: { paddingHorizontal: 4, paddingVertical: 2 },
-  removeGlyph: { fontSize: 15, color: semantic.textTertiary },
-  pressed: { opacity: 0.7 },
-});
+const createStyles = ({ semantic: s }: Theme) =>
+  StyleSheet.create({
+    row: { flexDirection: 'row', gap: space.sm, paddingVertical: 2 },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: s.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: s.border,
+      borderRadius: radius.pill,
+      paddingLeft: 10,
+      paddingRight: 6,
+      maxWidth: 240,
+    },
+    main: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
+    glyph: { fontSize: 13 },
+    name: { ...typography.caption, color: s.textPrimary, flexShrink: 1 },
+    engine: {
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      borderRadius: radius.pill,
+      backgroundColor: s.cardStrong,
+    },
+    engineLight: { backgroundColor: s.accentSoft },
+    engineText: { ...typography.micro, color: s.textSecondary },
+    engineTextLight: { color: s.accent },
+    remove: { paddingHorizontal: 4, paddingVertical: 2 },
+    removeGlyph: { fontSize: 15, color: s.textTertiary },
+    pressed: { opacity: 0.7 },
+  });

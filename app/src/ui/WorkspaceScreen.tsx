@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { store, useStore } from './useStore';
 import { Btn, IconButton } from './parts';
-import { colors, radius, space, topInset } from './theme';
+import { radius, space, topInset, useThemedStyles, type Theme } from './theme';
 
 /**
  * U8 工作区页（只读概览 + 文件入口）。
@@ -12,6 +12,7 @@ import { colors, radius, space, topInset } from './theme';
  * 还没接（M2），这里先把宿主报告的工作区、会话数、锦囊数列出来，并给文件面板入口。
  */
 export function WorkspaceScreen(): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   const state = useStore();
   const rows = store.sessionRows();
   const workspaces = state.workspaces;
@@ -77,8 +78,9 @@ export function WorkspaceScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -86,29 +88,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
+  title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
   scroll: { padding: space.lg, gap: space.md, paddingBottom: space.xxl },
-  hint: { color: colors.textFaint, fontSize: 12.5, lineHeight: 18 },
+  hint: { color: c.textFaint, fontSize: 12.5, lineHeight: 18 },
   card: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     padding: space.md,
     gap: 4,
   },
-  cardPressed: { backgroundColor: colors.glassStrong },
+  cardPressed: { backgroundColor: c.glassStrong },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  name: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
+  name: { flex: 1, color: c.text, fontSize: 15, fontWeight: '600' },
   runningPill: {
-    backgroundColor: colors.blueSoft,
+    backgroundColor: c.blueSoft,
     borderRadius: radius.pill,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  runningText: { color: colors.blue, fontSize: 10.5, fontWeight: '600' },
-  rootPath: { color: colors.textDim, fontSize: 11.5, fontFamily: 'monospace' },
-  meta: { color: colors.textFaint, fontSize: 12 },
+  runningText: { color: c.blue, fontSize: 10.5, fontWeight: '600' },
+  rootPath: { color: c.textDim, fontSize: 11.5, fontFamily: 'monospace' },
+  meta: { color: c.textFaint, fontSize: 12 },
   actions: { flexDirection: 'row', gap: space.sm, marginTop: 6 },
-  footnote: { color: colors.textFaint, fontSize: 11.5, lineHeight: 17, paddingHorizontal: space.xs },
-});
+  footnote: { color: c.textFaint, fontSize: 11.5, lineHeight: 17, paddingHorizontal: space.xs },
+  });

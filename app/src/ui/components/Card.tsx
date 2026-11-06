@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { radius, semantic, space } from '../theme';
+import { radius, space, useThemedStyles, type Theme } from '../theme';
 
 export interface CardProps {
   children: React.ReactNode;
@@ -20,6 +20,7 @@ export function Card({
   accessibilityLabel,
   style,
 }: CardProps): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   const body = <View style={[styles.card, padded && styles.padded, style]}>{children}</View>;
   if (!onPress) return body;
   return (
@@ -34,13 +35,14 @@ export function Card({
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: semantic.card,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: semantic.border,
-  },
-  padded: { padding: space.md },
-  pressed: { opacity: 0.9 },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: c.glass,
+      borderRadius: radius.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
+    padded: { padding: space.md },
+    pressed: { opacity: 0.9 },
+  });

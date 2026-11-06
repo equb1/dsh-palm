@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 
 import type { ModelChoice, ModelOption } from '../protocol';
 import { store, useStore } from './useStore';
-import { colors, radius, semantic, typography } from './theme';
+import { radius, typography, useTheme, useThemedStyles, type Theme } from './theme';
 
 interface ModelGroup {
   provider: string;
@@ -17,6 +17,8 @@ interface ModelGroup {
  */
 export function ModelSheet(): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [query, setQuery] = React.useState('');
   const current = state.detail?.model ?? state.defaultModel;
   const [selected, setSelected] = React.useState<ModelChoice | null>(current ?? null);
@@ -96,7 +98,7 @@ export function ModelSheet(): React.ReactElement {
                   value={query}
                   onChangeText={setQuery}
                   placeholder="搜索模型"
-                  placeholderTextColor={colors.textFaint}
+                  placeholderTextColor={palette.textFaint}
                   autoCorrect={false}
                   autoCapitalize="none"
                   style={styles.search}
@@ -163,84 +165,85 @@ export function ModelSheet(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,17,21,0.28)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    maxHeight: '72%',
-    paddingBottom: 12,
-  },
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  title: { ...typography.heading, color: colors.text },
-  close: { paddingHorizontal: 8, paddingVertical: 4 },
-  closeText: { color: colors.blue, fontSize: 14 },
-  list: { maxHeight: 520 },
-  listContent: { paddingHorizontal: 12, paddingBottom: 8 },
-  empty: { color: colors.textFaint, fontSize: 13, padding: 12 },
-  search: {
-    ...typography.bodySmall,
-    color: colors.text,
-    backgroundColor: colors.glassStrong,
-    borderRadius: radius.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginHorizontal: 6,
-    marginBottom: 6,
-  },
-  groupTitle: {
-    ...typography.meta,
-    color: colors.textFaint,
-    fontWeight: '500',
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    paddingBottom: 2,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    minHeight: 46,
-    paddingHorizontal: 10,
-    borderRadius: radius.sm,
-  },
-  rowPressed: { backgroundColor: semantic.sidebarHover },
-  modelName: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '500' },
-  check: { color: colors.blue, fontSize: 15, fontWeight: '700' },
-  effortSection: {
-    marginTop: 10,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    paddingHorizontal: 6,
-    gap: 8,
-  },
-  effortTitle: { color: colors.textDim, fontSize: 13, fontWeight: '500' },
-  effortRow: {
-    flexDirection: 'row',
-    gap: 4,
-    padding: 3,
-    borderRadius: radius.sm,
-    backgroundColor: colors.glassStrong,
-  },
-  effort: {
-    flex: 1,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.xs,
-  },
-  effortActive: { backgroundColor: colors.bg },
-  effortText: { color: colors.textDim, fontSize: 13 },
-  effortTextActive: { color: colors.text, fontWeight: '600' },
-});
+const createStyles = ({ palette: c, semantic: s }: Theme) =>
+  StyleSheet.create({
+    backdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: 'flex-end' },
+    sheet: {
+      backgroundColor: c.bg,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      maxHeight: '72%',
+      paddingBottom: 12,
+    },
+    head: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 18,
+      paddingTop: 16,
+      paddingBottom: 8,
+    },
+    title: { ...typography.heading, color: c.text },
+    close: { paddingHorizontal: 8, paddingVertical: 4 },
+    closeText: { color: c.blue, fontSize: 14 },
+    list: { maxHeight: 520 },
+    listContent: { paddingHorizontal: 12, paddingBottom: 8 },
+    empty: { color: c.textFaint, fontSize: 13, padding: 12 },
+    search: {
+      ...typography.bodySmall,
+      color: c.text,
+      backgroundColor: c.glassStrong,
+      borderRadius: radius.sm,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      marginHorizontal: 6,
+      marginBottom: 6,
+    },
+    groupTitle: {
+      ...typography.meta,
+      color: c.textFaint,
+      fontWeight: '500',
+      paddingHorizontal: 8,
+      paddingTop: 8,
+      paddingBottom: 2,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      minHeight: 46,
+      paddingHorizontal: 10,
+      borderRadius: radius.sm,
+    },
+    rowPressed: { backgroundColor: s.sidebarHover },
+    modelName: { flex: 1, color: c.text, fontSize: 15, fontWeight: '500' },
+    check: { color: c.blue, fontSize: 15, fontWeight: '700' },
+    effortSection: {
+      marginTop: 10,
+      paddingTop: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: c.border,
+      paddingHorizontal: 6,
+      gap: 8,
+    },
+    effortTitle: { color: c.textDim, fontSize: 13, fontWeight: '500' },
+    effortRow: {
+      flexDirection: 'row',
+      gap: 4,
+      padding: 3,
+      borderRadius: radius.sm,
+      backgroundColor: c.glassStrong,
+    },
+    effort: {
+      flex: 1,
+      height: 34,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radius.xs,
+    },
+    effortActive: { backgroundColor: c.bg },
+    effortText: { color: c.textDim, fontSize: 13 },
+    effortTextActive: { color: c.text, fontWeight: '600' },
+  });

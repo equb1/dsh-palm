@@ -1,10 +1,11 @@
 import React from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text } from 'react-native';
 
-import { colors } from '../theme';
+import { useThemedStyles, type Theme } from '../theme';
 
 /** 回到底部：生成中圆环做呼吸描边，结束后静态 */
 export function JumpButton({ running, onPress }: { running: boolean; onPress: () => void }): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   const pulse = React.useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
@@ -45,12 +46,13 @@ export function JumpButton({ running, onPress }: { running: boolean; onPress: ()
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
   wrap: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.bg,
+    backgroundColor: c.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -62,7 +64,7 @@ const styles = StyleSheet.create({
     bottom: -3,
     borderRadius: 21,
     borderWidth: 2,
-    borderColor: colors.blue,
+    borderColor: c.blue,
   },
-  arrow: { color: colors.textDim, fontSize: 16, lineHeight: 18 },
+  arrow: { color: c.textDim, fontSize: 16, lineHeight: 18 },
 });

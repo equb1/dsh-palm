@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Approval } from '../../protocol';
 import { store } from '../useStore';
 import { Btn } from '../parts';
-import { colors, font, radius, riskTone } from '../theme';
+import { font, radius, riskTone, useTheme, useThemedStyles, type Theme } from '../theme';
 import { ChatCard, ChatCardCodeBox, type ChatCardTone } from './ChatCard';
 
 /**
@@ -12,6 +12,8 @@ import { ChatCard, ChatCardCodeBox, type ChatCardTone } from './ChatCard';
  * dsh 的答案 schema 本来就有 custom 字段，之前只用了 selected。
  */
 function QuestionActions({ approval }: { approval: Approval }): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [draft, setDraft] = React.useState('');
   const options = approval.options ?? [];
   const questionId = approval.questionId ?? '';
@@ -44,7 +46,7 @@ function QuestionActions({ approval }: { approval: Approval }): React.ReactEleme
           value={draft}
           onChangeText={setDraft}
           placeholder="或者直接说你的需求…"
-          placeholderTextColor={colors.textFaint}
+          placeholderTextColor={palette.textFaint}
           multiline
           numberOfLines={2}
         />
@@ -89,8 +91,10 @@ function badgeTone(approval: Approval): ChatCardTone {
 }
 
 export function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const isQuestion = approval.kind === 'question';
-  const risk = riskTone(approval.risk);
+  const risk = riskTone(approval.risk, palette);
   return (
     <ChatCard
       title={approval.title}
@@ -129,8 +133,8 @@ export function ApprovalCard({ approval }: { approval: Approval }): React.ReactE
               key={i}
               style={[
                 styles.diffLine,
-                line.startsWith('+') && { color: colors.ok },
-                line.startsWith('-') && { color: colors.danger },
+                line.startsWith('+') && { color: palette.ok },
+                line.startsWith('-') && { color: palette.danger },
               ]}
             >
               {line}
@@ -144,53 +148,54 @@ export function ApprovalCard({ approval }: { approval: Approval }): React.ReactE
   );
 }
 
-const styles = StyleSheet.create({
-  summary: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
-  diffLine: { fontFamily: font.mono, fontSize: 11.5, color: colors.textDim, lineHeight: 17 },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  summary: { color: c.textDim, fontSize: 12.5, lineHeight: 19 },
+  diffLine: { fontFamily: font.mono, fontSize: 11.5, color: c.textDim, lineHeight: 17 },
 
   qWrap: { gap: 8, marginTop: 4 },
   qOption: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 3,
   },
-  qOptionPressed: { backgroundColor: colors.glassStrong },
+  qOptionPressed: { backgroundColor: c.glassStrong },
   qOptionHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  qOptionLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  qOptionLabel: { color: c.text, fontSize: 14, fontWeight: '600' },
   qRecommend: {
-    color: colors.blue,
+    color: c.blue,
     fontSize: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.blue,
+    borderColor: c.blue,
     borderRadius: 4,
     paddingHorizontal: 4,
     paddingVertical: 1,
   },
-  qOptionDesc: { color: colors.textFaint, fontSize: 12, lineHeight: 17 },
+  qOptionDesc: { color: c.textFaint, fontSize: 12, lineHeight: 17 },
   qInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 2 },
   qInput: {
     flex: 1,
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
-    color: colors.text,
+    borderColor: c.borderStrong,
+    color: c.text,
     fontSize: 13.5,
     paddingHorizontal: 12,
     paddingVertical: 8,
     maxHeight: 96,
   },
   qSend: {
-    backgroundColor: colors.blue,
+    backgroundColor: c.blue,
     borderRadius: radius.md,
     paddingHorizontal: 14,
     paddingVertical: 9,
   },
-  qSendText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  qSendText: { color: c.onAccent, fontSize: 13, fontWeight: '600' },
   qSkip: { alignSelf: 'flex-start', paddingVertical: 4 },
-  qSkipText: { color: colors.textFaint, fontSize: 12.5 },
+  qSkipText: { color: c.textFaint, fontSize: 12.5 },
 });

@@ -20,7 +20,7 @@ import { SessionDrawer } from './SessionDrawer';
 import { ModelSheet } from './ModelSheet';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
-import { colors, radius, space, topInset } from './theme';
+import { radius, space, topInset, useTheme, useThemedStyles, type Palette, type Theme } from './theme';
 
 function relTime(ts: number): string {
   const min = Math.round((Date.now() - ts) / 60_000);
@@ -35,13 +35,18 @@ function relTime(ts: number): string {
   return `${d.getMonth() + 1}-${d.getDate()}`;
 }
 
+function statusTones(c: Palette): Record<string, { label: string; color: string; bg: string }> {
+  return {
+    running: { label: '生成中', color: c.blue, bg: c.blueSoft },
+    waiting_approval: { label: '待确认', color: c.warn, bg: c.warnSoft },
+    error: { label: '出错', color: c.danger, bg: c.dangerSoft },
+  };
+}
+
 function StatusTag({ s }: { s: SessionSummary }): React.ReactElement | null {
-  const map = {
-    running: { label: '生成中', color: colors.blue, bg: colors.blueSoft },
-    waiting_approval: { label: '待确认', color: colors.warn, bg: colors.warnSoft },
-    error: { label: '出错', color: colors.danger, bg: colors.dangerSoft },
-  } as const;
-  const tone = map[s.status as keyof typeof map];
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const tone = statusTones(palette)[s.status];
   if (!tone) return null;
   return (
     <View style={[styles.tag, { backgroundColor: tone.bg }]}>
@@ -52,6 +57,8 @@ function StatusTag({ s }: { s: SessionSummary }): React.ReactElement | null {
 
 export function HomeScreen(): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [draft, setDraft] = React.useState('');
   const [refreshing, setRefreshing] = React.useState(false);
   const [drawer, setDrawer] = React.useState(false);
@@ -98,7 +105,7 @@ export function HomeScreen(): React.ReactElement {
     : '完整引擎启动中';
 
   const connColor =
-    state.conn === 'connected' ? colors.ok : state.conn === 'reconnecting' || booting ? colors.warn : colors.danger;
+    state.conn === 'connected' ? palette.ok : state.conn === 'reconnecting' || booting ? palette.warn : palette.danger;
   const connLabel =
     booting
       ? bootLabel
@@ -189,7 +196,7 @@ export function HomeScreen(): React.ReactElement {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              tintColor={colors.textDim}
+              tintColor={palette.textDim}
               onRefresh={() => {
                 setRefreshing(true);
                 void store.refreshSessions().finally(() => setRefreshing(false));
@@ -214,7 +221,7 @@ export function HomeScreen(): React.ReactElement {
                     accessibilityRole="button"
                     accessibilityLabel={`${s.title}${s.preview ? '，' + s.preview : ''}`}
                     onPress={() => void store.openSession(s.id)}
-                    style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.glassPressed }]}
+                    style={({ pressed }) => [styles.row, pressed && { backgroundColor: palette.glassPressed }]}
                   >
                     <View style={{ flex: 1, gap: 3 }}>
                       <View style={styles.rowTop}>
@@ -280,80 +287,81 @@ export function HomeScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
-  bodyWrap: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingTop: space.sm,
-    paddingBottom: space.sm,
-  },
-  headerModel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    height: 32,
-    maxWidth: 172,
-    paddingHorizontal: 10,
-    borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
-  },
-  headerModelText: { color: colors.text, fontSize: 12, flexShrink: 1 },
-  headerModelChevron: { color: colors.textFaint, fontSize: 9 },
-  brandMark: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.goldSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandGlyph: { color: colors.gold, fontSize: 18, fontWeight: '700' },
-  brand: { color: colors.text, fontSize: 16, fontWeight: '600', letterSpacing: 1.2 },
-  subRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  lightSetup: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 16 },
-  lightSetupText: { color: colors.blue, fontSize: 11.5, textAlign: 'center' },
-  connRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  connText: { color: colors.textFaint, fontSize: 11 },
-  disconnect: { color: colors.textDim, fontSize: 12 },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
+    bodyWrap: { flex: 1 },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.md,
+      paddingHorizontal: space.lg,
+      paddingTop: space.sm,
+      paddingBottom: space.sm,
+    },
+    headerModel: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      height: 32,
+      maxWidth: 172,
+      paddingHorizontal: 10,
+      borderRadius: radius.pill,
+      backgroundColor: c.glassStrong,
+    },
+    headerModelText: { color: c.text, fontSize: 12, flexShrink: 1 },
+    headerModelChevron: { color: c.textFaint, fontSize: 9 },
+    brandMark: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: c.goldSoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    brandGlyph: { color: c.gold, fontSize: 18, fontWeight: '700' },
+    brand: { color: c.text, fontSize: 16, fontWeight: '600', letterSpacing: 1.2 },
+    subRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+    lightSetup: { alignItems: 'center', paddingVertical: 6, paddingHorizontal: 16 },
+    lightSetupText: { color: c.blue, fontSize: 11.5, textAlign: 'center' },
+    connRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    connText: { color: c.textFaint, fontSize: 11 },
+    disconnect: { color: c.textDim, fontSize: 12 },
 
-  scrollOuter: { paddingBottom: space.lg, flexGrow: 1 },
+    scrollOuter: { paddingBottom: space.lg, flexGrow: 1 },
 
-  greeting: { paddingHorizontal: space.xl, paddingTop: 64, paddingBottom: 40, alignItems: 'center', gap: 10 },
-  greetingTitle: { color: colors.text, fontSize: 24, lineHeight: 32, fontWeight: '600', letterSpacing: 0.2 },
-  greetingSub: { color: colors.textFaint, fontSize: 13, lineHeight: 20 },
+    greeting: { paddingHorizontal: space.xl, paddingTop: 64, paddingBottom: 40, alignItems: 'center', gap: 10 },
+    greetingTitle: { color: c.text, fontSize: 24, lineHeight: 32, fontWeight: '600', letterSpacing: 0.2 },
+    greetingSub: { color: c.textFaint, fontSize: 13, lineHeight: 20 },
 
-  list: { paddingHorizontal: space.lg, gap: 8 },
-  sectionTitle: { color: colors.textFaint, fontSize: 12, lineHeight: 18, letterSpacing: 0.2, marginBottom: 2 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    padding: 12,
-    borderRadius: radius.lg,
-    backgroundColor: colors.glass,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
-  rowTitle: { color: colors.text, fontSize: 14, lineHeight: 22, fontWeight: '500', flex: 1 },
-  rowTime: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
-  rowBottom: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rowPreview: { color: colors.textDim, fontSize: 13, lineHeight: 20, flex: 1 },
-  engineTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radius.xs,
-    backgroundColor: colors.glassStrong,
-  },
-  engineTagFull: { backgroundColor: colors.blueSoft },
-  engineTagText: { color: colors.textFaint, fontSize: 10, fontWeight: '600' },
-  engineTagTextFull: { color: colors.blue },
-  tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill },
-  tagText: { fontSize: 10, fontWeight: '600' },
+    list: { paddingHorizontal: space.lg, gap: 8 },
+    sectionTitle: { color: c.textFaint, fontSize: 12, lineHeight: 18, letterSpacing: 0.2, marginBottom: 2 },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.md,
+      padding: 12,
+      borderRadius: radius.lg,
+      backgroundColor: c.glass,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
+    rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+    rowTitle: { color: c.text, fontSize: 14, lineHeight: 22, fontWeight: '500', flex: 1 },
+    rowTime: { color: c.textFaint, fontSize: 11, lineHeight: 16 },
+    rowBottom: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    rowPreview: { color: c.textDim, fontSize: 13, lineHeight: 20, flex: 1 },
+    engineTag: {
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      borderRadius: radius.xs,
+      backgroundColor: c.glassStrong,
+    },
+    engineTagFull: { backgroundColor: c.blueSoft },
+    engineTagText: { color: c.textFaint, fontSize: 10, fontWeight: '600' },
+    engineTagTextFull: { color: c.blue },
+    tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill },
+    tagText: { fontSize: 10, fontWeight: '600' },
 
-  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.lg, marginTop: space.md },
-});
+    error: { color: c.danger, fontSize: 12, paddingHorizontal: space.lg, marginTop: space.md },
+  });

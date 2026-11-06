@@ -4,7 +4,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import type { AppState } from '../state/store';
 import { setHostSafeModeNext } from '../lib/host';
 import { store } from './useStore';
-import { colors, font, radius, space, topInset } from './theme';
+import { font, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 interface Props {
   state: AppState;
@@ -19,6 +19,8 @@ interface Props {
  * - 用户也可随时点击底部「先看历史对话」跳过等待。
  */
 export function LaunchOverlay({ state }: Props): React.ReactElement | null {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [dismissed, setDismissed] = React.useState(false);
   const [elapsedSec, setElapsedSec] = React.useState(0);
   const [smoothPct, setSmoothPct] = React.useState(12);
@@ -177,10 +179,10 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
                 styles.statusDot,
                 {
                   backgroundColor: isFailed
-                    ? colors.danger
+                    ? palette.danger
                     : isConnected
-                      ? colors.ok
-                      : colors.gold,
+                      ? palette.ok
+                      : palette.gold,
                 },
               ]}
             />
@@ -202,14 +204,14 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
                 styles.progressFill,
                 {
                   width: `${Math.max(4, Math.min(100, smoothPct))}%`,
-                  backgroundColor: isConnected ? colors.ok : colors.gold,
+                  backgroundColor: isConnected ? palette.ok : palette.gold,
                 },
               ]}
             />
           </View>
         ) : null}
 
-        <Text style={[styles.stageSub, isFailed && { color: colors.danger }]} numberOfLines={2}>
+        <Text style={[styles.stageSub, isFailed && { color: palette.danger }]} numberOfLines={2}>
           {stageSub}
         </Text>
 
@@ -277,14 +279,15 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
   overlay: {
     position: 'absolute',
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: colors.bg,
+    backgroundColor: c.bg,
     justifyContent: 'space-between',
     paddingTop: topInset + space.xl,
     paddingBottom: space.xxl,
@@ -310,39 +313,39 @@ const styles = StyleSheet.create({
     width: 104,
     height: 104,
     borderRadius: 32,
-    backgroundColor: colors.goldSoft,
+    backgroundColor: c.goldSoft,
   },
   emblem: {
     width: 76,
     height: 76,
     borderRadius: 24,
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
     borderWidth: 1.5,
-    borderColor: 'rgba(216,169,75,0.45)',
+    borderColor: c.emblemBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emblemGlyph: {
-    color: colors.gold,
+    color: c.gold,
     fontSize: 34,
     fontWeight: '700',
   },
   title: {
-    color: colors.text,
+    color: c.text,
     fontSize: 26,
     fontWeight: '700',
     letterSpacing: 1,
   },
   subtitle: {
-    color: colors.textDim,
+    color: c.textDim,
     fontSize: 13,
     marginTop: 6,
   },
   bottomCard: {
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
     padding: space.lg,
     gap: 10,
   },
@@ -364,20 +367,20 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   stageTitle: {
-    color: colors.text,
+    color: c.text,
     fontSize: 14,
     fontWeight: '600',
     flex: 1,
   },
   pctText: {
-    color: colors.textDim,
+    color: c.textDim,
     fontSize: 12,
     fontFamily: font.mono,
   },
   progressTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     overflow: 'hidden',
   },
   progressFill: {
@@ -385,7 +388,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   stageSub: {
-    color: colors.textFaint,
+    color: c.textFaint,
     fontSize: 12,
     lineHeight: 17,
   },
@@ -399,21 +402,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
   },
   actionBtnPrimary: {
-    backgroundColor: colors.goldSoft,
-    borderColor: colors.gold,
+    backgroundColor: c.goldSoft,
+    borderColor: c.gold,
   },
   actionBtnPrimaryText: {
-    color: colors.gold,
+    color: c.gold,
     fontSize: 12,
     fontWeight: '600',
   },
   actionBtnText: {
-    color: colors.text,
+    color: c.text,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -429,12 +432,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   skipBtnText: {
-    color: colors.textDim,
+    color: c.textDim,
     fontSize: 12,
   },
   footerDivider: {
     width: 1,
     height: 10,
-    backgroundColor: colors.borderStrong,
+    backgroundColor: c.borderStrong,
   },
 });

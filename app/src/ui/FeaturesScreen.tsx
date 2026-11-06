@@ -10,7 +10,7 @@ import {
 
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
-import { colors, radius, space, topInset } from './theme';
+import { radius, space, topInset, useTheme, useThemedStyles, type Palette, type Theme } from './theme';
 
 /**
  * U6：全部功能页（卡片网格）。
@@ -21,13 +21,15 @@ import { colors, radius, space, topInset } from './theme';
  */
 type Tone = 'blue' | 'green' | 'violet' | 'amber' | 'slate';
 
-const TONES: Record<Tone, { bg: string; fg: string }> = {
-  blue: { bg: colors.blueSoft, fg: colors.blue },
-  green: { bg: colors.okSoft, fg: colors.ok },
-  violet: { bg: 'rgba(124,58,237,0.10)', fg: '#7C3AED' },
-  amber: { bg: colors.warnSoft, fg: colors.warn },
-  slate: { bg: colors.glassStrong, fg: colors.textDim },
-};
+function tones(c: Palette): Record<Tone, { bg: string; fg: string }> {
+  return {
+    blue: { bg: c.blueSoft, fg: c.blue },
+    green: { bg: c.okSoft, fg: c.ok },
+    violet: { bg: c.violetSoft, fg: c.violet },
+    amber: { bg: c.warnSoft, fg: c.warn },
+    slate: { bg: c.glassStrong, fg: c.textDim },
+  };
+}
 
 interface FeatureItem {
   id: string;
@@ -41,6 +43,8 @@ interface FeatureItem {
 
 export function FeaturesScreen(): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const [notice, setNotice] = React.useState<string | null>(null);
   const cardWidth = (width - space.lg * 2 - 10) / 2;
@@ -182,7 +186,7 @@ export function FeaturesScreen(): React.ReactElement {
             <Text style={styles.groupTitle}>{group.title}</Text>
             <View style={styles.grid}>
               {group.items.map((item) => {
-                const tone = TONES[item.tone];
+                const tone = tones(palette)[item.tone];
                 return (
                   <Pressable
                     key={item.id}
@@ -216,47 +220,48 @@ export function FeaturesScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
-  scroll: { padding: space.lg, gap: space.lg, paddingBottom: space.xxl },
-  notice: { color: colors.textDim, fontSize: 12, lineHeight: 17, paddingHorizontal: space.xs },
-  group: { gap: 8 },
-  groupTitle: {
-    color: colors.textFaint,
-    fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: space.xs,
-    letterSpacing: 0.2,
-  },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  card: {
-    minHeight: 116,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.glass,
-    padding: 12,
-    gap: 8,
-  },
-  cardPressed: { backgroundColor: colors.glassStrong },
-  cardDisabled: { opacity: 0.72 },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconGlyph: { fontSize: 16, fontWeight: '600' },
-  cardTexts: { gap: 2 },
-  cardTitle: { color: colors.text, fontSize: 14.5, fontWeight: '600' },
-  cardHint: { color: colors.textFaint, fontSize: 11.5, lineHeight: 16 },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.sm,
+      paddingHorizontal: space.lg,
+      paddingVertical: space.sm,
+    },
+    title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
+    scroll: { padding: space.lg, gap: space.lg, paddingBottom: space.xxl },
+    notice: { color: c.textDim, fontSize: 12, lineHeight: 17, paddingHorizontal: space.xs },
+    group: { gap: 8 },
+    groupTitle: {
+      color: c.textFaint,
+      fontSize: 12,
+      fontWeight: '600',
+      paddingHorizontal: space.xs,
+      letterSpacing: 0.2,
+    },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    card: {
+      minHeight: 116,
+      borderRadius: radius.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      backgroundColor: c.glass,
+      padding: 12,
+      gap: 8,
+    },
+    cardPressed: { backgroundColor: c.glassStrong },
+    cardDisabled: { opacity: 0.72 },
+    icon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    iconGlyph: { fontSize: 16, fontWeight: '600' },
+    cardTexts: { gap: 2 },
+    cardTitle: { color: c.text, fontSize: 14.5, fontWeight: '600' },
+    cardHint: { color: c.textFaint, fontSize: 11.5, lineHeight: 16 },
+  });

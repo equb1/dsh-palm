@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { semantic, space, typography } from '../theme';
+import { space, typography, useThemedStyles, type Theme } from '../theme';
 
 export interface EmptyStateProps {
   glyph?: string;
@@ -19,6 +19,7 @@ export function EmptyState({
   action,
   style,
 }: EmptyStateProps): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={[styles.root, style]}>
       {glyph ? <Text style={styles.glyph}>{glyph}</Text> : null}
@@ -29,21 +30,22 @@ export function EmptyState({
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: space.lg,
-    paddingVertical: space.xl,
-    gap: space.xs,
-  },
-  glyph: { fontSize: 28, color: semantic.textTertiary, marginBottom: space.xs },
-  title: { ...typography.heading, color: semantic.textPrimary, textAlign: 'center' },
-  description: {
-    ...typography.bodySmall,
-    color: semantic.textSecondary,
-    textAlign: 'center',
-    maxWidth: 300,
-  },
-  action: { marginTop: space.md },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    root: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: space.lg,
+      paddingVertical: space.xl,
+      gap: space.xs,
+    },
+    glyph: { fontSize: 28, color: c.textFaint, marginBottom: space.xs },
+    title: { ...typography.heading, color: c.text, textAlign: 'center' },
+    description: {
+      ...typography.bodySmall,
+      color: c.textDim,
+      textAlign: 'center',
+      maxWidth: 300,
+    },
+    action: { marginTop: space.md },
+  });

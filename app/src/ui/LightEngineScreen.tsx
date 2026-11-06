@@ -21,7 +21,7 @@ import {
 import { DEEPSEEK_DEFAULT, normalizeResponseFormat, normalizeSetup, setupProblem } from '../engine/light/config';
 import type { ImageResponseFormat } from '../engine/light/types';
 import { Btn, Card, IconButton, Mono, Pill } from './parts';
-import { colors, font, radius, space, topInset } from './theme';
+import { font, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 import { useStore, store } from './useStore';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 
@@ -33,6 +33,8 @@ const RESPONSE_FORMATS: Array<{ value: ImageResponseFormat; label: string }> = [
 
 export function LightEngineScreen({ onClose }: { onClose: () => void }): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [baseURL, setBaseURL] = React.useState(DEEPSEEK_DEFAULT.baseURL);
   const [model, setModel] = React.useState(DEEPSEEK_DEFAULT.model);
   const [apiKey, setApiKey] = React.useState('');
@@ -159,7 +161,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
         <IconButton glyph="‹" label="返回" onPress={onClose} />
         <Text style={styles.title}>M1 实验室 · 轻引擎</Text>
         <Pill style={{ marginLeft: 'auto' }}>
-          <Text style={[styles.status, connected && { color: colors.ok }]}>
+          <Text style={[styles.status, connected && { color: palette.ok }]}>
             {connected ? '已连接' : state.conn === 'connecting' ? '连接中' : '未连接'}
           </Text>
         </Pill>
@@ -233,7 +235,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
                 <Text style={styles.command}>{item.command}</Text>
                 <View style={styles.kv}>
                   <Text style={styles.k}>{item.exitCode === 0 ? '成功' : '失败'}</Text>
-                  <Text style={[styles.v, item.exitCode !== 0 && { color: colors.danger }]}>
+                  <Text style={[styles.v, item.exitCode !== 0 && { color: palette.danger }]}>
                     {item.ms}ms · exit {item.exitCode}
                   </Text>
                 </View>
@@ -261,7 +263,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
               value={baseURL}
               onChangeText={setBaseURL}
               placeholder="https://api.deepseek.com/v1"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="模型 Base URL"
@@ -273,7 +275,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
               value={model}
               onChangeText={setModel}
               placeholder="deepseek-chat"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="模型名"
@@ -286,7 +288,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
                 value={apiKey}
                 onChangeText={setApiKey}
                 placeholder="sk-…"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={palette.textFaint}
                 autoCapitalize="none"
                 autoCorrect={false}
                 secureTextEntry={!showKey}
@@ -318,7 +320,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
               value={imageBaseURL}
               onChangeText={setImageBaseURL}
               placeholder="https://api.openai.com/v1（可留空）"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="生图 Base URL"
@@ -330,7 +332,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
               value={imageModel}
               onChangeText={setImageModel}
               placeholder="gpt-image-1 / flux-schnell …（可留空）"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="生图模型"
@@ -342,7 +344,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
               value={imageApiKey}
               onChangeText={setImageApiKey}
               placeholder="sk-…（可留空）"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry
@@ -355,7 +357,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
               value={imageSize}
               onChangeText={setImageSize}
               placeholder="1024x1024"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="生图尺寸"
@@ -416,8 +418,9 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -425,22 +428,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
-  status: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
+  title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
+  status: { color: c.textDim, fontSize: 12, fontWeight: '600' },
   scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
-  cardTitle: { color: colors.text, fontSize: 15, fontWeight: '700', flex: 1 },
+  cardTitle: { color: c.text, fontSize: 15, fontWeight: '700', flex: 1 },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  badge: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
-  label: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  badge: { color: c.textDim, fontSize: 11, fontWeight: '600' },
+  hint: { color: c.textDim, fontSize: 12, lineHeight: 17 },
+  label: { color: c.textDim, fontSize: 12, marginTop: 2 },
   input: {
     minHeight: 42,
     borderRadius: radius.md,
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     paddingHorizontal: 12,
-    color: colors.text,
+    color: c.text,
     fontSize: 14,
   },
   keyRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
@@ -450,7 +453,7 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: 3,
     borderRadius: radius.sm,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
   },
   format: {
     flex: 1,
@@ -459,33 +462,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radius.xs,
   },
-  formatActive: { backgroundColor: colors.bg },
-  formatText: { color: colors.textDim, fontSize: 13 },
-  formatTextActive: { color: colors.text, fontWeight: '600' },
-  rootLabel: { color: colors.textDim, fontFamily: font.mono, fontSize: 11 },
+  formatActive: { backgroundColor: c.bg },
+  formatText: { color: c.textDim, fontSize: 13 },
+  formatTextActive: { color: c.text, fontWeight: '600' },
+  rootLabel: { color: c.textDim, fontFamily: font.mono, fontSize: 11 },
   actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
   result: {
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.bgElevated,
+    borderColor: c.border,
+    backgroundColor: c.bgElevated,
     padding: space.sm,
     gap: 4,
   },
-  command: { color: colors.text, fontFamily: font.mono, fontSize: 11.5 },
+  command: { color: c.text, fontFamily: font.mono, fontSize: 11.5 },
   kv: { flexDirection: 'row', justifyContent: 'space-between' },
-  k: { color: colors.textDim, fontSize: 11 },
-  v: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
+  k: { color: c.textDim, fontSize: 11 },
+  v: { color: c.textDim, fontSize: 11, fontWeight: '600' },
   out: {
-    color: colors.textDim,
+    color: c.textDim,
     fontFamily: font.mono,
     fontSize: 11,
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 5,
   },
-  errorText: { color: colors.danger, fontFamily: font.mono, fontSize: 11 },
-  note: { color: colors.textDim, fontSize: 12, paddingHorizontal: 2 },
-  footer: { color: colors.textFaint, fontSize: 11.5, lineHeight: 17, paddingHorizontal: 2 },
+  errorText: { color: c.danger, fontFamily: font.mono, fontSize: 11 },
+  note: { color: c.textDim, fontSize: 12, paddingHorizontal: 2 },
+  footer: { color: c.textFaint, fontSize: 11.5, lineHeight: 17, paddingHorizontal: 2 },
 });

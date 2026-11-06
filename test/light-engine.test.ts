@@ -24,7 +24,9 @@ async function tempDir(): Promise<string> {
 }
 
 after(async () => {
-  await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    roots.map((root) => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })),
+  );
 });
 
 interface FakeStep {

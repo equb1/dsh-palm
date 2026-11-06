@@ -5,7 +5,7 @@ import { store, useStore } from '../useStore';
 import { IconButton } from '../parts';
 import { ProvidersCard } from '../ProvidersCard';
 import { SmoothKeyboardAvoid } from '../SmoothKeyboardAvoid';
-import { colors, space, topInset } from '../theme';
+import { space, topInset, useThemedStyles, type Theme } from '../theme';
 
 /**
  * U4 二级页：模型提供商。
@@ -14,6 +14,7 @@ import { colors, space, topInset } from '../theme';
  */
 export function ProvidersScreen({ onClose }: { onClose: () => void }): React.ReactElement {
   const state = useStore();
+  const styles = useThemedStyles(createStyles);
 
   return (
     <View style={styles.root}>
@@ -37,17 +38,18 @@ export function ProvidersScreen({ onClose }: { onClose: () => void }): React.Rea
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
-  body: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
-  scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
-  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.xs },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
+    body: { flex: 1 },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.sm,
+      paddingHorizontal: space.lg,
+      paddingVertical: space.sm,
+    },
+    title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
+    scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
+    error: { color: c.danger, fontSize: 12, paddingHorizontal: space.xs },
+  });

@@ -53,6 +53,7 @@ import {
 } from '../lib/attachments/intake';
 import { classify, hashPrefix } from '../lib/attachments/classify';
 import { mergeSessionRows, type SessionEngine, type SessionRow } from './sessionList';
+import type { ThemeMode } from '../ui/theme/palette';
 import type { AttachmentEngine, AttachmentKind, IntakeSource } from '../lib/attachments/types';
 import {
   buildHandoff,
@@ -276,6 +277,8 @@ export interface AppState {
   collapseProcess: boolean;
   /** U7 对话字号倍率：1 / 1.15 / 1.3（持久化在 UI cache） */
   chatFontScale: number;
+  /** U7 主题：跟随系统 / 浅色 / 深色（持久化在 UI cache） */
+  themeMode: ThemeMode;
 }
 
 /**
@@ -440,6 +443,7 @@ export class Store {
     autoRoute: true,
     collapseProcess: true,
     chatFontScale: 1,
+    themeMode: 'system',
   };
 
   private readonly engineDeps: EngineDeps;
@@ -753,6 +757,12 @@ export class Store {
     this.persistUiCache();
   }
 
+  /** U7 主题：跟随系统 / 浅色 / 深色 */
+  setThemeMode(mode: ThemeMode): void {
+    this.patch({ themeMode: mode });
+    this.persistUiCache();
+  }
+
   /**
    * 会话级 pin：'light' 表示以后不再自动切完整；null 清除。
    * TODO(1.4): 还没做 pin 的 UI 入口（按裁剪顺序最后补；规则与持久化已就绪）。
@@ -817,6 +827,7 @@ export class Store {
         autoRoute: this.state.autoRoute,
         collapseProcess: this.state.collapseProcess,
         chatFontScale: this.state.chatFontScale,
+        themeMode: this.state.themeMode,
       });
       void writeHostUiCache(payload);
     } catch {
@@ -843,6 +854,7 @@ export class Store {
           autoRoute?: boolean;
           collapseProcess?: boolean;
           chatFontScale?: number;
+          themeMode?: ThemeMode;
         };
         if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
           nextPatch.sessions = parsed.sessions;
@@ -875,6 +887,13 @@ export class Store {
         }
         if (typeof parsed.chatFontScale === 'number' && parsed.chatFontScale >= 1) {
           nextPatch.chatFontScale = Math.min(parsed.chatFontScale, 1.3);
+        }
+        if (
+          parsed.themeMode === 'system' ||
+          parsed.themeMode === 'light' ||
+          parsed.themeMode === 'dark'
+        ) {
+          nextPatch.themeMode = parsed.themeMode;
         }
         if (parsed.draftPresetId && !this.state.draftPresetId) {
           nextPatch.draftPresetId = parsed.draftPresetId;

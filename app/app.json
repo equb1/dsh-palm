@@ -5,7 +5,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "dshpalm",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#0B0D10",
     "assetBundlePatterns": [
       "**/*"

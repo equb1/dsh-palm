@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { humanizeError } from '../lib/errors';
 import type { ProviderModel, ProviderProtocol, ProviderRow } from '../protocol';
 import { Btn, Pill } from './parts';
-import { colors, font, radius, space } from './theme';
+import { font, radius, space, useTheme, useThemedStyles, type Theme } from './theme';
 import { store, useStore } from './useStore';
 
 /** 线协议 → 人话，和 dsh 官方模型页一致 */
@@ -44,6 +44,8 @@ function errorText(err: unknown): string {
  */
 export function ProvidersCard(): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [tab, setTab] = React.useState<Tab>('catalog');
   const [draft, setDraft] = React.useState<Draft | null>(null);
   const [busy, setBusy] = React.useState<'discover' | 'save' | 'remove' | null>(null);
@@ -283,7 +285,7 @@ export function ProvidersCard(): React.ReactElement {
                   autoCapitalize="none"
                   autoCorrect={false}
                   placeholder="搜索 openai / anthropic / openrouter…"
-                  placeholderTextColor={colors.textFaint}
+                  placeholderTextColor={palette.textFaint}
                 />
                 <ScrollView style={styles.pickerList} keyboardShouldPersistTaps="handled">
                   {filteredCatalog.map((c) => (
@@ -317,7 +319,7 @@ export function ProvidersCard(): React.ReactElement {
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholder="openrouter"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={palette.textFaint}
               />
               <Text style={styles.label}>显示名（可选）</Text>
               <TextInput
@@ -326,7 +328,7 @@ export function ProvidersCard(): React.ReactElement {
                 onChangeText={(t) => patch({ displayName: t })}
                 autoCapitalize="none"
                 placeholder="留空就用渠道 ID"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={palette.textFaint}
               />
               <Text style={styles.label}>协议</Text>
               <View style={styles.pills}>
@@ -357,7 +359,7 @@ export function ProvidersCard(): React.ReactElement {
             autoCorrect={false}
             secureTextEntry
             placeholder={draft.editing ? '留空保留原来的 Key' : 'sk-…'}
-            placeholderTextColor={colors.textFaint}
+            placeholderTextColor={palette.textFaint}
           />
 
           <Text style={styles.label}>API 地址{draft.mode === 'catalog' ? '（可选）' : ''}</Text>
@@ -369,7 +371,7 @@ export function ProvidersCard(): React.ReactElement {
             autoCorrect={false}
             keyboardType="url"
             placeholder={selected?.defaultBaseURL ?? 'https://openrouter.ai/api/v1'}
-            placeholderTextColor={colors.textFaint}
+            placeholderTextColor={palette.textFaint}
           />
 
           {draft.mode === 'custom' ? (
@@ -440,19 +442,20 @@ export function ProvidersCard(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
   card: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     padding: space.md,
     gap: space.sm,
   },
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  status: { color: colors.textFaint, fontSize: 11 },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
+  cardTitle: { color: c.text, fontSize: 14, fontWeight: '600' },
+  status: { color: c.textFaint, fontSize: 11 },
+  hint: { color: c.textDim, fontSize: 12, lineHeight: 17 },
 
   row: {
     flexDirection: 'row',
@@ -460,38 +463,38 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    borderTopColor: c.border,
   },
   rowMain: { flex: 1, gap: 2 },
-  rowName: { color: colors.text, fontSize: 13.5, fontWeight: '600' },
-  rowBadge: { color: colors.textFaint, fontSize: 10.5, fontWeight: '400' },
-  rowMeta: { color: colors.textFaint, fontSize: 11 },
+  rowName: { color: c.text, fontSize: 13.5, fontWeight: '600' },
+  rowBadge: { color: c.textFaint, fontSize: 10.5, fontWeight: '400' },
+  rowMeta: { color: c.textFaint, fontSize: 11 },
   rowActions: { flexDirection: 'row', gap: 14 },
-  rowAction: { color: colors.blue, fontSize: 12.5 },
-  danger: { color: colors.danger },
+  rowAction: { color: c.blue, fontSize: 12.5 },
+  danger: { color: c.danger },
 
   form: { gap: 6, marginTop: 4 },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderRadius: 999,
     padding: 3,
     marginBottom: 4,
   },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 999 },
-  tabActive: { backgroundColor: colors.bg },
-  tabText: { color: colors.textDim, fontSize: 12 },
-  tabTextActive: { color: colors.text, fontWeight: '600' },
+  tabActive: { backgroundColor: c.bg },
+  tabText: { color: c.textDim, fontSize: 12 },
+  tabTextActive: { color: c.text, fontWeight: '600' },
 
-  label: { color: colors.textDim, fontSize: 12, marginTop: 4 },
+  label: { color: c.textDim, fontSize: 12, marginTop: 4 },
   input: {
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    color: colors.text,
+    color: c.text,
     fontSize: 13,
   },
   inputDisabled: { opacity: 0.55 },
@@ -503,54 +506,54 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: radius.md,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
   },
-  selectText: { color: colors.text, fontSize: 13 },
-  selectPlaceholder: { color: colors.textFaint, fontSize: 13 },
-  chevron: { color: colors.textFaint, fontSize: 12 },
+  selectText: { color: c.text, fontSize: 13 },
+  selectPlaceholder: { color: c.textFaint, fontSize: 13 },
+  chevron: { color: c.textFaint, fontSize: 12 },
 
   pills: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   pill: {
     borderRadius: 999,
     paddingHorizontal: 11,
     paddingVertical: 6,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
-  pillActive: { backgroundColor: colors.blueSoft, borderColor: colors.blue },
-  pillText: { color: colors.textDim, fontSize: 12 },
-  pillTextActive: { color: colors.blue, fontWeight: '600' },
-  tiny: { color: colors.textFaint, fontSize: 11 },
+  pillActive: { backgroundColor: c.blueSoft, borderColor: c.blue },
+  pillText: { color: c.textDim, fontSize: 12 },
+  pillTextActive: { color: c.blue, fontWeight: '600' },
+  tiny: { color: c.textFaint, fontSize: 11 },
 
   modelBox: { gap: 2, marginTop: 4 },
   modelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
-  check: { color: colors.textFaint, fontSize: 14, width: 16, textAlign: 'center' },
-  checkOn: { color: colors.blue },
-  modelName: { color: colors.text, fontSize: 13 },
-  modelMeta: { color: colors.textFaint, fontSize: 10.5, fontFamily: font.mono },
+  check: { color: c.textFaint, fontSize: 14, width: 16, textAlign: 'center' },
+  checkOn: { color: c.blue },
+  modelName: { color: c.text, fontSize: 13 },
+  modelMeta: { color: c.textFaint, fontSize: 10.5, fontFamily: font.mono },
 
   actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
-  error: { color: colors.danger, fontSize: 11.5, lineHeight: 16 },
+  error: { color: c.danger, fontSize: 11.5, lineHeight: 16 },
 
   pickerCard: {
     marginTop: 4,
     padding: 10,
     gap: 6,
     borderRadius: radius.md,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
   },
-  pickerTitle: { color: colors.text, fontSize: 13.5, fontWeight: '600' },
+  pickerTitle: { color: c.text, fontSize: 13.5, fontWeight: '600' },
   pickerList: { maxHeight: 260 },
   pickerRow: {
     paddingVertical: 9,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: c.border,
   },
-  pickerName: { color: colors.text, fontSize: 13.5 },
-  pickerMeta: { color: colors.textFaint, fontSize: 10.5, marginTop: 1 },
+  pickerName: { color: c.text, fontSize: 13.5 },
+  pickerMeta: { color: c.textFaint, fontSize: 10.5, marginTop: 1 },
 });

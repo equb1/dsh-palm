@@ -1,7 +1,7 @@
 import React from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, motion, radius, space } from '../theme';
+import { motion, radius, space, useTheme, useThemedStyles, type Palette, type Theme } from '../theme';
 
 /**
  * 设置首页的分组行（U4）。
@@ -11,14 +11,16 @@ import { colors, motion, radius, space } from '../theme';
  */
 export type SettingsTone = 'blue' | 'green' | 'amber' | 'violet' | 'slate' | 'danger';
 
-const TONES: Record<SettingsTone, { bg: string; fg: string }> = {
-  blue: { bg: colors.blueSoft, fg: colors.blue },
-  green: { bg: colors.okSoft, fg: colors.ok },
-  amber: { bg: colors.warnSoft, fg: colors.warn },
-  violet: { bg: 'rgba(124,58,237,0.10)', fg: '#7C3AED' },
-  slate: { bg: colors.glassStrong, fg: colors.textDim },
-  danger: { bg: colors.dangerSoft, fg: colors.danger },
-};
+function tones(c: Palette): Record<SettingsTone, { bg: string; fg: string }> {
+  return {
+    blue: { bg: c.blueSoft, fg: c.blue },
+    green: { bg: c.okSoft, fg: c.ok },
+    amber: { bg: c.warnSoft, fg: c.warn },
+    violet: { bg: c.violetSoft, fg: c.violet },
+    slate: { bg: c.glassStrong, fg: c.textDim },
+    danger: { bg: c.dangerSoft, fg: c.danger },
+  };
+}
 
 export interface SettingsRow {
   id: string;
@@ -28,6 +30,7 @@ export interface SettingsRow {
   icon: string;
   tone?: SettingsTone;
   warn?: boolean;
+  selected?: boolean;
   onPress: () => void;
 }
 
@@ -38,6 +41,7 @@ export function SettingsGroup({
   title: string;
   rows: SettingsRow[];
 }): React.ReactElement | null {
+  const styles = useThemedStyles(createStyles);
   if (rows.length === 0) return null;
   return (
     <View style={styles.groupWrap}>
@@ -52,7 +56,9 @@ export function SettingsGroup({
 }
 
 export function SettingsTile({ row }: { row: SettingsRow }): React.ReactElement {
-  const tone = TONES[row.tone ?? 'slate'];
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const tone = tones(palette)[row.tone ?? 'slate'];
   const scale = React.useRef(new Animated.Value(1)).current;
   const animate = (to: number): void => {
     Animated.timing(scale, {
@@ -86,54 +92,56 @@ export function SettingsTile({ row }: { row: SettingsRow }): React.ReactElement 
           ) : null}
         </View>
         {row.value ? (
-          <Text style={[styles.value, row.warn && { color: colors.warn }]} numberOfLines={1}>
+          <Text style={[styles.value, row.warn && { color: palette.warn }]} numberOfLines={1}>
             {row.value}
           </Text>
         ) : null}
-        <Text style={styles.chevron}>›</Text>
+        {row.selected ? <Text style={styles.check}>✓</Text> : <Text style={styles.chevron}>›</Text>}
       </Pressable>
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
-  groupWrap: { gap: 6 },
-  groupTitle: {
-    color: colors.textFaint,
-    fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: space.xs,
-    letterSpacing: 0.2,
-  },
-  group: {
-    backgroundColor: colors.glass,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    gap: 2,
-  },
-  tile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    minHeight: 52,
-    paddingVertical: 10,
-    borderRadius: radius.md,
-  },
-  pressed: { backgroundColor: colors.glassStrong },
-  icon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconGlyph: { fontSize: 15, fontWeight: '600' },
-  titles: { flex: 1, gap: 1 },
-  title: { color: colors.text, fontSize: 15 },
-  hint: { color: colors.textFaint, fontSize: 11.5 },
-  value: { color: colors.textFaint, fontSize: 12.5, maxWidth: '48%' },
-  chevron: { color: colors.textFaint, fontSize: 16 },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    groupWrap: { gap: 6 },
+    groupTitle: {
+      color: c.textFaint,
+      fontSize: 12,
+      fontWeight: '600',
+      paddingHorizontal: space.xs,
+      letterSpacing: 0.2,
+    },
+    group: {
+      backgroundColor: c.glass,
+      borderRadius: radius.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      gap: 2,
+    },
+    tile: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      minHeight: 52,
+      paddingVertical: 10,
+      borderRadius: radius.md,
+    },
+    pressed: { backgroundColor: c.glassStrong },
+    icon: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    iconGlyph: { fontSize: 15, fontWeight: '600' },
+    titles: { flex: 1, gap: 1 },
+    title: { color: c.text, fontSize: 15 },
+    hint: { color: c.textFaint, fontSize: 11.5 },
+    value: { color: c.textFaint, fontSize: 12.5, maxWidth: '48%' },
+    chevron: { color: c.textFaint, fontSize: 16 },
+    check: { color: c.blue, fontSize: 16, fontWeight: '700' },
+  });

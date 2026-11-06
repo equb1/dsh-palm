@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { store, useStore } from '../useStore';
 import { Btn, IconButton, Pill } from '../parts';
 import { SmoothKeyboardAvoid } from '../SmoothKeyboardAvoid';
-import { colors, radius, space, topInset } from '../theme';
+import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from '../theme';
 
 const REF = 'DEEPSEEK_API_KEY';
 
@@ -16,6 +16,8 @@ const REF = 'DEEPSEEK_API_KEY';
  */
 export function CredentialsScreen({ onClose }: { onClose: () => void }): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [key, setKey] = React.useState('');
   const [saved, setSaved] = React.useState(false);
   /** API Key 是备选方式，默认收起；账号登录是主路径 */
@@ -53,7 +55,7 @@ export function CredentialsScreen({ onClose }: { onClose: () => void }): React.R
               <Text style={styles.cardTitle}>DeepSeek API Key（备选）</Text>
               <View style={styles.rowRight}>
                 <Pill>
-                  <Text style={[styles.status, configured && { color: colors.ok }]}>
+                  <Text style={[styles.status, configured && { color: palette.ok }]}>
                     {configured ? '已配置' : '未配置'}
                   </Text>
                 </Pill>
@@ -71,7 +73,7 @@ export function CredentialsScreen({ onClose }: { onClose: () => void }): React.R
                   value={key}
                   onChangeText={setKey}
                   placeholder={configured ? '已配置 · 粘贴新 Key 可覆盖' : 'sk-…'}
-                  placeholderTextColor={colors.textFaint}
+                  placeholderTextColor={palette.textFaint}
                   autoCapitalize="none"
                   autoCorrect={false}
                   secureTextEntry
@@ -122,42 +124,43 @@ export function CredentialsScreen({ onClose }: { onClose: () => void }): React.R
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
-  body: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
-  scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
-  card: {
-    backgroundColor: colors.glass,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    padding: space.md,
-    gap: space.sm,
-  },
-  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  chevron: { color: colors.textFaint, fontSize: 12 },
-  cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  status: { color: colors.textFaint, fontSize: 11 },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
-  input: {
-    backgroundColor: colors.glassStrong,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.text,
-    fontSize: 13,
-  },
-  actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
-  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.xs },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
+    body: { flex: 1 },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.sm,
+      paddingHorizontal: space.lg,
+      paddingVertical: space.sm,
+    },
+    title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
+    scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
+    card: {
+      backgroundColor: c.glass,
+      borderRadius: radius.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      padding: space.md,
+      gap: space.sm,
+    },
+    rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    rowRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    chevron: { color: c.textFaint, fontSize: 12 },
+    cardTitle: { color: c.text, fontSize: 14, fontWeight: '600' },
+    status: { color: c.textFaint, fontSize: 11 },
+    hint: { color: c.textDim, fontSize: 12, lineHeight: 17 },
+    input: {
+      backgroundColor: c.glassStrong,
+      borderRadius: radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.borderStrong,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: c.text,
+      fontSize: 13,
+    },
+    actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
+    error: { color: c.danger, fontSize: 12, paddingHorizontal: space.xs },
+  });

@@ -11,7 +11,7 @@ import {
 
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
-import { colors, font, radius, space, topInset } from './theme';
+import { font, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 interface Entry {
   id: number;
@@ -28,6 +28,8 @@ const QUICK = ['pwd', 'ls', 'ls docs', 'cat README.md'] as const;
 
 /** U8 只读终端：可以 ls/cat/grep，写操作被沙箱拒绝；不经过审批，所以只给读 */
 export function TerminalScreen(): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const state = useStore();
   const [command, setCommand] = React.useState('');
   const [entries, setEntries] = React.useState<Entry[]>([]);
@@ -121,7 +123,7 @@ export function TerminalScreen(): React.ReactElement {
           value={command}
           onChangeText={setCommand}
           placeholder="只读命令，例如 ls /workspace"
-          placeholderTextColor={colors.textFaint}
+          placeholderTextColor={palette.textFaint}
           autoCapitalize="none"
           autoCorrect={false}
           accessibilityLabel="终端命令"
@@ -136,7 +138,7 @@ export function TerminalScreen(): React.ReactElement {
           style={[styles.runBtn, (running || !command.trim()) && styles.runBtnDisabled]}
         >
           {running ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator color={palette.onAccent} size="small" />
           ) : (
             <Text style={styles.runText}>运行</Text>
           )}
@@ -149,8 +151,9 @@ export function TerminalScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -158,42 +161,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  title: { color: colors.text, fontSize: 17, fontWeight: '700' },
+  title: { color: c.text, fontSize: 17, fontWeight: '700' },
   badge: {
-    color: colors.textFaint,
+    color: c.textFaint,
     fontSize: 10.5,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     borderRadius: radius.pill,
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
   output: { flex: 1 },
   outputContent: { padding: space.lg, gap: space.md, paddingBottom: space.lg },
-  hint: { color: colors.textFaint, fontSize: 12.5, lineHeight: 19 },
+  hint: { color: c.textFaint, fontSize: 12.5, lineHeight: 19 },
   entry: { gap: 4 },
-  commandLine: { color: colors.text, fontSize: 12.5, fontFamily: font.mono, lineHeight: 18 },
-  prompt: { color: colors.blue, fontSize: 12.5, fontFamily: font.mono },
+  commandLine: { color: c.text, fontSize: 12.5, fontFamily: font.mono, lineHeight: 18 },
+  prompt: { color: c.blue, fontSize: 12.5, fontFamily: font.mono },
   stdout: {
-    color: colors.textDim,
+    color: c.textDim,
     fontSize: 12,
     lineHeight: 18,
     fontFamily: font.mono,
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.sm,
     padding: 8,
   },
   stderr: {
-    color: colors.danger,
+    color: c.danger,
     fontSize: 12,
     lineHeight: 18,
     fontFamily: font.mono,
-    backgroundColor: colors.dangerSoft,
+    backgroundColor: c.dangerSoft,
     borderRadius: radius.sm,
     padding: 8,
   },
-  meta: { color: colors.textFaint, fontSize: 10, fontFamily: font.mono },
-  error: { color: colors.danger, fontSize: 12, lineHeight: 18 },
+  meta: { color: c.textFaint, fontSize: 10, fontFamily: font.mono },
+  error: { color: c.danger, fontSize: 12, lineHeight: 18 },
   quickRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -202,14 +205,14 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   quickPill: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
-  quickText: { color: colors.textDim, fontSize: 11, fontFamily: font.mono },
+  quickText: { color: c.textDim, fontSize: 11, fontFamily: font.mono },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -218,13 +221,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     minHeight: 46,
     borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
-  input: { flex: 1, color: colors.text, fontSize: 13, fontFamily: font.mono, paddingVertical: 8 },
+  input: { flex: 1, color: c.text, fontSize: 13, fontFamily: font.mono, paddingVertical: 8 },
   runBtn: {
-    backgroundColor: colors.blue,
+    backgroundColor: c.blue,
     borderRadius: radius.pill,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -232,12 +235,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   runBtnDisabled: { opacity: 0.5 },
-  runText: { color: '#FFFFFF', fontSize: 12.5, fontWeight: '600' },
+  runText: { color: c.onAccent, fontSize: 12.5, fontWeight: '600' },
   footnote: {
-    color: colors.textFaint,
+    color: c.textFaint,
     fontSize: 10.5,
     paddingHorizontal: space.lg,
     paddingTop: 6,
     paddingBottom: space.lg,
   },
-});
+  });

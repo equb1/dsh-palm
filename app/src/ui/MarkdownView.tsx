@@ -15,21 +15,46 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { colors, font, radius, semantic, space } from './theme';
+import {
+  font,
+  radius,
+  space,
+  useTheme,
+  useThemedStyles,
+  type Palette,
+  type Theme,
+} from './theme';
 import { highlight, type SyntaxKind } from './syntax';
 
-const SYNTAX_STYLES: Record<SyntaxKind, { color?: string; fontStyle?: 'italic' }> = {
-  plain: {},
-  comment: { color: '#6E7781', fontStyle: 'italic' },
-  string: { color: '#0A7D32' },
-  keyword: { color: '#8250DF' },
-  literal: { color: '#0550AE' },
-  number: { color: '#0550AE' },
-  function: { color: '#0550AE' },
-  operator: { color: '#57606A' },
-  property: { color: '#0550AE' },
-  tag: { color: '#116329' },
-};
+type SyntaxStyles = Record<SyntaxKind, TextStyle>;
+
+function syntaxStyles(c: Palette): SyntaxStyles {
+  return {
+    plain: {},
+    comment: { color: c.syntax.comment, fontStyle: 'italic' },
+    string: { color: c.syntax.string },
+    keyword: { color: c.syntax.keyword },
+    literal: { color: c.syntax.literal },
+    number: { color: c.syntax.number },
+    function: { color: c.syntax.function },
+    operator: { color: c.syntax.operator },
+    property: { color: c.syntax.property },
+    tag: { color: c.syntax.tag },
+  };
+}
+
+type MarkdownStyles = ReturnType<typeof createStyles>;
+
+const MarkdownStylesContext = React.createContext<{
+  styles: MarkdownStyles;
+  syntax: SyntaxStyles;
+} | null>(null);
+
+function useMarkdownStyles(): { styles: MarkdownStyles; syntax: SyntaxStyles } {
+  const value = React.useContext(MarkdownStylesContext);
+  if (!value) throw new Error('MarkdownView must be rendered inside its styles provider');
+  return value;
+}
 
 /* ------------------------------------------------------------------ *
  * 剪贴板复制工具
@@ -53,6 +78,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
  * ------------------------------------------------------------------ */
 
 function StreamingCursor(): React.ReactElement {
+  const { styles } = useMarkdownStyles();
   const opacity = React.useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
@@ -183,6 +209,7 @@ function InlineText({
   baseStyle?: object;
   trailingCursor?: boolean;
 }): React.ReactElement {
+  const { styles } = useMarkdownStyles();
   const tokens = parseInlineTokens(text);
 
   return (
@@ -509,6 +536,7 @@ function parseMarkdownBlocks(rawText: string): BlockItem[] {
  * ------------------------------------------------------------------ */
 
 function CodeBlockView({ lang, code }: { lang: string; code: string }): React.ReactElement {
+  const { styles, syntax } = useMarkdownStyles();
   const [copied, setCopied] = React.useState(false);
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -562,7 +590,7 @@ function CodeBlockView({ lang, code }: { lang: string; code: string }): React.Re
             token.kind === 'plain' ? (
               token.text
             ) : (
-              <Text key={i} style={SYNTAX_STYLES[token.kind]}>
+              <Text key={i} style={syntax[token.kind]}>
                 {token.text}
               </Text>
             ),
@@ -578,6 +606,7 @@ function CodeBlockView({ lang, code }: { lang: string; code: string }): React.Re
  * ------------------------------------------------------------------ */
 
 function ImageView({ alt, url }: { alt: string; url: string }): React.ReactElement {
+  const { styles } = useMarkdownStyles();
   const [hasError, setHasError] = React.useState(false);
 
   return (
@@ -624,6 +653,7 @@ function TableView({
   align: Array<'left' | 'center' | 'right'>;
   rows: string[][];
 }): React.ReactElement {
+  const { styles } = useMarkdownStyles();
   const wide = header.length >= 4;
   const cellAlign = (col: number): TextStyleAlign => {
     return align[col] ?? 'left';
@@ -704,6 +734,7 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
   trailingCursor?: boolean;
   fontScale?: number;
 }): React.ReactElement {
+  const { styles } = useMarkdownStyles();
   switch (block.type) {
     case 'h1':
       return (
@@ -809,7 +840,10 @@ function MarkdownViewImpl({
   isStreaming,
   fontScale = 1,
 }: MarkdownViewProps): React.ReactElement {
-  applyFontScale(fontScale);
+  const theme = useTheme();
+  const baseStyles = useThemedStyles(createStyles);
+  const styles = React.useMemo(() => scaleStyles(baseStyles, fontScale), [baseStyles, fontScale]);
+  const syntax = React.useMemo(() => syntaxStyles(theme.palette), [theme.palette]);
   const activeStreaming = Boolean(streaming || isStreaming);
   const { stable, tail } = splitStableMarkdown(text);
   const stableBlocks = React.useMemo(
@@ -823,42 +857,45 @@ function MarkdownViewImpl({
   const lastIsParagraph = activeBlock?.type === 'p';
 
   return (
-    <View style={[styles.root, style]}>
-      <BlockList blocks={stableBlocks} prefix="stable" fontScale={fontScale} />
-      <BlockList blocks={tailBlocks} prefix="tail" streaming={activeStreaming} fontScale={fontScale} />
-      {activeStreaming && (!tailEndsWithParagraph || !lastIsParagraph) ? (
-        <View style={styles.trailingCursorWrap}>
-          <StreamingCursor />
-        </View>
-      ) : null}
-    </View>
+    <MarkdownStylesContext.Provider value={{ styles, syntax }}>
+      <View style={[styles.root, style]}>
+        <BlockList blocks={stableBlocks} prefix="stable" fontScale={fontScale} />
+        <BlockList blocks={tailBlocks} prefix="tail" streaming={activeStreaming} fontScale={fontScale} />
+        {activeStreaming && (!tailEndsWithParagraph || !lastIsParagraph) ? (
+          <View style={styles.trailingCursorWrap}>
+            <StreamingCursor />
+          </View>
+        ) : null}
+      </View>
+    </MarkdownStylesContext.Provider>
   );
 }
 
 export const MarkdownView = React.memo(MarkdownViewImpl);
 
-let styles = StyleSheet.create({
+const createStyles = ({ palette: c, semantic: s }: Theme) =>
+  StyleSheet.create({
   root: { gap: space.sm },
-  bold: { fontWeight: '700', color: colors.text },
-  italic: { fontStyle: 'italic', color: colors.text },
-  strike: { textDecorationLine: 'line-through', color: colors.textFaint },
+  bold: { fontWeight: '700', color: c.text },
+  italic: { fontStyle: 'italic', color: c.text },
+  strike: { textDecorationLine: 'line-through', color: c.textFaint },
   inlineCode: {
     fontFamily: font.mono,
     fontSize: 13,
-    color: colors.text,
-    backgroundColor: semantic.codeInline,
+    color: c.text,
+    backgroundColor: s.codeInline,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     borderRadius: 4,
     paddingHorizontal: 5,
   },
   link: {
-    color: semantic.link,
+    color: s.link,
     textDecorationLine: 'underline',
   },
   cursorText: {
     fontFamily: font.mono,
-    color: colors.blue,
+    color: c.blue,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -866,21 +903,21 @@ let styles = StyleSheet.create({
     paddingVertical: 2,
   },
   h1Wrap: { marginTop: 6, marginBottom: 2 },
-  h1Text: { fontSize: 21, lineHeight: 30, fontWeight: '700', color: colors.text },
+  h1Text: { fontSize: 21, lineHeight: 30, fontWeight: '700', color: c.text },
   h2Wrap: { marginTop: 5, marginBottom: 2 },
-  h2Text: { fontSize: 19, lineHeight: 28, fontWeight: '700', color: colors.text },
+  h2Text: { fontSize: 19, lineHeight: 28, fontWeight: '700', color: c.text },
   h3Wrap: { marginTop: 4, marginBottom: 1 },
-  h3Text: { fontSize: 17, lineHeight: 24, fontWeight: '600', color: colors.text },
+  h3Text: { fontSize: 17, lineHeight: 24, fontWeight: '600', color: c.text },
   pWrap: { marginVertical: 1 },
   paragraph: {
     fontSize: 14,
     lineHeight: 22,
-    color: colors.text,
+    color: c.text,
   },
   quoteWrap: {
     borderLeftWidth: 3,
-    borderLeftColor: colors.borderStrong,
-    backgroundColor: colors.bgElevated,
+    borderLeftColor: c.borderStrong,
+    backgroundColor: c.bgElevated,
     borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -889,42 +926,42 @@ let styles = StyleSheet.create({
   quoteText: {
     fontSize: 14,
     lineHeight: 22,
-    color: colors.textDim,
+    color: c.textDim,
     fontStyle: 'italic',
   },
   listWrap: { marginVertical: 2, gap: 4 },
   listItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   listContent: { flex: 1 },
-  bullet: { color: colors.blue, fontSize: 16, lineHeight: 24 },
-  orderNumber: { color: colors.textFaint, fontSize: 13, lineHeight: 24, minWidth: 18 },
+  bullet: { color: c.blue, fontSize: 16, lineHeight: 24 },
+  orderNumber: { color: c.textFaint, fontSize: 13, lineHeight: 24, minWidth: 18 },
   hr: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.borderStrong,
+    backgroundColor: c.borderStrong,
     marginVertical: 6,
   },
   /* 代码块 */
   codeBlockWrap: {
-    backgroundColor: semantic.codeBlock,
+    backgroundColor: s.codeBlock,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     marginVertical: 4,
     overflow: 'hidden',
   },
   codeBlockHeader: {
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: c.border,
   },
   codeBlockLang: {
     fontFamily: font.mono,
     fontSize: 11,
-    color: colors.textFaint,
+    color: c.textFaint,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
@@ -932,12 +969,12 @@ let styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radius.sm,
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   codeCopyBtnCopied: {
-    backgroundColor: colors.okSoft,
+    backgroundColor: c.okSoft,
   },
   codeCopyBtnPressed: {
     opacity: 0.7,
@@ -945,10 +982,10 @@ let styles = StyleSheet.create({
   codeCopyText: {
     fontFamily: font.mono,
     fontSize: 11,
-    color: colors.textDim,
+    color: c.textDim,
   },
   codeCopyTextCopied: {
-    color: colors.ok,
+    color: c.ok,
     fontWeight: '600',
   },
   codeScroll: { padding: 12 },
@@ -956,15 +993,15 @@ let styles = StyleSheet.create({
     fontFamily: font.mono,
     fontSize: 11.5,
     lineHeight: 17,
-    color: '#1F2328',
+    color: c.codeText,
   },
   /* 图片 */
   imageCard: {
     marginVertical: 6,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.bgElevated,
+    borderColor: c.border,
+    backgroundColor: c.bgElevated,
     overflow: 'hidden',
   },
   image: {
@@ -976,7 +1013,7 @@ let styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
   },
   imageFallbackIcon: {
     fontSize: 28,
@@ -985,31 +1022,31 @@ let styles = StyleSheet.create({
   },
   imageFallbackText: {
     fontSize: 13,
-    color: colors.textDim,
+    color: c.textDim,
     fontWeight: '500',
   },
   imageFallbackSub: {
     fontSize: 11,
-    color: colors.textFaint,
+    color: c.textFaint,
     marginTop: 2,
     fontFamily: font.mono,
   },
   imageCaptionWrap: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    borderTopColor: c.border,
   },
   imageCaption: {
     fontSize: 12,
-    color: colors.textDim,
+    color: c.textDim,
     fontStyle: 'italic',
   },
   /* 表格 */
   tableWrap: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
     borderRadius: radius.sm,
     overflow: 'hidden',
     marginVertical: 4,
@@ -1018,42 +1055,39 @@ let styles = StyleSheet.create({
   tableRow: {
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    borderTopColor: c.border,
   },
   tableHeaderRow: {
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderTopWidth: 0,
   },
   tableRowStripe: {
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
   },
   tableCell: {
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: colors.border,
+    borderLeftColor: c.border,
   },
   tableCellWide: {
     minWidth: 100,
   },
   tableCellFirst: { borderLeftWidth: 0 },
-  tableHeaderText: { color: colors.text, fontSize: 12, fontWeight: '500', lineHeight: 18 },
-  tableCellText: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
+  tableHeaderText: { color: c.text, fontSize: 12, fontWeight: '500', lineHeight: 18 },
+  tableCellText: { color: c.textDim, fontSize: 12, lineHeight: 18 },
 });
 
 /**
- * U7 字号档：MarkdownView 的样式是模块级常量、子组件直接读 `styles`。
- * 用一份按倍率重建的样式表替换 `styles`，再靠 BlockList/MarkdownBlock 的
- * fontScale prop 穿透 memo 触发重渲染；聊天里所有 Markdown 共用同一倍率。
+ * U7 字号档：按当前主题重建一次基础样式，再按倍率复制 fontSize/lineHeight。
+ * 结果通过 MarkdownStylesContext 下发，memo 子组件靠 context 更新重渲染；
+ * 不再使用模块级可变 styles，避免主题和字号互相覆盖。
  */
-const baseStyles = styles;
-let scaledFor = 1;
-
-function scaleStyles(scale: number): typeof baseStyles {
-  if (scale <= 1) return baseStyles;
+function scaleStyles(base: MarkdownStyles, scale: number): MarkdownStyles {
+  if (scale <= 1) return base;
   const out: Record<string, unknown> = {};
-  for (const key of Object.keys(baseStyles) as Array<keyof typeof baseStyles>) {
-    const flat = StyleSheet.flatten(baseStyles[key]) as TextStyle | undefined;
+  for (const key of Object.keys(base) as Array<keyof MarkdownStyles>) {
+    const flat = StyleSheet.flatten(base[key]) as TextStyle | undefined;
     out[key] =
       flat && (flat.fontSize !== undefined || flat.lineHeight !== undefined)
         ? {
@@ -1061,13 +1095,7 @@ function scaleStyles(scale: number): typeof baseStyles {
             ...(flat.fontSize !== undefined ? { fontSize: flat.fontSize * scale } : {}),
             ...(flat.lineHeight !== undefined ? { lineHeight: flat.lineHeight * scale } : {}),
           }
-        : baseStyles[key];
+        : base[key];
   }
-  return out as typeof baseStyles;
-}
-
-function applyFontScale(scale: number): void {
-  if (scale === scaledFor) return;
-  scaledFor = scale;
-  styles = scaleStyles(scale);
+  return out as MarkdownStyles;
 }

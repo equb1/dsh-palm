@@ -3,7 +3,7 @@ import { Clipboard, Pressable, ScrollView, Share, StyleSheet, Text, View } from 
 
 import type { Approval, Block, Turn } from '../../protocol';
 import { MarkdownView } from '../MarkdownView';
-import { colors, font, radius } from '../theme';
+import { font, radius, useTheme, useThemedStyles, type Theme } from '../theme';
 import { ApprovalCard } from './ApprovalCard';
 import { CapabilityCard } from './CapabilityCard';
 
@@ -16,6 +16,7 @@ const ThinkingRow = React.memo(function ThinkingRow({
   onToggle?: () => void;
   live?: boolean;
 }): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   const [open, setOpen] = React.useState(false);
   const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
   const MAX_OPEN = 12000;
@@ -104,10 +105,12 @@ const ToolRow = React.memo(function ToolRow({
 }: {
   block: Extract<Block, { kind: 'tool' }>;
 }): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [open, setOpen] = React.useState(false);
   const detail = block.detail?.slice(0, 4000);
   const color =
-    block.state === 'running' ? colors.blue : block.state === 'error' ? colors.danger : colors.textFaint;
+    block.state === 'running' ? palette.blue : block.state === 'error' ? palette.danger : palette.textFaint;
 
   return (
     <View>
@@ -149,6 +152,8 @@ const ToolGroupRow = React.memo(function ToolGroupRow({
 }: {
   tools: ToolBlock[];
 }): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [open, setOpen] = React.useState(false);
   const names = Array.from(new Set(tools.map((tool) => tool.name)));
   const errors = tools.filter((tool) => tool.state === 'error').length;
@@ -165,7 +170,7 @@ const ToolGroupRow = React.memo(function ToolGroupRow({
         <Text style={styles.rowText} numberOfLines={1}>
           {names.join(' · ')}
         </Text>
-        {errors > 0 ? <Text style={[styles.rowState, { color: colors.danger }]}>×{errors}</Text> : null}
+        {errors > 0 ? <Text style={[styles.rowState, { color: palette.danger }]}>×{errors}</Text> : null}
         <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
       </Pressable>
       {open ? tools.map((tool) => <ToolRow key={tool.id} block={tool} />) : null}
@@ -226,6 +231,8 @@ function renderBlock(
 }
 
 function AssistantActions({ text }: { text: string }): React.ReactElement | null {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [copied, setCopied] = React.useState(false);
   if (!text.trim()) return null;
 
@@ -238,7 +245,7 @@ function AssistantActions({ text }: { text: string }): React.ReactElement | null
   return (
     <View style={styles.actions}>
       <Pressable accessibilityRole="button" accessibilityLabel="复制回答" onPress={copy} hitSlop={8}>
-        <Text style={[styles.actionGlyph, copied && { color: colors.ok }]}>{copied ? '✓' : '⧉'}</Text>
+        <Text style={[styles.actionGlyph, copied && { color: palette.ok }]}>{copied ? '✓' : '⧉'}</Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -298,6 +305,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
   /** U7 对话字号倍率 */
   fontScale?: number;
 }): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   const [open, setOpen] = React.useState(expandProcess === true);
   const completed = turn.status !== 'streaming';
   const visibleBlocks = React.useMemo(
@@ -403,6 +411,7 @@ function TurnViewImpl({
   expandProcess?: boolean;
   fontScale?: number;
 }): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   if (turn.role === 'user') {
     const text = turn.blocks
       .map((b) => (b.kind === 'text' ? b.text : ''))
@@ -438,54 +447,55 @@ function TurnViewImpl({
 
 export const TurnView = React.memo(TurnViewImpl);
 
-const styles = StyleSheet.create({
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
   userRow: { alignItems: 'flex-end' },
   userBubble: {
-    backgroundColor: colors.bubble,
+    backgroundColor: c.bubble,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: radius.lg,
     maxWidth: '84%',
   },
-  userText: { color: colors.text, fontSize: 14, lineHeight: 22 },
+  userText: { color: c.text, fontSize: 14, lineHeight: 22 },
 
   assistant: { gap: 8 },
   summary: {
     paddingVertical: 8,
     gap: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: c.border,
   },
   summaryHead: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  summaryCheck: { color: colors.ok, fontSize: 12, fontWeight: '700' },
-  summaryTitle: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  summaryDuration: { color: colors.textDim, fontSize: 12 },
-  summarySub: { color: colors.textFaint, fontSize: 11.5, lineHeight: 16 },
+  summaryCheck: { color: c.ok, fontSize: 12, fontWeight: '700' },
+  summaryTitle: { color: c.text, fontSize: 13, fontWeight: '600' },
+  summaryDuration: { color: c.textDim, fontSize: 12 },
+  summarySub: { color: c.textFaint, fontSize: 11.5, lineHeight: 16 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingVertical: 2 },
-  actionGlyph: { color: colors.textFaint, fontSize: 15 },
+  actionGlyph: { color: c.textFaint, fontSize: 15 },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
-  rowGlyph: { color: colors.textFaint, fontSize: 11 },
-  rowText: { color: colors.textDim, fontSize: 13, flex: 1 },
+  rowGlyph: { color: c.textFaint, fontSize: 11 },
+  rowText: { color: c.textDim, fontSize: 13, flex: 1 },
   rowTextLive: { fontSize: 12, lineHeight: 17 },
-  toolGroupTitle: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
-  thinkingLabel: { color: colors.textFaint, fontSize: 13 },
-  toolName: { color: colors.textFaint, fontSize: 11, fontFamily: font.mono },
+  toolGroupTitle: { color: c.textDim, fontSize: 12, fontWeight: '600' },
+  thinkingLabel: { color: c.textFaint, fontSize: 13 },
+  toolName: { color: c.textFaint, fontSize: 11, fontFamily: font.mono },
   rowState: { fontSize: 11 },
-  chevron: { color: colors.textFaint, fontSize: 11 },
+  chevron: { color: c.textFaint, fontSize: 11 },
 
   thinkingOpenBox: {
     gap: 6,
     paddingVertical: 2,
   },
-  thinkingActive: { color: colors.blue },
-  liveDot: { color: colors.blue, fontSize: 8, paddingHorizontal: 2 },
+  thinkingActive: { color: c.blue },
+  liveDot: { color: c.blue, fontSize: 8, paddingHorizontal: 2 },
   thinkingBodyWrap: {
     marginLeft: 18,
     paddingLeft: 12,
     paddingBottom: 6,
     borderLeftWidth: 2,
-    borderLeftColor: colors.border,
+    borderLeftColor: c.border,
   },
   thinkingScroll: {
     maxHeight: 320,
@@ -493,10 +503,10 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     paddingBottom: 6,
     borderLeftWidth: 2,
-    borderLeftColor: colors.border,
+    borderLeftColor: c.border,
   },
-  thinkingBody: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
-  thinkingMore: { color: colors.textFaint, fontSize: 11, lineHeight: 16, paddingTop: 6 },
+  thinkingBody: { color: c.textDim, fontSize: 12.5, lineHeight: 19 },
+  thinkingMore: { color: c.textFaint, fontSize: 11, lineHeight: 16, paddingTop: 6 },
   toolDetail: {
     marginLeft: 18,
     marginTop: 2,
@@ -504,8 +514,8 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.bgElevated,
+    borderColor: c.border,
+    backgroundColor: c.bgElevated,
   },
-  toolDetailText: { color: colors.textDim, fontFamily: font.mono, fontSize: 11.5, lineHeight: 17 },
+  toolDetailText: { color: c.textDim, fontFamily: font.mono, fontSize: 11.5, lineHeight: 17 },
 });

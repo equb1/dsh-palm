@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { radius, semantic, typography } from './theme';
+import { radius, typography, useTheme, useThemedStyles, type Theme } from './theme';
 
 export type EngineKind = 'light' | 'remote';
 
@@ -18,10 +18,12 @@ const DEFAULT_LABEL: Record<EngineKind, string> = { light: '轻引擎', remote: 
  * 按 A4 约定先只做组件，不接线；1.2 EngineManager 落地后再传入实际状态。
  */
 export function EngineBadge({ kind, label, onPress }: EngineBadgeProps): React.ReactElement | null {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   if (!kind) return null;
   const text = label ?? DEFAULT_LABEL[kind];
-  const fg = kind === 'light' ? semantic.accent : semantic.textSecondary;
-  const bg = kind === 'light' ? semantic.accentSoft : semantic.card;
+  const fg = kind === 'light' ? palette.blue : palette.textDim;
+  const bg = kind === 'light' ? palette.blueSoft : palette.glass;
 
   const body = (
     <View style={[styles.badge, { backgroundColor: bg }]}>
@@ -42,17 +44,18 @@ export function EngineBadge({ kind, label, onPress }: EngineBadgeProps): React.R
   );
 }
 
-const styles = StyleSheet.create({
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    alignSelf: 'flex-start',
-  },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  text: { ...typography.meta, fontWeight: '600' },
-  pressed: { opacity: 0.75 },
-});
+const createStyles = (_theme: Theme) =>
+  StyleSheet.create({
+    badge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: radius.pill,
+      alignSelf: 'flex-start',
+    },
+    dot: { width: 6, height: 6, borderRadius: 3 },
+    text: { ...typography.meta, fontWeight: '600' },
+    pressed: { opacity: 0.75 },
+  });

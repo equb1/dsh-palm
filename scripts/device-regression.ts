@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 
 import { adb, dumpNodes, hideKeyboard, keyevent, screenshot, tryTap, typeText, waitFor } from './device-ui';
 
-const PKG = 'cool.cnb.dshpalm';
+const PKG = process.env.DSH_PALM_PKG ?? 'cool.cnb.dshpalm';
 
 function textNodes(): string[] {
   return dumpNodes()
@@ -38,7 +38,7 @@ function step(name: string, fn: () => Promise<void> | void): Promise<void> {
 async function main(): Promise<void> {
   await step('冷启动到首页', async () => {
     adb(['shell', `am force-stop ${PKG}`]);
-    adb(['shell', `am start -W -n ${PKG}/.MainActivity`]);
+    adb(['shell', `am start -W -n ${PKG}/cool.cnb.dshpalm.MainActivity`]);
     const home = await waitFor('需要我做点什么？', 40);
     assert.ok(home, '首页问候没出现（bundle/引擎没起？）');
   });
@@ -131,6 +131,8 @@ async function main(): Promise<void> {
     assert.ok(tryTap('全文'), '点不到全文搜索');
     assert.ok(await waitFor('搜索会话', 10), '搜索页没出现');
     typeText('python');
+    // 中文输入法会把 input text 留在候选栏，补一个空格提交，再等正文搜索
+    keyevent('SPACE');
     assert.ok(await waitFor('处匹配', 15), '正文搜索没有结果');
     screenshot('ui-regression-search');
     hideKeyboard();

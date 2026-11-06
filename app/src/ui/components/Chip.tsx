@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { radius, semantic, typography } from '../theme';
+import { radius, typography, useTheme, useThemedStyles, type Theme } from '../theme';
 
 export interface ChipProps {
   label: string;
@@ -24,8 +24,10 @@ export function Chip({
   onPress,
   style,
 }: ChipProps): React.ReactElement {
-  const fg = color ?? (active ? semantic.accent : semantic.textSecondary);
-  const background = bg ?? (active ? semantic.accentSoft : semantic.card);
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const fg = color ?? (active ? palette.blue : palette.textDim);
+  const background = bg ?? (active ? palette.blueSoft : palette.glass);
   const body = (
     <View style={[styles.chip, size === 'md' && styles.chipMd, { backgroundColor: background }, style]}>
       <Text style={[styles.text, size === 'md' && styles.textMd, { color: fg }]}>{label}</Text>
@@ -44,17 +46,18 @@ export function Chip({
   );
 }
 
-const styles = StyleSheet.create({
-  chip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-    alignSelf: 'flex-start',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: semantic.border,
-  },
-  chipMd: { paddingHorizontal: 12, paddingVertical: 5 },
-  text: { fontSize: typography.meta.fontSize, fontWeight: '600', letterSpacing: 0.2 },
-  textMd: { fontSize: typography.caption.fontSize },
-  pressed: { opacity: 0.75 },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    chip: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.pill,
+      alignSelf: 'flex-start',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
+    chipMd: { paddingHorizontal: 12, paddingVertical: 5 },
+    text: { fontSize: typography.meta.fontSize, fontWeight: '600', letterSpacing: 0.2 },
+    textMd: { fontSize: typography.caption.fontSize },
+    pressed: { opacity: 0.75 },
+  });

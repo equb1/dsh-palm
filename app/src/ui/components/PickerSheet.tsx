@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radius, space } from '../theme';
+import { radius, space, useThemedStyles, type Theme } from '../theme';
 
 export interface PickerOption {
   id: string;
@@ -27,6 +27,7 @@ export function PickerSheet({
   onSelect,
   onClose,
 }: PickerSheetProps): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -63,29 +64,30 @@ export function PickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,17,21,0.28)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.xxl,
-    gap: 4,
-  },
-  title: { color: colors.textFaint, fontSize: 12, lineHeight: 18, marginBottom: 4 },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: radius.sm,
-  },
-  itemActive: { backgroundColor: colors.blueSoft },
-  glyph: { color: colors.textDim, fontSize: 13, width: 18 },
-  label: { flex: 1, color: colors.text, fontSize: 14, lineHeight: 22 },
-  labelActive: { color: colors.blue, fontWeight: '600' },
-  check: { color: colors.blue, fontSize: 14, fontWeight: '700' },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    backdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: 'flex-end' },
+    sheet: {
+      backgroundColor: c.bg,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      paddingHorizontal: space.lg,
+      paddingTop: space.md,
+      paddingBottom: space.xxl,
+      gap: 4,
+    },
+    title: { color: c.textFaint, fontSize: 12, lineHeight: 18, marginBottom: 4 },
+    item: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 8,
+      borderRadius: radius.sm,
+    },
+    itemActive: { backgroundColor: c.blueSoft },
+    glyph: { color: c.textDim, fontSize: 13, width: 18 },
+    label: { flex: 1, color: c.text, fontSize: 14, lineHeight: 22 },
+    labelActive: { color: c.blue, fontWeight: '600' },
+    check: { color: c.blue, fontSize: 14, fontWeight: '700' },
+  });

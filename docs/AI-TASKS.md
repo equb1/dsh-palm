@@ -17,7 +17,8 @@
 - 已完成的重活：工作区/设备密钥/`.dsh` 外置；通知、冷启动分享、`dshpalm://` 深链；
   会话改名/置顶/归档；日志导出；错误人话化；图片压缩；桥走 APK 补丁。
 - UI token 已对齐官方 DSH 默认浅色（2026-11-04）：`#FFFFFF` 基底、`#F9FAFB` 侧栏、
-  deepseek 蓝 `#4176E6`、8/12/16/20/28 圆角；深色 alias 后续按系统开关接。
+  deepseek 蓝 `#4176E6`、8/12/16/20/28 圆角。深色 alias 已接（2026-11-06）：
+  `theme/palette.ts` + `ThemeProvider`，支持跟随系统/浅色/深色，存 UI cache。
 - 输入区按 dsh-go 几何（2026-11-04）：单行 56 / 28 圆角、40 圆键；权限与锦囊在输入框上方，
   模型回顶栏，`+` 走附件面板；B3 前先把 Chat 的回合/思考/工具渲染拆到 `ui/chat/*`。
 - 流式主链路已修（2026-11-04）：canonical run/block id、chunk 缓冲、稳定块 memo、FlatList 和 follow
@@ -224,12 +225,13 @@
   - 文件夹是 UI 层标签，不改宿主/工作区；协议没有 folder 字段。
   - 2026-11-06 验收：筛选/全部功能/正文搜索/置顶/自定义文件夹全部通过
     （`ACCEPTANCE-2026-11-06`）；完整引擎正文搜索与多工作区仍属后续项。
-- [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
+- [x] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
   - 2026-11-06 前置：外观组加了「完成后收起过程」开关（`collapseProcess`，默认开，
     持久化在 UI cache）；关掉后完成的回合默认展开思考/工具过程，收起/展开仍可手动点。
     真机：关 → 打开已完成会话，摘要箭头朝上、过程展开；改回开（`146`、`147` 截图）。
-  - 主题仍是浅色固定；深色主题未做，改造方案见 [DARK-THEME](DARK-THEME.md)（需要把各页
-    StyleSheet 改成 `createStyles(theme)` + `useThemedStyles`，不是单点开关）。
+  - 深色主题已落地（2026-11-06）：`theme/palette.ts` + `theme/context.tsx`；所有页面改成
+    `createStyles(theme)` + `useThemedStyles`，Markdown 走 `MarkdownStylesContext`；设置 →
+    外观 → 主题可选跟随系统/浅色/深色（`themeMode` 存 UI cache）。
   - 2026-11-06 动效 token：新增 `ui/components/ScreenFade.tsx`，页面切换按 `motion.duration.base`
     + `motion.easing.standard` 淡入（App 的 screen 统一包一层）；设置行按压用
     `motion.duration.fast` 缩到 0.98 回弹（`SettingsTile`）。真机 10 步回归全绿，页面切换无布局跳动。
@@ -237,8 +239,10 @@
     对话字号」点按循环 标准/大/特大；`MarkdownView` 按倍率重建模块样式（fontSize/lineHeight），
     `TurnView` 用户气泡同步缩放；真机同一会话标准 vs 特大对比（`166-font-standard.png`、
     `167-font-large.png`、`168-settings-font.png`）。
-  - 2026-11-06 验收：字号档 + 页面/设置行动效 ✅；深色主题 ❌（唯一剩余项，方案见
-    [DARK-THEME](DARK-THEME.md)）。
+  - 2026-11-06 验收：字号档 + 页面/设置行动效 ✅；深色主题已实现，Web 浅色/深色截图覆盖
+    设置、主题页、聊天、审批卡、文件页与系统跟随（见 [DARK-THEME](DARK-THEME.md)）。
+    真机用并行测试包（`cool.cnb.dshpalm.test`，不动 release 数据）深色 `device:regression`
+    10/10 通过（2026-11-06，含引擎启停/文件/全文搜索）；测试包仍在设备上，release 未动。
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
   - 2026-11-06 第一步：轻宿主加 `fs.list`（列 `/workspace` 目录，返回 name/kind/size/mtime，
     子项 500 条上限、单子项 stat 失败不拖垮整页）；新增 `ui/FilesScreen.tsx` 文件浏览器
@@ -274,7 +278,7 @@
 
 #### 可并行 UI 项（2026-11-03，给 agent）
 
-> 历史规划。U1/U4/U5/U6/U9 已完成，U7/U8 部分完成；当前状态以上方任务清单和
+> 历史规划。U1/U4/U5/U6/U7/U9 已完成，U8 部分完成；当前状态以上方任务清单和
 > `ACCEPTANCE-2026-11-06` 为准，下表的「现在不要做」不再适用。
 
 **背景**：1.2/1.3/1.4 会改 `App.tsx`、`store.ts`、`SettingsScreen.tsx`、
