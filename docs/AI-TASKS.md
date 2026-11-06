@@ -241,10 +241,8 @@
     `167-font-large.png`、`168-settings-font.png`）。
   - 2026-11-06 验收：字号档 + 页面/设置行动效 ✅；深色主题已实现，Web 浅色/深色截图覆盖
     设置、主题页、聊天、审批卡、文件页与系统跟随（见 [DARK-THEME](DARK-THEME.md)）。
-    真机用并行测试包（`cool.cnb.dshpalm.test`，不动 release 数据）验到主题页/设置/首页/聊天
-    深色通过；`device:regression` 9/10，搜索步骤是 IME 候选未提交（已修脚本），后续为
-    uiautomator flake。设备暂停使用，待恢复后补 10/10 和浅色轮次。
-    测试包仍在设备上，release 包未动；恢复 adb 后可 `adb uninstall cool.cnb.dshpalm.test` 清理。
+    真机用并行测试包（`cool.cnb.dshpalm.test`，不动 release 数据）深色 `device:regression`
+    10/10 通过（2026-11-06，含引擎启停/文件/全文搜索）；测试包仍在设备上，release 未动。
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
   - 2026-11-06 第一步：轻宿主加 `fs.list`（列 `/workspace` 目录，返回 name/kind/size/mtime，
     子项 500 条上限、单子项 stat 失败不拖垮整页）；新增 `ui/FilesScreen.tsx` 文件浏览器
