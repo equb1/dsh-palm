@@ -6,12 +6,19 @@ import { describe, it } from 'node:test';
 
 import {
   buildHandoff,
+  buildReplayFromHistory,
+  buildReplayFromTurns,
   buildReverseSeedText,
   buildSeedText,
   detailHasSeedMarker,
+  HANDOFF_VERSION,
+  handoffIdFromSeed,
   logicalIdFor,
   mergeDetail,
+  parseHandoffReplay,
   physicalIdFor,
+  replayToHistory,
+  replayToTurns,
   seedMarkerFor,
   stripEngineNoticeTurns,
   truncateTurns,
@@ -233,6 +240,55 @@ describe('Handoff · 纯函数', () => {
     assert.equal(detailHasSeedMarker(full, marker), true);
   });
 
+  it('mergeDetail：反向交接已重建轻引擎回合时，不再追加完整侧（避免重复）', () => {
+    const marker = '[dsh-handoff:h_test]';
+    const light = baseDetail(CONVERSATION, [
+      {
+        id: 'u1',
+        role: 'user',
+        createdAt: 1,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b1', text: '完整侧旧问题' }],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: 2,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b2', text: '重建的完整侧回答' }],
+      },
+      {
+        id: 'seed',
+        role: 'user',
+        createdAt: 3,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b3', text: `${marker}\n继续` }],
+      },
+    ]);
+    const full = baseDetail('s_full_1', [
+      {
+        id: 'fu1',
+        role: 'user',
+        createdAt: 1,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'fb1', text: '完整侧旧问题' }],
+      },
+      {
+        id: 'fa1',
+        role: 'assistant',
+        createdAt: 2,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'fb2', text: '重建的完整侧回答' }],
+      },
+    ]);
+    const reverseLink: ConversationLink = { ...link(), handoffDirection: 'full_to_light' };
+    const merged = mergeDetail(reverseLink, light, full);
+    assert.ok(merged);
+    assert.deepEqual(merged?.turns.map((turn) => turn.id), ['u1', 'a1']);
+    assert.equal(JSON.stringify(merged?.turns).match(/重建的完整侧回答/g)?.length, 1);
+    assert.equal(JSON.stringify(merged?.turns).includes(marker), false);
+  });
+
   it('mergeDetail：过滤完整引擎的 approval policy 提示，不误删真实用户消息', () => {
     const light = baseDetail(CONVERSATION, [
       {
@@ -356,6 +412,217 @@ describe('Handoff · 纯函数', () => {
     assert.equal(handoff.completedSteps[0]?.name, 'read_file');
     assert.match(buildReverseSeedText(handoff), /回到手机轻引擎/);
     assert.equal(buildReverseSeedText(handoff).includes(handoff.seedMarker), true);
+  });
+
+  it('结构化回放：thinking/tool 参数与结果按序生成，可解析往返', () => {
+    const history: HandoffHistoryMessage[] = [
+      { role: 'user', content: '整理报告' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'call_read',
+            type: 'function',
+            function: { name: 'read_file', arguments: '{"path":"uploads/report.docx"}' },
+          },
+          {
+            id: 'call_write',
+            type: 'function',
+            function: { name: 'write_file', arguments: '{"path":"uploads/out.docx"}' },
+          },
+        ],
+      },
+      { role: 'tool', tool_call_id: 'call_read', name: 'read_file', content: '读取成功' },
+      { role: 'tool', tool_call_id: 'call_write', name: 'write_file', content: '[错误] 磁盘已满' },
+      { role: 'assistant', content: '处理完成' },
+    ];
+    const turns: Turn[] = [
+      {
+        id: 'u1',
+        role: 'user',
+        createdAt: 1,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'ub1', text: '整理报告' }],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: 2,
+        status: 'done',
+        blocks: [
+          { kind: 'text', id: 'ab1', text: '我先读文件' },
+          { kind: 'thinking', id: 'ab2', text: '需要先确认格式', done: true },
+          {
+            kind: 'tool',
+            id: 'ab3',
+            callId: 'call_read',
+            name: 'read_file',
+            summary: '读取 uploads/report.docx',
+            state: 'done',
+            detail: '读取成功',
+          },
+          {
+            kind: 'tool',
+            id: 'ab4',
+            callId: 'call_write',
+            name: 'write_file',
+            summary: '写入 uploads/out.docx',
+            state: 'error',
+            detail: '[错误] 磁盘已满',
+          },
+        ],
+      },
+      {
+        id: 'a2',
+        role: 'assistant',
+        createdAt: 3,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'ab5', text: '处理完成' }],
+      },
+    ];
+
+    const replay = buildReplayFromTurns(turns, history);
+    assert.equal(replay.source, 'light-turns');
+    assert.deepEqual(replay.stats, { turns: 3, blocks: 6, tools: 2, truncated: false });
+    assert.deepEqual(
+      replay.turns[1]?.blocks.map((block) => block.kind),
+      ['text', 'thinking', 'tool', 'tool'],
+    );
+    const firstTool = replay.turns[1]?.blocks[2];
+    assert.equal(firstTool?.kind === 'tool' ? firstTool.arguments : '', '{"path":"uploads/report.docx"}');
+    const parsed = parseHandoffReplay(replay);
+    assert.ok(parsed);
+    assert.deepEqual(parsed, replay);
+
+    const rebuilt = replayToTurns(parsed);
+    assert.deepEqual(rebuilt.map((turn) => turn.role), ['user', 'assistant', 'assistant']);
+    const tools = rebuilt.flatMap((turn) =>
+      turn.blocks.filter((block) => block.kind === 'tool'),
+    );
+    assert.deepEqual(
+      tools.map((block) => (block.kind === 'tool' ? `${block.callId}:${block.state}` : '')),
+      ['call_read:done', 'call_write:error'],
+    );
+
+    const rebuiltHistory = replayToHistory(parsed);
+    assert.deepEqual(
+      rebuiltHistory.map((message) => message.role),
+      ['user', 'assistant', 'tool', 'tool', 'assistant'],
+    );
+    assert.deepEqual(
+      rebuiltHistory.filter((message) => message.role === 'tool').map((message) => message.tool_call_id),
+      ['call_read', 'call_write'],
+    );
+    assert.deepEqual(
+      rebuiltHistory[1]?.tool_calls?.map((call) => call.function.name),
+      ['read_file', 'write_file'],
+    );
+  });
+
+  it('只有 history 时重建回放：工具结果按 callId 回填，参数不丢', () => {
+    const replay = buildReplayFromHistory(historyWithTools());
+    assert.equal(replay.source, 'history');
+    assert.deepEqual(
+      replay.turns.map((turn) => turn.role),
+      ['user', 'assistant', 'assistant', 'user'],
+    );
+    const tool = replay.turns[1]?.blocks[0];
+    assert.equal(tool?.kind, 'tool');
+    if (tool?.kind === 'tool') {
+      assert.equal(tool.callId, 'call_read');
+      assert.equal(tool.state, 'done');
+      assert.equal(tool.arguments, '{"path":"uploads/report.docx"}');
+      assert.match(tool.detail ?? '', /report\.docx/);
+    }
+    const rebuilt = replayToHistory(replay);
+    assert.deepEqual(
+      rebuilt.filter((message) => message.role === 'tool').map((message) => message.tool_call_id),
+      ['call_read'],
+    );
+  });
+
+  it('v1 兼容：不生成 replay，seed 不含结构化回放；解析为空时安全降级', () => {
+    const handoff = buildHandoff({
+      conversationId: CONVERSATION,
+      reason: 'capability_missing',
+      presetId: 'light',
+      history: historyWithTools(),
+      userText: '再导出成 docx',
+      version: 1,
+      now: 1,
+    });
+    assert.equal(handoff.version, 1);
+    assert.equal(handoff.replay, undefined);
+    assert.equal(buildSeedText(handoff).includes('结构化回放'), false);
+    assert.equal(parseHandoffReplay(handoff.replay), null);
+    assert.deepEqual(replayToHistory(handoff.replay), []);
+    assert.deepEqual(replayToTurns(handoff.replay), []);
+  });
+
+  it('v2 默认带结构化回放；seed 明说完整引擎只做文本降级', () => {
+    const turns: Turn[] = [
+      {
+        id: 'u1',
+        role: 'user',
+        createdAt: 1,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'ub', text: '整理报告' }],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: 2,
+        status: 'done',
+        blocks: [
+          { kind: 'thinking', id: 'th', text: '先读文件', done: true },
+          {
+            kind: 'tool',
+            id: 'tb',
+            callId: 'call_read',
+            name: 'read_file',
+            summary: '读取 report.docx',
+            state: 'done',
+            detail: '正文',
+          },
+          { kind: 'image', id: 'img', ref: 'uploads/shot.png', mime: 'image/png' },
+        ],
+      },
+    ];
+    const handoff = buildHandoff({
+      conversationId: CONVERSATION,
+      reason: 'pre_route',
+      presetId: 'light',
+      history: historyWithTools(),
+      turns,
+      userText: '继续',
+      now: 1,
+    });
+    assert.equal(handoff.version, HANDOFF_VERSION);
+    assert.ok(handoff.replay);
+    const seed = buildSeedText(handoff);
+    assert.match(seed, /## 结构化回放/);
+    assert.match(seed, /THINKING: 先读文件/);
+    assert.match(seed, /TOOL read_file #call_read \[done\]/);
+    assert.match(seed, /完整引擎不支持原生事件导入/);
+    assert.match(handoff.replay?.unsupported.join(',') ?? '', /block:image/);
+    assert.match(seed, /未回放：block:image/);
+    const reverse = buildReverseSeedText(handoff);
+    assert.match(reverse, /轻引擎会按结构化 turn\/block\/tool 重建上下文/);
+    assert.equal(reverse.includes('完整引擎不支持原生事件导入'), false);
+  });
+
+  it('handoffIdFromSeed：旧客户端只传 text 也能拿到幂等 id', () => {
+    const handoff = buildHandoff({
+      conversationId: CONVERSATION,
+      reason: 'pre_route',
+      presetId: 'light',
+      history: [{ role: 'user', content: 'hi' }],
+      now: 1,
+    });
+    const seed = buildSeedText(handoff);
+    assert.equal(handoffIdFromSeed(seed), handoff.handoffId);
+    assert.equal(handoffIdFromSeed('没有 marker'), undefined);
   });
 
   it('logical / physical 映射：两个物理 id 都归到一条逻辑会话', () => {

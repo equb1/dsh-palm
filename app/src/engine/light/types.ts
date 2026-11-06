@@ -139,6 +139,10 @@ export interface StoredSession {
   model?: ModelChoice;
   turns: Turn[];
   history: ChatMessage[];
+  /** M2.2：反向交接的确定性 id，用于 sessions.import 幂等 */
+  handoffId?: string;
+  /** 交接 seed 的 marker，便于诊断/兼容旧客户端 */
+  handoffSeedMarker?: string;
   /** E2：运行中收到的下一条消息，等当前 run 结束自动开始 */
   queued?: string[];
 }
