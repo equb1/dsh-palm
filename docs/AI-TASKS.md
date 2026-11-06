@@ -606,7 +606,7 @@ type AttachmentChipsProps = {
     装 release 再还原」走不通。首装/升级仍等用户确认后执行（路径 A 干净首装 / 路径 B 同签名升级）。
   - 2026-11-06 夜间：versionCode bump 到 `2` / versionName `0.2.0`，重新 `assembleRelease`
     （包含完整引擎平权、深色主题、M2.1–M2.4、LAN 发现、系统入口）；APK 244.2MiB、
-    sha256 `B847E348…`，设备已同签名 `install -r` 升级成功（数据保留）。
+    sha256 `3D34E091…`，设备已同签名 `install -r` 升级成功（数据保留）。
 
 
 ## 4. 待决事项
