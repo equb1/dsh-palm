@@ -422,6 +422,12 @@ function requireSession(id: string): SessionState {
 const handlers: { [M in Method]: Handler<M> } = {
   'capabilities.get': () => capabilities(),
 
+  'web.session': () => {
+    throw Object.assign(new Error('mock 引擎没有官方 Web 前端；请用本机完整引擎'), {
+      code: 'unsupported' satisfies ProtocolError['code'],
+    });
+  },
+
   'sessions.list': ({ limit }) => {
     const list = [...sessions.values()]
       .map((s) => s.summary)

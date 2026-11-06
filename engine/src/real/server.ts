@@ -30,6 +30,11 @@ import { DshRealClient, type RealSessionListItem } from './dshClient';
 import { projectRecords, type RealRecord } from './project';
 import { promptWithProotFiles } from './promptParts';
 import { canonicalRunId, canonicalTurnId, liveBlockId, mergeLiveTurn } from '../../../app/src/protocol/turns';
+import {
+  buildWebFrontendEndpoint,
+  isLoopbackAddress,
+  WebFrontendError,
+} from '../../../app/src/lib/webFrontend';
 import { DeviceStore } from './devices';
 
 export interface RealBridgeOptions {
@@ -847,7 +852,11 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     }
   }
 
-  type Handler<M extends Method> = (params: RequestParams[M]) => Promise<unknown>;
+  type HandlerContext = {
+    /** 这次请求是不是从本机 loopback 发来的 */
+    localClient: boolean;
+  };
+  type Handler<M extends Method> = (params: RequestParams[M], ctx: HandlerContext) => Promise<unknown>;
   const unsupported = (name: string): never => {
     throw Object.assign(new Error(`${name} 在真引擎桥上还没实现`), {
       code: 'unsupported' satisfies ProtocolError['code'],
@@ -917,6 +926,22 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
   const handlers: { [M in Method]: Handler<M> } = {
     'capabilities.get': async () => capabilities(),
+
+    /**
+     * 官方 Web 前端的入口 + token（M2.1）。
+     * 只有「连桥的客户端在本机 loopback」且「上游 dsh 也在 loopback」才下发；
+     * 远程配对进来的客户端拿不到 token，明确 unsupported。
+     */
+    'web.session': async (_params, ctx) => {
+      if (!ctx.localClient) {
+        throw new WebFrontendError(
+          'unsupported',
+          '官方 Web 入口只在本机提供：远程连接不接收 Web token',
+          '请在手机 App（本机完整引擎）里打开实验室；远程宿主请直接在电脑浏览器访问。',
+        );
+      }
+      return buildWebFrontendEndpoint(options.baseUrl, options.token);
+    },
 
     'sessions.list': async () => {
       const { items } = await client.listSessions();
@@ -1595,8 +1620,8 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         return;
       }
 
-      const handler = handlers[method] as (p: unknown) => Promise<unknown>;
-      handler(msg.params ?? {})
+      const handler = handlers[method] as (p: unknown, ctx: HandlerContext) => Promise<unknown>;
+      handler(msg.params ?? {}, { localClient: isLoopbackAddress(req.socket.remoteAddress) })
         .then((result) => send({ type: 'res', v: PROTOCOL_VERSION, id, ok: true, result }))
         .catch((err: { code?: ProtocolError['code']; message?: string; hint?: string }) =>
           send({

@@ -40,6 +40,7 @@ import {
   type PrewarmTier,
 } from './engineManager';
 import { routeNeedsFullPermission, routeTurn, type RouteTurnResult } from './router';
+import type { WebFrontendTarget } from '../lib/webFrontend';
 import { LocalEngineClient } from '../engine/light/localClient';
 import type { LightHost } from '../engine/light/host';
 import { applyProviderSave, withFreshAccountToken } from '../engine/light/config';
@@ -487,6 +488,8 @@ export class Store {
 
   /* ------------------------ EngineManager 内部状态 ------------------------ */
   private engineStarted = false;
+  /** 冷启动初始化只跑一次；深链要等它结束再切引擎，避免和 BOOT 抢链路 */
+  private engineStartInFlight: Promise<void> | null = null;
   /** 每次冷启动最多自动弹一次配置页，避免用户切到完整模式后还被反复打断 */
   private lightSetupPrompted = false;
   /** 同一时刻只跑一次 warm；切换/智能预热都走它 */
@@ -1277,6 +1280,82 @@ export class Store {
       if (!ok) return;
     }
     await this.openSession(id);
+  }
+
+  /**
+   * M2.1：官方 Web 前端的本机入口。
+   *
+   * 先确定要定位的完整会话（轻引擎会话无法映射到官方前端，返回首页 + 说明），
+   * 再确保完整引擎在线，最后让桥下发 URL/token。token 不写日志、不落 UI cache。
+   */
+  async getWebFrontendTarget(options: { sessionId?: string | null } = {}): Promise<WebFrontendTarget> {
+    // 冷启动直接进实验室：等缓存里的 currentId / links 恢复后再定位会话
+    if (this.engineStartInFlight) await this.engineStartInFlight;
+    else if (!this.engineStarted) await this.engineStart();
+    // 显式传 null = 打开官方前端首页；不传才回落到当前会话
+    const requested = 'sessionId' in options ? options.sessionId : this.state.currentId;
+    const target = this.webSessionTargetFor(requested);
+    if (this.state.engineKind !== 'remote') {
+      const ok = await this.switchEngine('full');
+      if (!ok) {
+        throw new Error(this.state.error ?? '完整引擎没起来，打不开官方 Web 界面');
+      }
+    }
+    const endpoint = await this.requestFull('web.session', {});
+    return {
+      ...endpoint,
+      ...(target.id ? { sessionId: target.id } : {}),
+      ...(target.note ? { note: target.note } : {}),
+    };
+  }
+
+  /** 逻辑会话 → 官方 Web 能定位到的完整物理会话；轻引擎侧只给降级说明 */
+  private webSessionTargetFor(logicalId: string | null | undefined): { id?: string; note?: string } {
+    if (!logicalId) return {};
+    const link = this.linkForSession(logicalId);
+    if (link) {
+      if (link.activeSide === 'full' && link.fullSessionId) return { id: link.fullSessionId };
+      return { note: '当前是轻引擎会话，官方 Web 前端只能打开完整引擎页面；已打开首页。' };
+    }
+    if (this.state.engineKind === 'remote') return { id: logicalId };
+    return { note: '当前会话不在完整引擎，已打开官方 Web 前端首页。' };
+  }
+
+  /**
+   * M2.1：WebView 里点会话 / dshpalm://session 深链回到 RN。
+   * 成功才切主界面；失败留在 WebView（或原页面）并返回可读错误。
+   */
+  async openSessionFromWebView(
+    sessionId: string,
+    engine: 'full' | 'light' = 'full',
+  ): Promise<{ ok: boolean; error?: string }> {
+    const id = sessionId.trim();
+    if (!id) return { ok: false, error: 'WebView 没给出会话 id' };
+
+    // 冷启动直接点深链：先等本地缓存/默认引擎就绪，再切目标引擎
+    if (this.engineStartInFlight) await this.engineStartInFlight;
+    else if (!this.engineStarted) await this.engineStart();
+
+    const target: EngineTarget = engine === 'light' ? 'light' : 'full';
+    if (target === 'full' ? this.state.engineKind !== 'remote' : this.state.engineKind !== 'light') {
+      const ok = await this.switchEngine(target);
+      if (!ok) {
+        const error =
+          target === 'full'
+            ? '这个 WebView 会话属于完整引擎，但完整引擎没起来；没有切回来。'
+            : '这个会话属于轻引擎，但轻引擎没连上；没有切回来。';
+        this.setError(error);
+        return { ok: false, error };
+      }
+    }
+
+    const logicalId = this.logicalIdOf(id) ?? id;
+    await this.openSession(logicalId);
+    if (this.state.error) return { ok: false, error: this.state.error };
+
+    // openSession 只改 detail/currentId；这里成功后才把用户从设置/WebView 带回会话页
+    this.patch({ view: 'main', connectModalOpen: false, error: null });
+    return { ok: true };
   }
 
   /** M2.6：完整会话 → 轻引擎继续（摘要 + 最近 8 轮 + 工具结果，原完整会话之后只读） */
@@ -2663,9 +2742,18 @@ export class Store {
    * 才 `warmLocalHost()` 把 proot 拉起来（只预热、不连接）。
    * BOOT 事件本身只发 connect-light —— 回归锁在 engineManager 里。
    */
-  async engineStart(): Promise<void> {
-    if (this.engineStarted) return;
+  engineStart(): Promise<void> {
+    if (this.engineStartInFlight) return this.engineStartInFlight;
+    if (this.engineStarted) return Promise.resolve();
     this.engineStarted = true;
+    const run = this.engineStartInner().finally(() => {
+      if (this.engineStartInFlight === run) this.engineStartInFlight = null;
+    });
+    this.engineStartInFlight = run;
+    return run;
+  }
+
+  private async engineStartInner(): Promise<void> {
     await this.hydrateLocalCache();
     void ensureNotificationPermission();
     // 没有轻引擎配置、且用户上次选了「先用完整模式」：直接起完整引擎，不再弹配置页

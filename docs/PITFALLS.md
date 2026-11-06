@@ -224,8 +224,9 @@
 
 - 现象：实验室能打开官方前端，但和 RN 会话互不相通。
 - 原因：token 从日志捞，导航没打通。
-- 处理：M2 做（宿主暴露 web 地址/token + 双向跳转）。
-- 状态：未完成。
+- 处理：M2.1 已实现 `web.session`（仅 loopback 下发 URL/token）+ WebView localStorage 会话观察器 +
+  `dshpalm://session` 深链；后台/卸载停轮询，token 失效可重新取地址。
+- 状态：代码/单测/Web 构建完成（2026-11-06），真机待回归。
 
 ### E5. 无线 adb 容易断
 

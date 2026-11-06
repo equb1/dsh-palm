@@ -59,6 +59,7 @@ RN App（UI，只认协议）
 - 附件：`attachments.upload`
 - 工作区：`workspaces.list/create`
 - 引擎状态：`engine.status`
+- WebView（M2.1）：`web.session`（仅本机 loopback 客户端 + loopback 上游下发官方前端 URL/token）
 
 ### 2.3 事件
 
@@ -537,7 +538,7 @@ cd app/android && sh gradlew :app:assembleDebug
 
 | 层 | 跑法 | 状态 |
 |---|---|---|
-| L0 | WebView 官方前端 | 实验室可用，会话联动未做 |
+| L0 | WebView 官方前端 | 实验室可用；双向会话联动（M2.1，真机待回归） |
 | L1 | 轻引擎 + shim | 未做 |
 | L2 | 无独立运行时（按 L3） | 结论已定 |
 | L3 | proot | 可用 |
