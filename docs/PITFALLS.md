@@ -685,6 +685,17 @@
 - 验证：深色测试包跑到 9/10，剩余失败为 IME 候选和上述 flake；设备恢复后复跑。
 
 
+
+### I15. 轻引擎图片视觉不要把 base64 落进会话（2026-11-06）
+
+- 现象：如果直接把图片 data URL 写进 `history`，会话 JSON 会膨胀到几十 MB，重启/搜索/交接都变慢。
+- 原因：`ChatMessage.content` 是持久化字段，而 OpenAI 的图片格式需要把 base64 放进请求体。
+- 处理：历史只存 `imageFiles: [{path,mime}]`；`Agent` 在每次请求前用 `SandboxFs.readFileBuffer`
+  读成 data URL，放在临时 `images` 字段；provider 再转成 `content` array，`imageFiles/images`
+  都不外发。非视觉模型或超过 8MB/4 张/合计 16MB 时只给路径，正文明确提示。
+- 验证：`test/light-engine.test.ts` 检查模型收到 image_url、会话 JSON 不含 `data:image`；
+  `test/provider.test.ts` 检查 content parts 形状；`test/vision.test.ts` 覆盖降级/上限。
+
 ### I16. 完整引擎文件接口直接读 /root/work（2026-11-06）
 
 - 现象：dsh 远程 API 没有 `fs.list/rename/delete`，完整引擎文件页一直显式 unsupported。

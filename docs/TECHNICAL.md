@@ -191,7 +191,11 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
 - 会话管理（E3）：轻宿主实现 `sessions.delete`（运行中拒绝）和 `sessions.search`（标题/历史/思考
   正文，返回片段与命中数）；`sessions.pin` 的状态进 `SessionSummary.pinned`，抽屉据此分「置顶」组；
   完整引擎对 delete/search 显式 unsupported。
+- 图片视觉（M2.4）：`engine/light/vision.ts` 按模型名启发式识别视觉能力；图片读成 data URL，
+  单张 8MB、合计 16MB、最多 4 张；非视觉/超限降级为路径并在正文提示。历史只落 `imageFiles`（路径+MIME），
+  请求前才读字节，provider 转成 OpenAI `content` array；不把 base64 写进会话 JSON。
 - 限制：单次读 10MB；软链 EPERM；chmod/utimes 只内存；bash 无 python/js/网络。
+  未知视觉模型可能被降级；远程图片 URL / PDF / OCR 未做。
 
 ### 5.2 模型调用
 

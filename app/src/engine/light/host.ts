@@ -41,6 +41,12 @@ import { withApprovalResolution } from '../../protocol/qa';
 import { SessionRepo, newRunId, newSessionId } from './sessionRepo';
 import { buildHandoff } from '../../lib/handoff';
 import { toolsForPermission } from './tools';
+import {
+  selectVisionFiles,
+  supportsVisionModel,
+  visionFileRef,
+  type VisionFileRef,
+} from './vision';
 import type {
   AskAnswer,
   AskQuestion,
@@ -367,12 +373,12 @@ export class LightHost {
             hint: '附件已由 App 收件到 /workspace/uploads，请用 files 传路径引用',
           });
         }
-        const body = this.textWithFiles(text, files);
-        if (!body) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
+        const input = this.buildUserInput(text, files, session);
+        if (!input.body) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
         if (this.runs.has(sessionId)) {
           // E2：同一会话同时只跑一个 run，后来的消息排队，当前 run 结束自动开始
-          this.appendUserMessage(session, body);
-          session.queued = [...(session.queued ?? []), body];
+          this.appendUserMessage(session, input.body, input.imageFiles);
+          session.queued = [...(session.queued ?? []), input.body];
           await this.save(session);
           return {
             accepted: true as const,
@@ -380,7 +386,7 @@ export class LightHost {
             queued: true,
           };
         }
-        this.appendUserMessage(session, body);
+        this.appendUserMessage(session, input.body, input.imageFiles);
         await this.save(session);
         const runId = this.startRun(session);
         return { accepted: true as const, runId };
@@ -404,9 +410,9 @@ export class LightHost {
             hint: '附件已由 App 收件到 /workspace/uploads，请用 files 传路径引用',
           });
         }
-        const body = this.textWithFiles(text, files);
-        if (!body) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
-        this.appendUserMessage(session, body);
+        const input = this.buildUserInput(text, files, session);
+        if (!input.body) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
+        this.appendUserMessage(session, input.body, input.imageFiles);
         await this.save(session);
         const run = this.runs.get(sessionId);
         if (run) {
@@ -1222,13 +1228,30 @@ export class LightHost {
     return { provider: this.providerId(), model: this.options.model.model };
   }
 
+  /** 当前会话实际用的模型是否声明视觉；未知模型按不支持处理 */
+  private visionEnabledFor(session: StoredSession): boolean {
+    const model = session.model?.model ?? this.options.model.model;
+    return this.options.model.supportsVision ?? supportsVisionModel(model);
+  }
+
   /**
-   * 附件只给路径：`/workspace/<relPath>`。
+   * 附件只给路径：`/workspace/<relPath>`；图片按视觉能力附加 data URL 引用。
    * 路径不合法（不在 uploads、带 `..`）统一转成 bad_request，绝不拼进工作区外。
    */
-  private textWithFiles(text: string, files?: FileRef[]): string {
+  private buildUserInput(
+    text: string,
+    files: FileRef[] | undefined,
+    session: StoredSession,
+  ): { body: string; imageFiles?: VisionFileRef[] } {
     try {
-      return promptWithFiles(text, files, WORKSPACE_MOUNT).trim();
+      const selection = selectVisionFiles(files, this.visionEnabledFor(session));
+      const visionPaths = new Set(selection.accepted.map((file) => file.relPath));
+      const body = promptWithFiles(text, files, WORKSPACE_MOUNT, {
+        ...(visionPaths.size > 0 ? { visionPaths } : {}),
+        ...(selection.note ? { visionNote: selection.note } : {}),
+      }).trim();
+      const imageFiles = selection.accepted.map(visionFileRef);
+      return { body, ...(imageFiles.length > 0 ? { imageFiles } : {}) };
     } catch (error) {
       if (error instanceof AttachmentPathError) {
         throw new EngineProtocolError({
@@ -1241,8 +1264,16 @@ export class LightHost {
     }
   }
 
-  private appendUserMessage(session: StoredSession, text: string): void {
-    session.history.push({ role: 'user', content: text });
+  private appendUserMessage(
+    session: StoredSession,
+    text: string,
+    imageFiles?: VisionFileRef[],
+  ): void {
+    session.history.push({
+      role: 'user',
+      content: text,
+      ...(imageFiles && imageFiles.length > 0 ? { imageFiles } : {}),
+    });
     const turn = userTurnFromText(text, this.now);
     session.turns.push(turn);
     if (session.title === '新会话' || session.title.length === 0) {

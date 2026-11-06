@@ -414,7 +414,15 @@ type AttachmentChipsProps = {
     L3 过滤与排序、空结果；`npm run verify` 245 pass / 0 fail。
   - Web 验收：深色/浅色插件页、搜索 `dsh-client-ui-chat`、L3 过滤、展开判定理由；
     当前矩阵 305 包（L0 64 / L1 131 / L2 66 / L3 43 / 无代码 1，按含依赖）。
-- [ ] **2.4 轻引擎附件引用**（图片视觉/路径消费；与 1.3 原生收件不重复）
+- [x] **2.4 轻引擎附件引用**（图片视觉/路径消费；与 1.3 原生收件不重复）
+  - 2026-11-06：新增 `engine/light/vision.ts`：按模型名识别视觉能力（gpt-4o/Claude/Gemini/Qwen-VL…），
+    图片读成 data URL；单张 8MB、合计 16MB、最多 4 张，超限或非视觉模型降级为路径并在正文明确提示。
+    `ChatMessage` 只把 `imageFiles`（路径+MIME）落盘，请求前才读成 `images` data URL；
+    provider 把带图消息转成 OpenAI `content` array（text + image_url），内部字段不外发。
+  - 单测：`test/vision.test.ts` 5 条 + `test/provider.test.ts` content parts + `test/light-engine.test.ts`
+    视觉/非视觉/超限 3 条；`npm run verify` 249 pass / 0 fail。
+  - 限制：视觉模型靠模型名启发式识别，未知视觉模型暂时会降级；后续可加显式开关。
+    data URL 只支持本地图片，远程 URL 输入未做；PDF/OCR 仍按原计划暂缓。
 - [x] **2.5 轻引擎多提供商 + 账号模型目录**
   - [x] 轻引擎实现 `providers.list/save/discover`，设置页复用 ProvidersCard；
     2026-11-06：`providers.list` 回当前单渠道（`configured` 认 API Key 或账号 token）；

@@ -12,7 +12,7 @@ import { ShellRunner } from '../app/src/engine/shell/bash';
 import { LightHost } from '../app/src/engine/light/host';
 import { LocalEngineClient } from '../app/src/engine/light/localClient';
 import type { LightModelConfig, ToolCall } from '../app/src/engine/light/types';
-import type { EngineEvent } from '../app/src/protocol';
+import type { EngineEvent, FileRef } from '../app/src/protocol';
 import type { StreamHandlers, StreamOptions, StreamResult } from '../app/src/engine/light/provider';
 
 const roots: string[] = [];
@@ -88,30 +88,40 @@ interface Harness {
   dataRoot: string;
   client: LocalEngineClient;
   events: EngineEvent[];
+  stream: ReturnType<typeof fakeStream>;
 }
 
-async function makeHost(steps: FakeStep[], options: { hostName?: string; dataRoot?: string; workspaceRoot?: string } = {}): Promise<Harness> {
+async function makeHost(
+  steps: FakeStep[],
+  options: {
+    hostName?: string;
+    dataRoot?: string;
+    workspaceRoot?: string;
+    model?: LightModelConfig;
+  } = {},
+): Promise<Harness> {
   const workspaceRoot = options.workspaceRoot ?? (await tempDir());
   const dataRoot = options.dataRoot ?? (await tempDir());
   const mount = await createWorkspaceMount({ backend: new NodeBackend({ root: workspaceRoot }) });
   const dataFs = await createDataSandbox(new NodeBackend({ root: dataRoot }));
   const shell = new ShellRunner({ fs: mount.fs, beforeRun: () => mount.workspace.refreshIndex() });
+  const stream = fakeStream(steps);
   const host = new LightHost({
     workspace: mount.workspace,
     shell,
     dataFs,
-    model: MODEL,
+    model: options.model ?? MODEL,
     ...(options.hostName ? { hostName: options.hostName } : {}),
     maxSteps: 4,
     approvalTimeoutMs: 5_000,
     questionTimeoutMs: 5_000,
-    stream: fakeStream(steps).fn,
+    stream: stream.fn,
   });
   const events: EngineEvent[] = [];
   host.onEvent((event) => events.push(event));
   const client = new LocalEngineClient(host);
   await client.connect();
-  return { host, workspaceRoot, dataRoot, client, events };
+  return { host, workspaceRoot, dataRoot, client, events, stream };
 }
 
 function nextEvent(harness: Harness, name: string): Promise<EngineEvent> {
@@ -611,5 +621,103 @@ describe('LocalEngineClient', () => {
       (error: unknown) => (error as { code?: string }).code === 'bad_request',
     );
     await busy.client.request('sessions.stop', { sessionId: running });
+  });
+});
+
+describe('轻引擎 · 图片视觉（M2.4）', () => {
+  const PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+
+  async function seedImage(
+    harness: Harness,
+    name = 'tiny.png',
+    bytes = PNG,
+  ): Promise<FileRef> {
+    await mkdir(join(harness.workspaceRoot, 'uploads'), { recursive: true });
+    await writeFile(join(harness.workspaceRoot, 'uploads', name), bytes);
+    return {
+      path: `/data/user/0/cool.cnb.dshpalm/files/workspace/uploads/${name}`,
+      relPath: `uploads/${name}`,
+      name,
+      mime: 'image/png',
+      bytes: bytes.length,
+      hash: 'test-hash',
+    };
+  }
+
+  it('视觉模型：图片作为 image_url 发给模型，历史只存路径', async () => {
+    const harness = await makeHost([{ text: '看到了' }], {
+      model: { ...MODEL, model: 'gpt-4o' },
+    });
+    const sessionId = await createSession(harness);
+    const image = await seedImage(harness);
+    const finished = nextEvent(harness, 'run.finished');
+    await harness.client.request('sessions.send', {
+      sessionId,
+      text: '看看这张图',
+      files: [image],
+    });
+    await finished;
+
+    const user = harness.stream.calls[0]?.messages.find((message) => message.role === 'user');
+    assert.ok(user);
+    assert.equal(user.images?.length, 1);
+    assert.match(user.images?.[0] ?? '', /^data:image\/png;base64,/);
+
+    const { session } = await harness.client.request('sessions.get', { sessionId });
+    const userTurn = session.turns.find((turn) => turn.role === 'user');
+    assert.match(JSON.stringify(userTurn?.blocks), /视觉输入/);
+
+    const handoff = await harness.client.request('sessions.handoff', {
+      sessionId,
+      reason: 'test',
+    });
+    assert.equal(JSON.stringify(handoff).includes('data:image'), false);
+    const raw = await readFile(join(harness.dataRoot, 'sessions', `${sessionId}.json`), 'utf8');
+    assert.equal(raw.includes('data:image'), false);
+    assert.match(raw, /uploads\/tiny\.png/);
+  });
+
+  it('非视觉模型：不发 image_url，正文明确提示只保留路径', async () => {
+    const harness = await makeHost([{ text: '收到' }], {
+      model: { ...MODEL, model: 'deepseek-chat' },
+    });
+    const sessionId = await createSession(harness);
+    const image = await seedImage(harness);
+    const finished = nextEvent(harness, 'run.finished');
+    await harness.client.request('sessions.send', {
+      sessionId,
+      text: '看看这张图',
+      files: [image],
+    });
+    await finished;
+
+    const user = harness.stream.calls[0]?.messages.find((message) => message.role === 'user');
+    assert.ok(user);
+    assert.equal(user.images, undefined);
+    assert.match(String(user.content), /未解析/);
+    assert.match(String(user.content), /当前模型未声明视觉能力/);
+  });
+
+  it('超过视觉上限的图片降级为路径，不发送 image_url', async () => {
+    const harness = await makeHost([{ text: '收到' }], {
+      model: { ...MODEL, model: 'gpt-4o' },
+    });
+    const sessionId = await createSession(harness);
+    const image = await seedImage(harness, 'huge.png');
+    const finished = nextEvent(harness, 'run.finished');
+    await harness.client.request('sessions.send', {
+      sessionId,
+      text: '看看大图',
+      files: [{ ...image, bytes: 9 * 1024 * 1024 }],
+    });
+    await finished;
+
+    const user = harness.stream.calls[0]?.messages.find((message) => message.role === 'user');
+    assert.ok(user);
+    assert.equal(user.images, undefined);
+    assert.match(String(user.content), /视觉上限/);
   });
 });

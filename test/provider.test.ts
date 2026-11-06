@@ -235,6 +235,40 @@ describe('provider · OpenAI 兼容 SSE', () => {
     );
   });
 
+  it('带图片的消息转成 content parts，内部 imageFiles 不外发', async () => {
+    type SentBody = {
+      messages: Array<{ content: unknown; images?: unknown; imageFiles?: unknown }>;
+    };
+    let sent: SentBody | undefined;
+    const baseURL = await startServer((_req, res, body) => {
+      sent = JSON.parse(body) as SentBody;
+      writeChunked(res, [sse({ choices: [{ delta: { content: 'ok' } }] }), 'data: [DONE]\n\n']);
+    });
+
+    await streamChat(
+      { ...MODEL, baseURL },
+      {
+        messages: [
+          {
+            role: 'user',
+            content: '看看这张图',
+            images: ['data:image/png;base64,AAAA'],
+            imageFiles: [{ path: '/uploads/a.png', mime: 'image/png' }],
+          },
+        ],
+      },
+    );
+
+    const message = sent?.messages[0];
+    assert.ok(message);
+    assert.deepEqual(message.content, [
+      { type: 'text', text: '看看这张图' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+    ]);
+    assert.equal('images' in message, false);
+    assert.equal('imageFiles' in message, false);
+  });
+
   it('URL 拼接：带不带 /chat/completions 都对', () => {
     assert.equal(completionsUrl('https://api.deepseek.com/v1'), 'https://api.deepseek.com/v1/chat/completions');
     assert.equal(completionsUrl('https://api.deepseek.com/v1/'), 'https://api.deepseek.com/v1/chat/completions');

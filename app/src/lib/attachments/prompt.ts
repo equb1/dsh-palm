@@ -44,22 +44,40 @@ function joinRoot(root: string, relPath: string): string {
 
 /**
  * 每个附件一行：`- /root/work/uploads/x.md (text/markdown, 1.5 KB, 未解析)`。
- * 目前所有附件都只给路径，不把内容塞进上下文，所以统一标「未解析」。
+ * 图片被视觉模型消费时标「视觉输入」；其余附件仍只给路径，不塞内容。
  */
-export function buildFileLines(files: readonly FileRef[] | undefined, root: string): string[] {
+export interface FilePromptOptions {
+  /** 这些 relPath 会作为视觉输入发给模型 */
+  visionPaths?: ReadonlySet<string>;
+  /** 视觉降级/超限时追加的一句说明 */
+  visionNote?: string;
+}
+
+export function buildFileLines(
+  files: readonly FileRef[] | undefined,
+  root: string,
+  options: FilePromptOptions = {},
+): string[] {
   if (!files || files.length === 0) return [];
   return files.map((file) => {
     const relPath = assertSafeRelPath(file.relPath);
     const mime = file.mime?.trim() || 'application/octet-stream';
-    return `- ${joinRoot(root, relPath)} (${mime}, ${formatBytes(file.bytes)}, 未解析)`;
+    const state = options.visionPaths?.has(relPath) ? '视觉输入' : '未解析';
+    return `- ${joinRoot(root, relPath)} (${mime}, ${formatBytes(file.bytes)}, ${state})`;
   });
 }
 
 /** 把附件清单放在用户正文前面；没有正文时只发清单 */
-export function promptWithFiles(text: string, files: readonly FileRef[] | undefined, root: string): string {
+export function promptWithFiles(
+  text: string,
+  files: readonly FileRef[] | undefined,
+  root: string,
+  options: FilePromptOptions = {},
+): string {
   const body = text.trim();
-  const lines = buildFileLines(files, root);
+  const lines = buildFileLines(files, root, options);
   if (lines.length === 0) return body;
   const block = `[附件]\n${lines.join('\n')}`;
-  return body ? `${block}\n\n${body}` : block;
+  const note = options.visionNote ? `\n${options.visionNote}` : '';
+  return body ? `${block}${note}\n\n${body}` : `${block}${note}`;
 }
