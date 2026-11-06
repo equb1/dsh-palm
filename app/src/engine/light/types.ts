@@ -21,6 +21,8 @@ export interface LightModelConfig {
   providerName?: string;
   /** 模型是否会输出 reasoning_content（deepseek-reasoner / 部分开源模型） */
   reasoning?: boolean;
+  /** 是否支持图片视觉；不填按模型名自动判断（见 vision.ts） */
+  supportsVision?: boolean;
 }
 
 /** 生图返回格式：auto 不传 response_format，b64_json / url 显式要求 */
@@ -48,6 +50,10 @@ export interface ToolCall {
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
+  /** 本次请求要带的图片 data URL；只在运行时附加，不落盘 */
+  images?: string[];
+  /** 用户消息引用的工作区图片（轻量引用，落盘用） */
+  imageFiles?: Array<{ path: string; mime: string }>;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;

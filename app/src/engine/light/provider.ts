@@ -107,6 +107,19 @@ interface PartialToolCall {
   args: string;
 }
 
+/** ChatMessage 是内部历史形状；带图片时转成 OpenAI 的 content parts */
+function wireMessage(message: ChatMessage): Record<string, unknown> {
+  if (!message.images || message.images.length === 0) {
+    const { imageFiles: _imageFiles, ...rest } = message;
+    return rest;
+  }
+  const { images, imageFiles: _imageFiles, ...rest } = message;
+  const content: Array<Record<string, unknown>> = [];
+  if (message.content?.trim()) content.push({ type: 'text', text: message.content });
+  for (const url of images) content.push({ type: 'image_url', image_url: { url } });
+  return { ...rest, content };
+}
+
 export async function streamChat(
   config: LightModelConfig,
   options: StreamOptions,
@@ -117,7 +130,7 @@ export async function streamChat(
 
   const body: Record<string, unknown> = {
     model: config.model,
-    messages: options.messages,
+    messages: options.messages.map(wireMessage),
     stream: true,
   };
   if (options.tools && options.tools.length > 0) {

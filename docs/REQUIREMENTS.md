@@ -56,7 +56,8 @@
 | 文档生成与解析（PDF） | — | **暂缓**（C14） |
 | 文档格式转换/渲染（office→pdf/png） | proot / 电脑 | LibreOffice；**v1 暂缓**（C8） |
 | 生成图像 | 轻 TS | 调图像模型 API + 落盘 |
-| 图像理解/OCR | 原生 | ML Kit / Vision（后续） |
+| 图像理解（模型视觉） | 轻 TS | 图片按 data URL 发给视觉模型；无视觉能力只给路径 |
+| OCR | 原生 | ML Kit / Vision（后续） |
 | 录音/转写 | 原生 | sherpa-onnx（DSH 已有 sensevoice 包） |
 | 语音合成 | API/原生 | 看 provider |
 | 音视频转码/剪辑 | proot | ffmpeg |

@@ -23,6 +23,14 @@ import { newBlockId } from './sessionRepo';
 import { checkToolCapability } from './capability';
 import { closePendingToolCalls, sanitizeToolHistory } from './history';
 import { permissionNote, TOOL_CONTEXT_HELP, toolsForPermission, toDisplayPath, toSandboxPath } from './tools';
+import {
+  MAX_VISION_IMAGES,
+  MAX_VISION_IMAGE_BYTES,
+  MAX_VISION_TOTAL_BYTES,
+  normalizeVisionMime,
+  supportsVisionModel,
+  visionDataUrl,
+} from './vision';
 import { errorKindOf, errorStatusOf } from '../../lib/errors';
 import type {
   AgentTool,
@@ -83,6 +91,47 @@ interface TextBlock {
 const MAX_HISTORY_CHARS = 180_000;
 const MAX_STEPS = 8;
 
+/** 把历史里的 imageFiles 解析成 data URL；只读最近的消息，最多 4 张 */
+async function attachVisionImages(
+  history: StoredSession['history'],
+  workspace: SandboxFs,
+  supportsVision: boolean,
+  cache: Map<string, string>,
+): Promise<StoredSession['history']> {
+  if (!supportsVision) return history;
+  const out = history.map((message) => ({ ...message }));
+  let remaining = MAX_VISION_IMAGES;
+  let totalBytes = 0;
+  for (let i = out.length - 1; i >= 0 && remaining > 0; i -= 1) {
+    const message = out[i];
+    if (!message || message.role !== 'user' || !message.imageFiles?.length) continue;
+    const images: string[] = [];
+    for (const file of message.imageFiles) {
+      if (remaining <= 0) break;
+      const mime = normalizeVisionMime(file.mime);
+      if (!mime) continue;
+      const key = `${file.path}|${mime}`;
+      let data = cache.get(key);
+      if (!data) {
+        try {
+          const bytes = await workspace.readFileBuffer(file.path);
+          if (bytes.length > MAX_VISION_IMAGE_BYTES) continue;
+          if (totalBytes + bytes.length > MAX_VISION_TOTAL_BYTES) continue;
+          totalBytes += bytes.length;
+          data = visionDataUrl(bytes, mime);
+          cache.set(key, data);
+        } catch {
+          continue;
+        }
+      }
+      images.push(data);
+      remaining -= 1;
+    }
+    if (images.length > 0) out[i] = { ...message, images };
+  }
+  return out;
+}
+
 function cloneTurn(turn: Turn): Turn {
   return { ...turn, blocks: turn.blocks.map((block) => ({ ...block })) };
 }
@@ -140,13 +189,18 @@ export class Agent {
     this.log = deps.log;
   }
 
+  private visionEnabled(config: LightModelConfig): boolean {
+    return config.supportsVision ?? supportsVisionModel(config.model);
+  }
+
   private systemPrompt(session: StoredSession): string {
     return [
       '你是「锦囊」（dsh-palm）手机轻引擎里的助手。你运行在用户手机上的一个沙箱里，',
       '能读写一个真实的工作区 /workspace，并能执行受限的 bash 命令。',
       '',
       `工作区：${toDisplayPath('/')}`,
-      '用户发来的文件在 /workspace/uploads，直接用路径读取，不要用 base64。',
+      '如果模型支持视觉，用户发来的图片会直接作为图片输入；否则只给路径。',
+      '其他文件在 /workspace/uploads，用路径和工具读取，不要自己生成 base64。',
       permissionNote(session.permission),
       '',
       TOOL_CONTEXT_HELP,
@@ -184,6 +238,7 @@ export class Agent {
       ? { ...this.deps.model, model: session.model.model }
       : this.deps.model;
     let usage: RunOutcome['usage'];
+    const visionCache = new Map<string, string>();
 
     try {
       for (let step = 0; step < maxSteps; step += 1) {
@@ -223,9 +278,15 @@ export class Agent {
           return handle;
         };
 
+        const history = await attachVisionImages(
+          this.trimHistory(session.history),
+          this.deps.workspace,
+          this.visionEnabled(modelConfig),
+          visionCache,
+        );
         const messages = [
           { role: 'system' as const, content: this.systemPrompt(session) },
-          ...sanitizeToolHistory(this.trimHistory(session.history)),
+          ...sanitizeToolHistory(history),
         ];
 
         let result;
