@@ -1184,6 +1184,8 @@ export class Store {
       currentId: null,
       account: null,
       engineKind: null,
+      // 断开后必须回到主路由，否则 settings/files 等页会盖住 ConnectScreen
+      view: 'main',
       connectModalOpen: true,
     });
     // 用户主动断开：只更新状态机，不自动重连（effects 不执行）

@@ -732,3 +732,11 @@
 - 处理：HostService 启动时持有 `WifiManager.MulticastLock`，退出释放；manifest 加
   `ACCESS_LOCAL_NETWORK`/`CHANGE_WIFI_MULTICAST_STATE`，HostModule 提供按需请求。
 - 验证：连接页「扫描局域网」应列出桥的 `_dsh-palm._tcp`；扫不到时仍可手填地址。
+
+### I20. 设置里断开后连接页被设置页盖住（2026-11-06）
+
+- 现象：HostScreen 点「断开当前连接」后仍停在设置页，看起来像按钮没反应。
+- 原因：`disconnect()` 只设 `connectModalOpen=true`，但 `App.tsx` 先按 `view` 选屏，
+  `view='settings'` 时不会渲染 ConnectScreen。
+- 处理：`disconnect()` 同时把 `view` 置回 `main`；设置页断开后正常进入连接页。
+- 验证：设置 → 宿主 → 断开，ConnectScreen 出现；重新进 App 轻引擎自动恢复。
