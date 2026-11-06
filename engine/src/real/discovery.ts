@@ -41,7 +41,8 @@ function localAddresses(): string[] {
 export function advertiseBridge(input: AdvertiseInput): BridgeAdvertiser | null {
   let mdns: ReturnType<typeof createMdns> | null = null;
   try {
-    mdns = createMdns({ loopback: true });
+    // 不能只用 loopback，否则手机上永远发现不了桌面桥；默认走所有网卡。
+    mdns = createMdns({ loopback: false });
   } catch {
     return null;
   }

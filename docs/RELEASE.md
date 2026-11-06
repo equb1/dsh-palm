@@ -9,7 +9,7 @@
 | 项 | 值 |
 |---|---|
 | APK | `app/android/app/build/outputs/apk/release/app-release.apk` |
-| 大小 / sha256 | 244.2 MiB（256,039,154 B）/ `775DBA9D25723503DA2FA4BB0CD81BFBDD65F0F67ABC7C779CDB96A66311A796` |
+| 大小 / sha256 | 244.2 MiB（256,042,306 B）/ `500651F193BAF0F8F8A24AB6ECF8A50AA837221222B13A9EBBC4AC2B9E0756CE` |
 | applicationId | `cool.cnb.dshpalm` |
 | versionName / versionCode | `0.2.0` / `2` |
 | 签名 | V2，`CN=DSH Palm`，证书 SHA-256 `50de0609c1f781651301906c0781fe0dd039288bd5efc32883d03b9dac86628c` |

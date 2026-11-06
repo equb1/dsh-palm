@@ -527,7 +527,10 @@ type AttachmentChipsProps = {
 - [ ] **3.2 LAN 直连**（mDNS、E2E WS、索引同步、离线状态机）
   - [x] 第一步：桥持久化 hostId/name/fingerprint，广播 `_dsh-palm._tcp`；
     Android NSD 扫描、连接页列表、手填地址兜底、上次宿主重连
-  - [x] 第一步：HostService 持有 Wi-Fi 组播锁；Android 16 本地网络权限已声明
+  - [x] 第一步：HostService 持有 Wi-Fi 组播锁；宿主页「局域网扫描」可在不断开当前连接时扫描；
+    NEARBY_WIFI_DEVICES 运行时权限已接（Android 16 弹窗可见）
+  - [ ] 真机跨设备发现未验证：本机 Windows 防火墙拒绝入站 5353/8788，手机 ping 电脑 100% 丢包；
+    PC 本机 mDNS 查询能拿到 PTR/SRV/TXT/A
   - [ ] E2E WS（X25519 + 加密帧）未做；当前仍是明文 `ws://`
   - [ ] 多宿主索引/密钥分仓未做（目前只有一个 active remote host + 全局设备密钥）
   - [ ] 完整离线状态机（在线/重连/离线/配对失效 + 最后同步时间）只做了「上次宿主重连」
@@ -606,7 +609,7 @@ type AttachmentChipsProps = {
     装 release 再还原」走不通。首装/升级仍等用户确认后执行（路径 A 干净首装 / 路径 B 同签名升级）。
   - 2026-11-06 夜间：versionCode bump 到 `2` / versionName `0.2.0`，重新 `assembleRelease`
     （包含完整引擎平权、深色主题、M2.1–M2.4、LAN 发现、系统入口）；APK 244.2MiB、
-    sha256 `775DBA9D…`，设备已同签名 `install -r` 升级成功（数据保留）。
+    sha256 `500651F1…`，设备已同签名 `install -r` 升级成功（数据保留）。
 
 
 ## 4. 待决事项

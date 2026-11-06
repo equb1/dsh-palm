@@ -740,3 +740,16 @@
   `view='settings'` 时不会渲染 ConnectScreen。
 - 处理：`disconnect()` 同时把 `view` 置回 `main`；设置页断开后正常进入连接页。
 - 验证：设置 → 宿主 → 断开，ConnectScreen 出现；重新进 App 轻引擎自动恢复。
+
+### I21. mDNS 扫描不到：loopback / 权限 / Windows 防火墙（2026-11-06）
+
+- 现象：HostScreen 点「扫描」一直空；Node 本机查询却能看到广播。
+- 原因 1：`multicast-dns({loopback:true})` 只在本机回环广播，局域网网卡发不出去；
+  改为 `loopback:false`。
+- 原因 2：Android 13+ NSD 需要 `NEARBY_WIFI_DEVICES`；部分 Android 16 ROM 没有
+  `ACCESS_LOCAL_NETWORK`，只 request 它会静默失败。现在先请求 NEARBY_WIFI_DEVICES，
+  真机可见系统允许弹窗。
+- 原因 3：Windows 防火墙默认拒绝入站 UDP 5353/ TCP 8788；本机测试中 PC 能 ping 手机，
+  手机 ping PC 100% 丢包，mDNS 因此无法跨设备验收。要么加防火墙规则，要么换同一交换机/
+  关闭 AP 隔离。
+- 验证：手机允许附近设备权限后扫描仍空时，先查 `ping <pc>` 和防火墙，不要先怀疑代码。

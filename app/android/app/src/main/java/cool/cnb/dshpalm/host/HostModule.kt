@@ -145,15 +145,18 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
 
     @Volatile private var lanDiscovery: LanDiscovery? = null
 
-    /** Android 16 的本地网络访问权限；旧系统直接返回 true。 */
+    /**
+     * Android 13+ 的附近 Wi-Fi 权限；部分 Android 16 ROM 还没有
+     * ACCESS_LOCAL_NETWORK，用 NEARBY_WIFI_DEVICES 覆盖 NSD。
+     */
     @ReactMethod
     fun requestLanPermission(promise: Promise) {
         try {
-            if (Build.VERSION.SDK_INT < 36) {
+            if (Build.VERSION.SDK_INT < 33) {
                 promise.resolve(true)
                 return
             }
-            val permission = "android.permission.ACCESS_LOCAL_NETWORK"
+            val permission = "android.permission.NEARBY_WIFI_DEVICES"
             if (ctx.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
                 promise.resolve(true)
                 return

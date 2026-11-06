@@ -13,7 +13,7 @@
 - **系统入口（M3.3 第一步）**：QS 磁贴、桌面小组件、通知 ACTION_VIEW 直达会话/审批、
   常驻通知可点回 App。
 - **构建**：just-bash 固定 browser 入口；桥约 1.6MB；软链测试在无权限环境跳过。
-- **发布**：`0.2.0 (2)`，244.2MiB，sha256 `775DBA9D…`，已同签名 `install -r`。
+- **发布**：`0.2.0 (2)`，244.2MiB，sha256 `500651F1…`，已同签名 `install -r`。
 
 ## 测试计划
 
@@ -27,6 +27,8 @@ npm run device:regression           # 需要先补 docs/weekly.docx fixture
 ## 风险 / 未完成
 
 - `device:regression` 在 release 0.2.0 上 8/10 通过；全文搜索在轻会话为空/输入焦点异常时未过。
+- 真机 LAN 扫描权限弹窗已出现，但当前 PC 防火墙/网络隔离导致手机 ping 不到电脑；
+  PC 本机 mDNS 查询正常。需放行 5353/8788 或换可互访网段再验收。
 - E2E 加密 WS、多宿主密钥/索引分仓、完整离线状态机、悬浮球未做。
 - 完整引擎搜索按需扫日志，大历史首次搜索可能受 15s 请求超时限制。
 - PDF/OCR/LibreOffice render/旧格式/TTS 仍按决策暂缓。

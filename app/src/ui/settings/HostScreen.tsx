@@ -1,10 +1,11 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { store, useStore } from '../useStore';
 import { Btn, IconButton } from '../parts';
 import { SmoothKeyboardAvoid } from '../SmoothKeyboardAvoid';
-import { radius, space, topInset, useThemedStyles, type Theme } from '../theme';
+import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from '../theme';
+import { discoverLanHosts, requestLanPermission, type DiscoveredHost } from '../../lib/host';
 
 /**
  * U4 二级页：宿主。
@@ -13,8 +14,31 @@ import { radius, space, topInset, useThemedStyles, type Theme } from '../theme';
  */
 export function HostScreen({ onClose }: { onClose: () => void }): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const preset = state.caps?.presets.find((p) => p.id === state.draftPresetId) ?? state.caps?.presets[0];
+  const [scanning, setScanning] = React.useState(false);
+  const [lanHosts, setLanHosts] = React.useState<DiscoveredHost[]>([]);
+  const [scanNote, setScanNote] = React.useState<string | null>(null);
+
+  const scan = async (): Promise<void> => {
+    if (scanning) return;
+    setScanning(true);
+    setScanNote(null);
+    try {
+      await requestLanPermission();
+      const hosts = await discoverLanHosts(4_000);
+      setLanHosts(hosts);
+      if (hosts.length === 0) setScanNote('没有发现宿主；确认同一 Wi-Fi，或回连接页手动填地址。');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const useHost = (host: DiscoveredHost): void => {
+    store.setUrl(`ws://${host.host}:${host.port}/ws`);
+    setScanNote(`已填入 ${host.name}；断开后到连接页输入配对码。`);
+  };
 
   return (
     <View style={styles.root}>
@@ -66,6 +90,43 @@ export function HostScreen({ onClose }: { onClose: () => void }): React.ReactEle
               />
             </View>
           </View>
+
+          <View style={styles.card}>
+            <View style={styles.scanHead}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>局域网扫描</Text>
+                <Text style={styles.scanHint}>发现同一 Wi-Fi 下广播 _dsh-palm._tcp 的宿主</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="扫描局域网"
+                onPress={() => void scan()}
+                style={({ pressed }) => [styles.scanBtn, pressed && styles.scanBtnPressed]}
+              >
+                {scanning ? (
+                  <ActivityIndicator size="small" color={palette.blue} />
+                ) : (
+                  <Text style={styles.scanBtnText}>扫描</Text>
+                )}
+              </Pressable>
+            </View>
+            {lanHosts.map((host) => (
+              <Pressable
+                key={`${host.id}:${host.host}:${host.port}`}
+                accessibilityRole="button"
+                accessibilityLabel={`使用宿主 ${host.name}`}
+                onPress={() => useHost(host)}
+                style={({ pressed }) => [styles.lanRow, pressed && styles.lanRowPressed]}
+              >
+                <Text style={styles.lanName} numberOfLines={1}>{host.name}</Text>
+                <Text style={styles.lanMeta} numberOfLines={1}>
+                  {host.host}:{host.port}
+                  {host.fingerprint ? ` · ${host.fingerprint.slice(0, 8)}` : ''}
+                </Text>
+              </Pressable>
+            ))}
+            {scanNote ? <Text style={styles.scanNote}>{scanNote}</Text> : null}
+          </View>
         </ScrollView>
       </SmoothKeyboardAvoid>
     </View>
@@ -99,4 +160,29 @@ const createStyles = ({ palette: c }: Theme) =>
     k: { color: c.textDim, fontSize: 13 },
     v: { color: c.text, fontSize: 13, fontWeight: '500' },
     actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
+    scanHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+    scanHint: { color: c.textFaint, fontSize: 11.5, lineHeight: 16, marginTop: 2 },
+    scanBtn: {
+      minWidth: 64,
+      minHeight: 34,
+      borderRadius: radius.md,
+      backgroundColor: c.blueSoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+    },
+    scanBtnPressed: { opacity: 0.75 },
+    scanBtnText: { color: c.blue, fontSize: 12.5, fontWeight: '600' },
+    lanRow: {
+      borderRadius: radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      paddingHorizontal: space.sm,
+      paddingVertical: 9,
+      gap: 2,
+    },
+    lanRowPressed: { backgroundColor: c.glassStrong },
+    lanName: { color: c.text, fontSize: 13.5, fontWeight: '600' },
+    lanMeta: { color: c.textFaint, fontSize: 11.5, fontFamily: 'monospace' },
+    scanNote: { color: c.textDim, fontSize: 11.5, lineHeight: 16 },
   });
