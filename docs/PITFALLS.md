@@ -691,4 +691,4 @@
 - 处理：新增 `engine/src/real/workspaceFs.ts`，桥直接读写 `/root/work`；路径必须是工作区绝对路径，
   拒绝 `..`、根目录改名/删除，列表跳过软链，500 条上限。UI 复用 FilesScreen。
 - 验证：`test/bridge-workspace.test.ts` 覆盖列表/改名/删除/穿越/软链；桥补丁需
-  `node scripts/build-bridge.mjs` 后重打 APK；真机 UI 验收待设备空闲。
+  `node scripts/build-bridge.mjs` 后重打 APK；真机已验 fs.list/delete，rename 由单测覆盖。

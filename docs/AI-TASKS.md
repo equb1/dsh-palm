@@ -275,7 +275,8 @@
     直接读写 `/root/work`，实现 `fs.list/rename/delete`；拒绝 `..`/根目录改名删除，软链不跟随。
     FilesScreen 复用同一套 UI，错误文案不再说「完整引擎暂不支持」。
     单测 `test/bridge-workspace.test.ts` 4 条（列表/改名/删除/穿越/软链）；`npm run verify` 244 pass。
-    真机 UI 验收待设备空闲（桥补丁已打包）。
+    真机已验证：完整引擎文件页列出 docs/uploads，删除 `docs/u8-test.txt` 后 UI 与宿主目录同步消失；
+    rename 由单测覆盖。
   - 未做：多工作区创建/置顶/分组（M2）；完整引擎终端/正文搜索（仍显式 unsupported）。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，

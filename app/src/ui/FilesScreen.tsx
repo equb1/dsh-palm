@@ -279,7 +279,7 @@ export function FilesScreen(): React.ReactElement {
         </View>
 
         <Text style={styles.footnote}>
-          工作区是 {state.engineKind === 'remote' ? '/root/work' : '/workspace'}；文件用系统查看器打开，PDF 等暂不解析。
+          工作区是 {state.engine.mode === 'full' ? '/root/work' : '/workspace'}；文件用系统查看器打开，PDF 等暂不解析。
         </Text>
       </ScrollView>
     </View>
