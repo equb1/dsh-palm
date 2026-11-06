@@ -27,7 +27,16 @@ import type {
 } from '../../../app/src/protocol';
 import { PROTOCOL_VERSION } from '../../../app/src/protocol';
 import { DshRealClient, type RealSessionListItem } from './dshClient';
-import { projectRecords, type RealRecord } from './project';
+import {
+  addUsage,
+  assistantMessageInfo,
+  contentText,
+  mergeAssistantContent,
+  projectRecords,
+  readContent,
+  usageFrom,
+  type RealRecord,
+} from './project';
 import { promptWithProotFiles } from './promptParts';
 import { canonicalRunId, canonicalTurnId, liveBlockId, mergeLiveTurn } from '../../../app/src/protocol/turns';
 import { DeviceStore } from './devices';
@@ -537,9 +546,15 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   let liveRunId = '';
   /** 每个 assistant-stream 步骤都从 block index 0 重新开始，id 必须带上步骤号才不撞车 */
   let liveStep = 0;
+  /** 当前流式步骤在宿主里的真实 step 号；assistant/message 的 content index 按它对齐 */
+  let liveStepNo = 0;
   /** 正在流式的回合按会话存一份，sessions.get 时补进快照，避免重进会话看到两份 */
   const liveTurns = new Map<string, Turn>();
   const blockIdByIndex = new Map<number, string>();
+  /** 非流式 assistant/message 可能与流式帧/重连快照重复，按事件指纹去重 */
+  const seenAssistant = new Set<string>();
+  /** 已收尾的 run，防止迟到的 turn/end 或 assistant/message 把回合重新拉起来 */
+  const finishedRuns = new Map<string, Set<string>>();
   /** 还没回答的 ask_user_question，按工具调用 id 存 */
   const pendingQuestions = new Map<string, Approval>();
   /** 每个待回答问题的 attachWait 流，回答后要关掉 */
@@ -591,6 +606,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     if (!sameSession) {
       liveTurn = null;
       liveStep = 0;
+      liveStepNo = 0;
       blockIdByIndex.clear();
     } else if (!liveTurn) {
       liveTurn = liveTurns.get(sessionId) ?? null;
@@ -603,6 +619,200 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         /* 单帧出错不影响整条流 */
       }
     });
+  }
+
+  function markRunFinished(sessionId: string, runId: string): void {
+    if (!runId) return;
+    const set = finishedRuns.get(sessionId) ?? new Set<string>();
+    set.add(runId);
+    finishedRuns.set(sessionId, set);
+  }
+
+  function wasRunFinished(sessionId: string, runId: string): boolean {
+    return finishedRuns.get(sessionId)?.has(runId) ?? false;
+  }
+
+  function reviveRun(sessionId: string, runId: string): void {
+    finishedRuns.get(sessionId)?.delete(runId);
+  }
+
+  function pruneEmptyLiveBlocks(turn: Turn): void {
+    turn.blocks = turn.blocks.filter((block) => {
+      if (block.kind !== 'text' && block.kind !== 'thinking') return true;
+      return block.text.trim().length > 0 || block.done === true;
+    });
+  }
+
+  function beginLiveTurn(
+    sessionId: string,
+    runId: string,
+    createdAt: number,
+    usage?: Turn['usage'],
+  ): Turn {
+    liveRunId = runId;
+    liveTurn = {
+      id: canonicalTurnId(runId),
+      runId,
+      role: 'assistant',
+      createdAt,
+      blocks: [],
+      status: 'streaming',
+      ...(usage ? { usage } : {}),
+    };
+    liveTurns.set(sessionId, liveTurn);
+    reviveRun(sessionId, runId);
+    broadcast('run.started', { sessionId, runId, turnId: liveTurn.id });
+    return liveTurn;
+  }
+
+  function finishLiveTurn(
+    sessionId: string,
+    runIdHint: string | undefined,
+    finalReason: 'done' | 'stopped' | 'error',
+    errMsg = '',
+    usage?: Turn['usage'],
+  ): void {
+    const turn = liveTurn;
+    if (turn) addUsage(turn, usage);
+    const runId = turn?.runId ?? runIdHint ?? liveRunId;
+    if (runId) markRunFinished(sessionId, runId);
+
+    if (!turn) {
+      broadcast('run.finished', {
+        sessionId,
+        runId: runId || 'run',
+        reason: finalReason,
+        ...(usage ? { usage } : {}),
+        ...(errMsg ? { error: errMsg } : {}),
+      });
+    } else {
+      turn.status = finalReason;
+      if (finalReason === 'error' && errMsg && turn.blocks.length === 0) {
+        turn.blocks.push({
+          kind: 'text',
+          id: `${runId || 'run'}:live:error`,
+          text: `错误：${errMsg}`,
+        });
+      }
+      pruneEmptyLiveBlocks(turn);
+      turn.meta = {
+        steps: turn.blocks.length,
+        durationMs: Math.max(1, Date.now() - turn.createdAt),
+      };
+      let preview = '';
+      for (let i = turn.blocks.length - 1; i >= 0; i -= 1) {
+        const block = turn.blocks[i];
+        if (block && block.kind === 'text' && block.text.trim()) {
+          preview = block.text.replace(/\s+/g, ' ').trim().slice(0, 120);
+          break;
+        }
+      }
+      broadcast('block.appended', { sessionId, runId: runId || 'run', turn });
+      broadcast('run.finished', {
+        sessionId,
+        runId: runId || 'run',
+        reason: finalReason,
+        usage: turn.usage ?? usage,
+        ...(errMsg ? { error: errMsg } : {}),
+        ...(preview ? { preview } : {}),
+      });
+    }
+
+    liveTurns.delete(sessionId);
+    liveTurn = null;
+    liveRunId = '';
+    liveStepNo = 0;
+    blockIdByIndex.clear();
+  }
+
+  /**
+   * 非流式 assistant/message：真引擎不保证每次都走 assistant-stream 增量。
+   * 最终 message.content 是权威全文，用它覆盖同一步骤的流式块；工具调用按 callId 去重。
+   */
+  function handleAssistantMessage(
+    sessionId: string,
+    ev: { type?: string; seq?: number; time?: number },
+    d: Record<string, unknown>,
+  ): void {
+    const info = assistantMessageInfo(ev, d);
+    if (!info) return;
+    const key = `${sessionId}:${info.key}`;
+    if (seenAssistant.has(key)) return;
+
+    const hintedRunId = info.runId ?? liveTurn?.runId ?? liveRunId;
+    if (hintedRunId && !liveTurn && wasRunFinished(sessionId, hintedRunId)) return;
+    seenAssistant.add(key);
+
+    const entries = readContent(info.message.content);
+    if (!liveTurn && entries.length === 0 && !info.usage) return;
+
+    if (!liveTurn) {
+      const runId = info.runId ?? canonicalRunId(info.turn, crypto.randomUUID())!;
+      beginLiveTurn(sessionId, runId, Date.now(), info.usage);
+      liveStepNo = info.step;
+      blockIdByIndex.clear();
+    } else if (info.runId && liveTurn.runId && info.runId !== liveTurn.runId) {
+      finishLiveTurn(sessionId, liveTurn.runId, 'done');
+      beginLiveTurn(sessionId, info.runId, Date.now(), info.usage);
+      liveStepNo = info.step;
+      blockIdByIndex.clear();
+    } else {
+      if (info.runId && !liveTurn.runId) {
+        liveTurn.runId = info.runId;
+        liveTurn.id = canonicalTurnId(info.runId);
+        liveRunId = info.runId;
+      }
+      liveRunId = liveTurn.runId ?? liveRunId;
+      if (info.step >= 0 && info.step !== liveStepNo) {
+        liveStepNo = info.step;
+        blockIdByIndex.clear();
+      }
+      addUsage(liveTurn, info.usage);
+    }
+
+    const turn = liveTurn;
+    if (!turn) return;
+    const runId = turn.runId ?? liveRunId;
+    const sameStep = info.step < 0 || info.step === liveStepNo;
+    const streamBlockIds = sameStep ? blockIdByIndex : undefined;
+    const streamPrefix = sameStep ? `${runId}:live:${liveStep}:` : '';
+    const messagePrefix = `${runId}:msg:${info.step}:`;
+
+    const merged = mergeAssistantContent(turn, info.message.content, {
+      textBlockId: (index) => `${runId}:msg:${info.step}:b${index}`,
+      toolBlockId: (index, callId) =>
+        callId ? `${runId}:tool:${callId}` : `${runId}:tool:msg:${info.step}:${index}`,
+      streamBlockIds,
+      findTextBlock: (entry, index) => {
+        const streamId = streamBlockIds?.get(index);
+        if (streamId) {
+          const found = turn.blocks.find((b) => b.id === streamId);
+          if (found && (found.kind === 'text' || found.kind === 'thinking')) return found;
+        }
+        const sameMessageBlock = turn.blocks.find(
+          (b): b is Extract<Block, { kind: 'text' | 'thinking' }> =>
+            (b.kind === 'text' || b.kind === 'thinking') &&
+            b.kind === entry.kind &&
+            b.id === `${messagePrefix}b${index}`,
+        );
+        if (sameMessageBlock) return sameMessageBlock;
+        if (!streamPrefix) return undefined;
+        for (let i = turn.blocks.length - 1; i >= 0; i -= 1) {
+          const block = turn.blocks[i]!;
+          if (block.kind !== entry.kind) continue;
+          if (!block.id.startsWith(streamPrefix) && !block.id.startsWith(messagePrefix)) continue;
+          if (!block.text || block.text === entry.text) return block;
+          if (block.text.length >= 20 && entry.text?.startsWith(block.text)) return block;
+        }
+        return undefined;
+      },
+      markDone: true,
+    });
+
+    broadcast('block.appended', { sessionId, runId, turn });
+    for (const block of merged.updated) {
+      broadcast('block.updated', { sessionId, runId, turnId: turn.id, block });
+    }
   }
 
   function handleFollowValue(sessionId: string, value: Record<string, unknown>): void {
@@ -630,49 +840,88 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         }
         return;
       }
+      if (ev?.type === 'assistant/message') {
+        handleAssistantMessage(sessionId, ev, (ev.data ?? {}) as Record<string, unknown>);
+        return;
+      }
       if (ev?.type === 'tool/call') {
         const d = (ev.data ?? {}) as Record<string, unknown>;
+        const runId = canonicalRunId(d.turn);
         if (!liveTurn) {
-          liveRunId = canonicalRunId(d.turn, crypto.randomUUID())!;
-          liveTurn = {
-            id: canonicalTurnId(liveRunId),
-            runId: liveRunId,
-            role: 'assistant',
-            createdAt: Date.now(),
-            blocks: [],
-            status: 'streaming',
-          };
-          liveTurns.set(sessionId, liveTurn);
+          beginLiveTurn(
+            sessionId,
+            runId ?? canonicalRunId(d.turn, crypto.randomUUID())!,
+            Date.now(),
+          );
+        } else if (runId && liveTurn.runId && runId !== liveTurn.runId) {
+          finishLiveTurn(sessionId, liveTurn.runId, 'done');
+          beginLiveTurn(sessionId, runId, Date.now());
         }
+        const turn = liveTurn!;
+        liveRunId = turn.runId ?? liveRunId;
         const name = String(d.name ?? 'tool');
         const args = summarizeToolArgs(d.arguments);
-        liveTurn.blocks.push({
+        const callId = typeof d.callId === 'string' ? d.callId : '';
+        const existing = callId
+          ? turn.blocks.find(
+              (b): b is Extract<Block, { kind: 'tool' }> =>
+                b.kind === 'tool' && b.callId === callId,
+            )
+          : undefined;
+        if (existing) {
+          if ((!existing.name || existing.name === 'tool') && name) existing.name = name;
+          if (!existing.summary) existing.summary = args;
+          broadcast('block.updated', {
+            sessionId,
+            runId: liveRunId,
+            turnId: turn.id,
+            block: existing,
+          });
+          return;
+        }
+        turn.blocks.push({
           kind: 'tool',
-          id: `${liveRunId}:tool:${String(d.callId ?? crypto.randomUUID())}`,
-          ...(typeof d.callId === 'string' ? { callId: d.callId } : {}),
+          id: `${liveRunId}:tool:${callId || crypto.randomUUID()}`,
+          ...(callId ? { callId } : {}),
           name,
           summary: args,
           state: 'running',
         });
-        broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
+        broadcast('block.appended', { sessionId, runId: liveRunId, turn });
         return;
       }
       if (ev?.type === 'tool/result') {
         const d = (ev.data ?? {}) as Record<string, unknown>;
         const msg = (d.message ?? {}) as Record<string, unknown>;
         const callId = String(msg.toolCallId ?? d.callId ?? '');
-        const block = liveTurn?.blocks.find(
+        const turn = liveTurn;
+        if (!turn || !callId) return;
+        const text = contentText(msg.content);
+        let block = turn.blocks.find(
           (b): b is Extract<Block, { kind: 'tool' }> =>
-            b.kind === 'tool' && b.id.endsWith(String(callId))
+            b.kind === 'tool' && b.callId === callId,
         );
-        if (block && liveTurn) {
-          block.state = msg.isError === true ? 'error' : 'done';
-          const detail = JSON.stringify(msg.content ?? '').replace(/\\n/g, '\n');
-          if (detail) block.detail = detail.slice(0, 200);
+        const appended = !block;
+        if (!block) {
+          block = {
+            kind: 'tool',
+            id: `${liveRunId}:tool:${callId}`,
+            callId,
+            name: String(msg.name ?? d.name ?? 'tool'),
+            summary: '',
+            state: 'running',
+          };
+          turn.blocks.push(block);
+        }
+        block.state = msg.isError === true ? 'error' : 'done';
+        if (text) block.detail = text.slice(0, 200);
+        if (appended) {
+          broadcast('block.appended', { sessionId, runId: liveRunId, turn });
+        } else {
           broadcast('block.updated', {
             sessionId,
             runId: liveRunId,
-            turnId: liveTurn.id,
+            turnId: turn.id,
             block,
           });
         }
@@ -695,55 +944,38 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
             : typeof failure.message === 'string' && failure.message.trim()
               ? failure.message.trim()
               : '';
+        const runIdHint = canonicalRunId(ev.data?.turn, liveTurn?.runId ?? liveRunId);
+        const usage = usageFrom(ev.data?.usage);
 
+        if (runIdHint && !liveTurn && wasRunFinished(sessionId, runIdHint)) return;
+        if (liveTurn && runIdHint && liveTurn.runId && liveTurn.runId !== runIdHint) {
+          // 旧回合的 turn/end 迟到：只补 run.finished，不误收当前回合
+          markRunFinished(sessionId, runIdHint);
+          broadcast('run.finished', {
+            sessionId,
+            runId: runIdHint,
+            reason: finalReason,
+            ...(errMsg ? { error: errMsg } : {}),
+          });
+          return;
+        }
         if (!liveTurn && finalReason === 'error') {
-          liveRunId = canonicalRunId(ev.data?.turn, crypto.randomUUID())!;
+          const runId = runIdHint ?? canonicalRunId(ev.data?.turn, crypto.randomUUID())!;
+          liveRunId = runId;
           liveTurn = {
-            id: canonicalTurnId(liveRunId),
-            runId: liveRunId,
+            id: canonicalTurnId(runId),
+            runId,
             role: 'assistant',
             createdAt: Date.now(),
             blocks: errMsg
-              ? [{ kind: 'text', id: `${liveRunId}:live:error`, text: `错误：${errMsg}` }]
+              ? [{ kind: 'text', id: `${runId}:live:error`, text: `错误：${errMsg}` }]
               : [],
             status: 'error',
           };
+          liveTurns.set(sessionId, liveTurn);
         }
-
-        let preview = '';
-        if (liveTurn) {
-          liveTurn.status = finalReason;
-          if (finalReason === 'error' && errMsg && liveTurn.blocks.length === 0) {
-            liveTurn.blocks.push({
-              kind: 'text',
-              id: `${liveRunId}:live:error`,
-              text: `错误：${errMsg}`,
-            });
-          }
-          liveTurn.meta = {
-            steps: liveTurn.blocks.length,
-            durationMs: Math.max(1, Date.now() - liveTurn.createdAt),
-          };
-          for (let i = liveTurn.blocks.length - 1; i >= 0; i -= 1) {
-            const b = liveTurn.blocks[i];
-            if (b && b.kind === 'text' && b.text.trim()) {
-              preview = b.text.replace(/\s+/g, ' ').trim().slice(0, 120);
-              break;
-            }
-          }
-          broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
-        }
-
-        broadcast('run.finished', {
-          sessionId,
-          runId: liveRunId || 'run',
-          reason: finalReason,
-          usage: liveTurn?.usage,
-          ...(errMsg ? { error: errMsg } : {}),
-          ...(preview ? { preview } : {}),
-        });
-        liveTurns.delete(sessionId);
-        liveTurn = null;
+        finishLiveTurn(sessionId, runIdHint, finalReason, errMsg, usage);
+        return;
       }
 
       return;
@@ -754,18 +986,23 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     if (!frame) return;
 
     if (frame.type === 'start') {
-      liveRunId = canonicalRunId(frame.turn, String(frame.attemptId ?? crypto.randomUUID()))!;
+      const runId = canonicalRunId(frame.turn, String(frame.attemptId ?? crypto.randomUUID()))!;
       liveStep += 1;
+      liveStepNo = typeof frame.step === 'number' ? frame.step : liveStep;
+      const previous = liveTurn && liveTurn.runId === runId ? liveTurn : null;
+      liveRunId = runId;
       liveTurn = {
-        id: canonicalTurnId(liveRunId),
-        runId: liveRunId,
+        id: canonicalTurnId(runId),
+        runId,
         role: 'assistant',
-        createdAt: Date.now(),
+        createdAt: previous?.createdAt ?? Date.now(),
         blocks: [],
         status: 'streaming',
+        ...(previous?.usage ? { usage: previous.usage } : {}),
       };
       blockIdByIndex.clear();
       liveTurns.set(sessionId, liveTurn);
+      reviveRun(sessionId, runId);
       broadcast('run.started', { sessionId, runId: liveRunId, turnId: liveTurn.id });
       broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
       return;

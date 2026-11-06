@@ -44,6 +44,8 @@
   请求 400，现于发请求前统一补齐 `[已停止] 未执行` 并丢弃孤立 tool 消息（`light/history.ts`）。
 - 账号重登闭环（2026-11-06 验收）：轻引擎 401 横幅的「重新登录」入口已可用；release 上浏览器
   OAuth 授权完成（页面「授权已完成」），回 App 已登录、模型可选（见 M2.7）。
+- 桥补非流式 assistant/message（2026-11-06）：最终全文覆盖同步骤流式块、工具按 callId 去重、
+  usage 累加、turn/end 幂等收尾；单测见 `test/real-assistant-message.test.ts`。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎附件只给路径，不解析图片/PDF；
   轻引擎无文档编辑、无 pptx（复杂/编辑/pptx 走完整引擎）。
@@ -460,7 +462,6 @@ type AttachmentChipsProps = {
 
 ### 已知缺口（未成任务）
 
-- bridge 对非流式 `assistant/message` 可能漏转；
 - follow WS 没有 `onclose/onerror` 自动重连（靠进会话重建）；
 - 图片渲染未做系统真机验收；
 - 历史“已回答”问题没有官方那种只读问答卡；
