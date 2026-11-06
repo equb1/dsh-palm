@@ -1,11 +1,13 @@
 # 锦囊 · AI 维护清单
 
-> 状态：2026-11-06。**本文件是任务状态、规则和命令的唯一来源**。
+> 状态：2026-11-06 夜间（release 0.2.0 / 完整引擎平权 / LAN 发现 / 系统入口）。
+> **本文件是任务状态、规则和命令的唯一来源**。
 > 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)，
 > 长会话流式见 [STREAMING-FIX](STREAMING-FIX.md)。交接：2026-11-05 见
 > [archive/32](archive/32-handoff-2026-11-05.md) / [archive/33](archive/33-handoff-2026-11-05.md)，
 > 2026-11-06 见 [archive/34](archive/34-handoff-2026-11-06.md) / [archive/35](archive/35-handoff-2026-11-06.md) /
-> [archive/36](archive/36-handoff-2026-11-06.md) / [archive/37](archive/37-handoff-2026-11-06.md)。
+> [archive/36](archive/36-handoff-2026-11-06.md) / [archive/37](archive/37-handoff-2026-11-06.md) /
+> [archive/38](archive/38-handoff-2026-11-06.md)。
 > **每次做完任务，必须回来勾选/更新这里**；不要另开任务文档。
 
 ## 1. 当前基线
@@ -22,8 +24,8 @@
 - 输入区按 dsh-go 几何（2026-11-04）：单行 56 / 28 圆角、40 圆键；权限与锦囊在输入框上方，
   模型回顶栏，`+` 走附件面板；B3 前先把 Chat 的回合/思考/工具渲染拆到 `ui/chat/*`。
 - 流式主链路已修（2026-11-04）：canonical run/block id、chunk 缓冲、稳定块 memo、FlatList 和 follow
-  状态机已落地；真机工具密集长流、上滑冻结、回到底部、重进通过。20 分钟 soak 已完成
-  （2026-11-05：33 回合 / 41 次流式，0 duplicate，PSS 623MB，见 PITFALLS I10），90 分钟待补；
+  状态机已落地；真机工具密集长流、上滑冻结、回到底部、重进通过。20 分钟和 90 分钟 soak 均已完成
+  （2026-11-06：109 轮，PSS 349→615MB，无 OOM，见 PITFALLS I10）；
   见 `PITFALLS.md` H7 和 [STREAMING-FIX](STREAMING-FIX.md)。
 - 完整引擎（proot）自带 Python/Office 层（2026-11-04）：`assets/python.bin` 首次启动解压到 rootfs，
   `python3` + docx/openpyxl/pptx；三格式创建/读回/编辑在真机通过（见 P0 1.1）。
@@ -47,6 +49,16 @@
   OAuth 授权完成（页面「授权已完成」），回 App 已登录、模型可选（见 M2.7）。
 - 桥补非流式 assistant/message（2026-11-06）：最终全文覆盖同步骤流式块、工具按 callId 去重、
   usage 累加、turn/end 幂等收尾；单测见 `test/real-assistant-message.test.ts`。
+- 完整引擎平权（2026-11-06 夜间）：`sessions.delete` 直接删 dsh 会话目录（运行中拒绝）、
+  `sessions.search` 扫本地 vN 日志（标题/用户/正文/思考，片段与轻引擎一致）、`shell.run`
+  用只读 SandboxFs + just-bash（写操作 EACCES）；工作区映射修成真实 workspaceId，
+  新建工作区可落在 `/root/work` 下。
+- OAuth 取消（2026-11-06 夜间）：桥起 loopback 回调中继，用户拒绝授权时立刻
+  `account/cancelSignIn`，App 显示「已取消授权」，不再等 600s。
+- LAN（M3.2 第一步）：桥持久化 hostId/name/fingerprint 并广播 `_dsh-palm._tcp`；
+  Android NSD 扫描宿主，连接页可扫描/填入地址/重连上次宿主；群组播锁由 HostService 持有。
+- 系统入口（M3.3 第一步）：QS 磁贴、桌面小组件、通知 ACTION_VIEW 直达会话/审批、
+  常驻通知可点回 App；悬浮球和 E2E 加密仍未做。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎附件只给路径，不解析图片/PDF；
   轻引擎无文档编辑、无 pptx（复杂/编辑/pptx 走完整引擎）。
@@ -284,7 +296,11 @@
     单测 `test/bridge-workspace.test.ts` 4 条（列表/改名/删除/穿越/软链）；`npm run verify` 244 pass。
     真机已验证：完整引擎文件页列出 docs/uploads，删除 `docs/u8-test.txt` 后 UI 与宿主目录同步消失；
     rename 由单测覆盖。
-  - 未做：多工作区创建/置顶/分组（M2）；完整引擎终端/正文搜索（仍显式 unsupported）。
+  - 2026-11-06 夜间完整引擎平权：`sessions.delete` / `sessions.search` / `shell.run` 已实现；
+    工作区映射改为真实 `workspaceId`，`sessions.create` 支持传入 workspaceId，
+    `workspaces.create` 可在 `/root/work` 下创建目录；WorkspaceScreen 增加「新建工作区」入口。
+  - 未做：多工作区的置顶/分组/排序（M2 余项）；完整引擎正文搜索仍是本地日志扫描，
+    没有上游 FTS 的实时索引。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）
@@ -505,9 +521,20 @@ type AttachmentChipsProps = {
 
 - [ ] **3.1 官方 OAuth 真机验证**（loopback + 拒绝授权）
   - [x] 正常授权 loopback：release 真机通过（2026-11-06，页面「授权已完成」、回 App 已登录）
-  - [ ] 用户拒绝授权路径未验证（需确认上游回调对 `error` 参数的处理）
+  - [x] 用户拒绝授权：桥用 loopback 回调中继 + `account/cancelSignIn`，代码路径完成；
+    真机需要再点一次「拒绝授权」验收（App 应立即显示「已取消授权」）
+  - [ ] 关闭浏览器/不回调仍会走 600s 超时（可后续加前台启发式取消）
 - [ ] **3.2 LAN 直连**（mDNS、E2E WS、索引同步、离线状态机）
+  - [x] 第一步：桥持久化 hostId/name/fingerprint，广播 `_dsh-palm._tcp`；
+    Android NSD 扫描、连接页列表、手填地址兜底、上次宿主重连
+  - [x] 第一步：HostService 持有 Wi-Fi 组播锁；Android 16 本地网络权限已声明
+  - [ ] E2E WS（X25519 + 加密帧）未做；当前仍是明文 `ws://`
+  - [ ] 多宿主索引/密钥分仓未做（目前只有一个 active remote host + 全局设备密钥）
+  - [ ] 完整离线状态机（在线/重连/离线/配对失效 + 最后同步时间）只做了「上次宿主重连」
 - [ ] **3.3 系统入口**（小组件、悬浮球、QS、通知直达、后台分享）
+  - [x] QS 磁贴、桌面小组件、通知 ACTION_VIEW 直达会话/审批、常驻通知可点回 App
+  - [ ] 悬浮球（overlay service）未做，设置里明确标注「暂未接入」
+  - [x] 后台分享：`ShareInbox` 已有，冷启动/onNewIntent 都接
 
 ### M4 · 远期
 
@@ -521,6 +548,9 @@ type AttachmentChipsProps = {
 - 图片渲染未做系统真机验收；
 - TTS/朗读未接（需要原生 TTS）；
 - 轻引擎账号 token 读自明文 YAML，安全模型需在文档里说清；
+- LAN 仍是明文 WS，E2E 加密未做；设备密钥仍只有一个全局槽，多宿主会互相覆盖；
+- 悬浮球未接（SYSTEM_ALERT_WINDOW 已声明，但没有 overlay service）；
+- 完整引擎搜索按需扫日志，长会话首次搜索可能受 15s 请求超时限制；
 - 发布签名/正式包流程（见 E8）。
 
 ## 3. 工程债
@@ -531,13 +561,17 @@ type AttachmentChipsProps = {
     `session.queued`，当前 run 结束（含手动停止）后自动 `startRun` 下一条，返回 `{queued:true}`。
     单测：第一条 `waitForAbort`，第二条排队，stop 后收到两次 `run.finished` 且第二轮有回复。
     局限：App 界面仍用「停止 / 插话」，没有主动「排队发送」按钮；协议层已支持。
-- [ ] **E3** 宿主缺会话删除/正文搜索 → 等上游或自建索引
+- [x] **E3** 宿主缺会话删除/正文搜索 → 等上游或自建索引
+  - 2026-11-06 夜间：完整引擎也实现 `sessions.delete` / `sessions.search`（删 dsh 会话目录 + 扫描 vN 日志；
+    运行中拒绝），完整引擎侧不再是 unsupported；`test/real-bridge-parity.test.ts` 用假 dsh 覆盖
+    delete/search/shell/workspace 四条链路。
   - 2026-11-06：轻引擎实现 `sessions.delete`（运行中的会话拒绝删除），抽屉长按菜单加「删除」
     + 二次确认；store 删除后关闭当前会话、清理 ConversationLink、刷新列表。mock 宿主同样支持，
     完整引擎显式 unsupported。真机删掉「Do not ask questions」测试会话，
     其他会话不受影响（`148-drawer-longpress-menu.png`、`149-drawer-after-delete.png`）；
     单测覆盖删除与运行中拒绝。
-  - 仍缺：完整引擎删除与正文搜索（轻引擎已支持删除 + `sessions.search` 全文搜索）。
+  - 仍缺：上游 FTS 的实时索引（当前完整引擎搜索按需扫日志）；删除后其他在线客户端的
+    实时 `session.deleted` 事件（协议尚未加）。
 - [ ] **E4** 沙箱只有 JS 层路径约束 → 文档别承诺安全边界
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
   - 2026-11-06 第一步：新增 `scripts/device-regression.ts` + `npm run device:regression`：
@@ -547,6 +581,10 @@ type AttachmentChipsProps = {
     用 uiautomator 文本断言，失败自动截图。真机一次通过 10 步；键盘弹起时先 `hideKeyboard()`
     再按返回，否则第一次返回只收键盘。
   - 仍只有一条主路径；登录/审批/流式长会话/引擎启停/文件操作等还没进脚本。
+  - 2026-11-06 夜间 release 0.2.0 已装，`device:regression` 跑到文件页；当前轻工作区
+    (`/workspace`) 只有 `deepseek-harness/default-workspace` 且为空，脚本依赖的
+    `docs/weekly.docx` fixture 不存在，后 7 步未跑。需要在有 fixture 的工作区或先切完整
+    引擎后重跑；不是安装/启动失败。
   - 2026-11-06 手工补审批路径：真机新会话发「Use the bash tool to run: echo approval-ok…」→
     审批卡（`拒绝/批准`，显示 `执行命令`/`echo approval-ok`）→ 批准 → 工具输出 `approval-ok`
     （`169-approval-card.png`、`170-approval-approved.png`）。流式与工具行同时可见；
@@ -566,8 +604,9 @@ type AttachmentChipsProps = {
   - 关键修正（推翻旧想法）：release 默认 `debuggable=false`，装完 `run-as` 不可用；且 debug 与 release
     证书不同。所以这台设备 debug → release **必然丢 App 数据**，「卸前 tar 备份 files/shared_prefs、
     装 release 再还原」走不通。首装/升级仍等用户确认后执行（路径 A 干净首装 / 路径 B 同签名升级）。
-  - 2026-11-06 重新构建：`gradlew :app:assembleRelease` 7m51s 成功，新 APK 243.6MiB、
-    sha256 `89F9F424…`、证书 `50de0609…`；`npm run release:preflight` 全 PASS，首装仍等用户确认。
+  - 2026-11-06 夜间：versionCode bump 到 `2` / versionName `0.2.0`，重新 `assembleRelease`
+    （包含完整引擎平权、深色主题、M2.1–M2.4、LAN 发现、系统入口）；APK 244.2MiB、
+    sha256 `B847E348…`，设备已同签名 `install -r` 升级成功（数据保留）。
 
 
 ## 4. 待决事项
@@ -579,6 +618,9 @@ type AttachmentChipsProps = {
 | 插件市场（D3） | 只启用/配置 / 下载执行 | 前者（2.5.2） |
 | 多端同步（D4） | 索引+引用 / 也同步正文 | 仅索引+引用 |
 | PDF（C14） | 继续暂缓 / 重启 | 继续暂缓 |
+
+> 2026-11-06 夜间确认：PDF、OCR、LibreOffice render/recalc、旧 Office 格式、TTS
+> 本轮不做，只在文档和 UI 里标注；不要为了“看起来完整”接假入口。
 
 ## 5. 分支、提交与验证规则
 

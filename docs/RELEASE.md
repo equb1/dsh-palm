@@ -1,6 +1,7 @@
 # 发布、首装与升级（E8）
 
-> 状态：2026-11-06。当前设备装的是 **debug** 包，`app-release.apk` 还没上过设备。
+> 状态：2026-11-06 夜间。当前设备装的是 **release** 包（签名 `55df28b9`），
+> 新版 `0.2.0 (2)` 正在用同签名覆盖升级（`adb install -r`，保留数据）。
 > 本文只写发布流程和已确认的签名/数据迁移事实；**卸载/安装前必须让用户确认**。
 
 ## 1. 当前制品
@@ -8,9 +9,9 @@
 | 项 | 值 |
 |---|---|
 | APK | `app/android/app/build/outputs/apk/release/app-release.apk` |
-| 大小 / sha256 | 243.6 MiB（255,472,630 B）/ `FD7843540A885410A332659B77B6155A5389D53BAB497BD5F9787A0FAD25DCFC` |
+| 大小 / sha256 | 244.2 MiB（256,039,130 B）/ `B847E348CC7F9431DD4D51C0FD3BBA4438AE46F1EEC89F0A94EF0B01D6C52B33` |
 | applicationId | `cool.cnb.dshpalm` |
-| versionName / versionCode | `0.1.0` / `1` |
+| versionName / versionCode | `0.2.0` / `2` |
 | 签名 | V2，`CN=DSH Palm`，证书 SHA-256 `50de0609c1f781651301906c0781fe0dd039288bd5efc32883d03b9dac86628c` |
 | keystore | `app/android/keystore/release.jks` + `app/android/keystore.properties`（gitignore） |
 | 签名备份 | `D:\dsh-palm-backup\keystore-2026-11-05\`、`C:\Users\chenf\Desktop\dsh-palm-keystore-backup-2026-11-05\` |
@@ -31,6 +32,11 @@
 > 2026-11-06 06:10 又修了 release 发消息报错：patch 脚本 CRLF + 完整引擎默认 provider
 > `deepseek-official` 不可路由（缺 `DEEPSEEK_API_KEY`）。现在 bridge 会自动切到
 > `deepseek-account`，真机完整引擎 `hi` 正常回复。当前 sha256 见上表。
+>
+> 2026-11-06 夜间：versionCode `2` / versionName `0.2.0`，同签名 `adb install -r`
+> 覆盖升级（保留 release 数据）；包含完整引擎 delete/search/shell、深色主题、M2.1–M2.4、
+> LAN 发现、QS/小组件/通知直达。升级后先跑 `npm run release:preflight` 和
+> `npm run device:regression`。
 
 ## 2. 预检（只读，随时可跑）
 
@@ -38,10 +44,11 @@
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-preflight.ps1
 ```
 
-2026-11-06 输出摘要：APK/元数据/签名/设备/keystore 备份全部 PASS；
-设备已装 `0.1.0 (1)`，设备签名与 release 证书**不一致**（WARN）。
+2026-11-06 夜间输出摘要：APK/元数据/签名/设备/keystore 备份全部 PASS；
+设备已装 `0.2.0 (2)`（release 证书 `55df28b9`），预检仍会打一条“debug/release 证书不同”
+的通用 WARN（脚本按 debug 基线比较，设备本身是 release）。
 
-## 3. 关键事实：debug → release 不能直接覆盖
+## 3. 关键事实：debug → release 不能直接覆盖（当前设备已经是 release）
 
 - 设备当前 debug 包签名与 release 证书不同，`adb install -r app-release.apk` 会报
   `INSTALL_FAILED_UPDATE_INCOMPATIBLE`。

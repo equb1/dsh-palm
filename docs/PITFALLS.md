@@ -422,7 +422,7 @@
 - 处理：统一走 `SmoothKeyboardAvoid`；底部安全区单独留；不重复加 padding。
 - 验证：1–6 行输入、中文候选都不遮。
 
-### H7. 长会话流式仍抖 / 思考重复（2026-11-04 主体已修，20 分钟 soak 待补）
+### H7. 长会话流式仍抖 / 思考重复（2026-11-04 主体已修，2026-11-06 soak 通过）
 **现象**
 
 - 20+ 分钟的长任务，思考或正文输出时界面一跳一跳，不是连续流；
@@ -464,11 +464,13 @@
 - “回到底部”移入列表容器，键盘弹出时仍在 Composer 上方。
 - 新增 `test/stream-turns.test.ts` 与 `scripts/stream-replay.ts`；10 万 delta 回放通过。
 
-**仍然待做**
+**后续观察**
 
-1. **20 分钟真机 soak**：本轮完成 3000 字、工具密集长流和多次重进，但还没跑到连续 20 分钟。需要补一条带工具、键盘反复开关、多次退出重进的回归。
-2. **APK 直装**：设备旧包签名不一致，本轮按 E8 用 Metro + 手动更新 rootfs 桥验证；统一调试签名后再直接 `adb install -r` 验证 APK 内补丁。
-3. **VirtualizedList 警告**：真机仍偶发 `large list slow to update` 警告，暂不阻塞交互；后续结合性能基准调窗口参数。
+1. [x] **20 分钟 / 90 分钟真机 soak**：2026-11-05 20 分钟通过；2026-11-06 90 分钟、109 轮、
+   PSS 349→615MB、无 OOM（I10）。
+2. [x] **APK 直装**：设备已统一 release 签名，`adb install -r` 覆盖升级保留数据。
+3. **VirtualizedList 警告**：真机仍偶发 `large list slow to update` 警告，暂不阻塞交互；
+   后续结合 >200 轮长上下文再调窗口参数。
 
 **验证方式**
 
@@ -704,3 +706,29 @@
   拒绝 `..`、根目录改名/删除，列表跳过软链，500 条上限。UI 复用 FilesScreen。
 - 验证：`test/bridge-workspace.test.ts` 覆盖列表/改名/删除/穿越/软链；桥补丁需
   `node scripts/build-bridge.mjs` 后重打 APK；真机已验 fs.list/delete，rename 由单测覆盖。
+
+### I17. 完整引擎 delete/search 只能走 dsh 磁盘布局（2026-11-06）
+
+- 现象：dsh 远程 API 没有 session/delete、session/search；强行做会在宿主内存里留下幽灵会话。
+- 原因：会话持久化在 `$DSH_HOME/sessions/--<project>--/<encoded-id>/session.vN.jsonl.zstd`，
+  上游没有删除 seam，搜索 FTS 默认还是 `:memory:` + `openAt: never`。
+- 处理：`sessionFs.ts` 复刻 `projectKey`/`encodeSegment`，删除会话目录后加 250ms 二次确认，
+  并在桥内用 tombstone 立即过滤列表/详情/搜索；搜索按需解多帧 zstd，复用 `projectRecords`。
+- 验证：`test/bridge-session-fs.test.ts` 覆盖路径/代际选择/删除；`bridge-session-search.test.ts`
+  覆盖标题/用户/思考/正文/片段。代价是首次搜索大历史可能接近客户端 15s 超时。
+
+### I18. just-bash 进桥会拉原生 zstd/liblzma（2026-11-06）
+
+- 现象：`node scripts/build-bridge.mjs` 报 `.node` 无 loader、`node-liblzma` 解析失败。
+- 原因：`just-bash` 的 Node 入口带可选原生压缩依赖；桥只需要解释器和自己的 SandboxFs。
+- 处理：`build-bridge.mjs` 用 esbuild plugin 把 `just-bash` 固定指向
+  `dist/bundle/browser.js`；桥体积约 1.6MB，运行时不需要那些原生模块。
+- 验证：桥构建通过；`shell.run` 的 pwd/ls/写拒绝由校验用例覆盖。
+
+### I19. Android 16 局域网发现要组播锁和本地网络权限（2026-11-06）
+
+- 现象：mDNS 广播存在，但手机 NSD 扫不到；或 Android 16 直接拒绝本地网络访问。
+- 原因：Android 默认过滤组播；targetSdk 36 还要 `ACCESS_LOCAL_NETWORK`。
+- 处理：HostService 启动时持有 `WifiManager.MulticastLock`，退出释放；manifest 加
+  `ACCESS_LOCAL_NETWORK`/`CHANGE_WIFI_MULTICAST_STATE`，HostModule 提供按需请求。
+- 验证：连接页「扫描局域网」应列出桥的 `_dsh-palm._tcp`；扫不到时仍可手填地址。

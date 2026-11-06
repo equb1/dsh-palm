@@ -1,6 +1,6 @@
 # 锦囊 · 长会话流式输出修复方案
 
-> 状态：2026-11-04 主体完成，20 分钟 soak 待补。对应 `PITFALLS.md` H7、`AI-TASKS.md` U9。
+> 状态：2026-11-06 完成（20 分钟 + 90 分钟真机 soak 均通过）。对应 `PITFALLS.md` H7、`AI-TASKS.md` U9。
 > 本文是长流式问题的实施方案与验收记录；产品需求、实现机制、任务状态仍分别以四篇主文档为准。
 
 ## 1. 问题定性
@@ -214,11 +214,12 @@ npm run verify
 2. **程序滚动/测量修正误冻结追底**：仅靠 offset 变化判断用户上滑，会被 FlatList 动态测量修正误触发。现在必须真实触摸 + `onScrollBeginDrag` 才进入用户拖拽状态。
 3. **键盘弹出时跳到底部按钮被盖住**：按钮从 `SmoothKeyboardAvoid` 的绝对定位移入列表容器，始终在 Composer 上方。
 
-### 8.3 仍待完成
+### 8.3 后续观察
 
-- [ ] 真机 20 分钟连续 soak（工具 + 多次重进 + 键盘反复开关）；本轮已完成 3000 字、工具密集长流验证，但未达到 20 分钟。
-- [ ] 安装包统一签名后直接 `adb install -r` 验证 APK 内新桥；本轮设备旧包签名不同，按 `PITFALLS.md` E8 使用 Metro + 手动更新 rootfs 桥验证。
-- [ ] 观察 `VirtualizedList` 的 slow update 警告；当前不阻塞交互，后续结合性能基准再调窗口参数。
+- [x] 真机 20 分钟连续 soak（2026-11-05，33 回合 / 41 次流式；见 PITFALLS I10）。
+- [x] 真机 90 分钟连续 soak（2026-11-06，109 轮，PSS 349→615MB，无 OOM）。
+- [x] 统一 release 签名后 `adb install -r`，桥补丁随 APK assets 同步。
+- [ ] `VirtualizedList` 的 `large list slow to update` 仍偶发；不阻塞交互，后续结合 >200 轮长上下文再观察。
 
 ### 8.4 验证命令
 

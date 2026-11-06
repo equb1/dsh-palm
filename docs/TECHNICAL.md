@@ -87,8 +87,10 @@ UI 侧统一经 `app/src/lib/errors.ts` 翻成人话。
   发送：`session/send`；插话：`session/steer`；取消：`session/cancel`；
   改名：`session/rename { request: { sessionId, title } }`。
 - 钉/归档在 workspace 控制器：`workspace/pinSession|unpinSession|archiveSession|unarchiveSession`。
-- **没有**会话删除、正文搜索的远程接口。
-- 文件接口 `fs.list/rename/delete` 不经过 dsh：桥在 proot 内直接用 Node fs 读写 `/root/work`（见 §5.1）。
+- **没有**会话删除、正文搜索的远程接口；桥在 proot 内按 dsh 磁盘布局直接处理
+  （`engine/src/real/sessionFs.ts`：删会话目录、扫 `session.vN.jsonl.zstd`）。
+- 文件接口 `fs.list/rename/delete` 不经过 dsh：桥在 proot 内直接用 Node fs 读写
+  默认工作区（优先会话真实 cwd，回退 `/root/work`；见 §5.1）。
 - 事件投影：`engine/src/real/project.ts` 把 `user/message`、`assistant/message`、工具调用等
   折成 `Turn/Block`；`run.finished` 映射状态。非流式 `assistant/message` 用最终全文覆盖
   同一步骤的流式块，按 seq/message id 去重，工具调用按 callId 去重，usage 累加到回合。
@@ -183,15 +185,19 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
 - 文件名：`lib/filenames.ts` 统一清洗（中文/空格/`#`/`%` 等），生成工具与审批卡共用。
 - 文件浏览（U8）：协议 `fs.list` / `fs.rename` / `fs.delete` 由轻宿主用工作区 `SandboxFs` 实现
   （`/` 根、name/kind/size/mtime，500 条上限；根目录不可重命名/删除）。
-  完整引擎由桥的 `engine/src/real/workspaceFs.ts` 直接读写 `/root/work`：同样支持 list/rename/delete，
-  拒绝 `..`/根目录改名删除，软链不跟随；不依赖 dsh 远程接口。
-- 只读终端（U8）：`shell.run` 由轻宿主用独立只读挂载（Workspace SandboxFs `readOnly` + MountableFs）
-  跑 ShellRunner，写操作返回 EACCES；15s 超时、20k 输出；完整引擎 unsupported。
+  完整引擎由桥的 `engine/src/real/workspaceFs.ts` 直接读写：根优先取最近会话的真实 cwd
+  （如 `/root/work/deepseek-harness/default-workspace`），回退 `/root/work`；同样支持
+  list/rename/delete，拒绝 `..`/根目录改名删除，软链不跟随；不依赖 dsh 远程接口。
+- 只读终端（U8）：`shell.run` 用独立只读挂载（Workspace SandboxFs `readOnly` + MountableFs）
+  跑 ShellRunner，写操作返回 EACCES；15s 超时、20k 输出。轻宿主和完整引擎共用同一套实现；
+  桥打包时 `just-bash` 固定走 browser 入口，避免可选原生 zstd/liblzma 依赖。
 - 会话运行（E2）：同一会话同时最多一个 run；运行中再 `sessions.send` 会写历史并进
   `session.queued`（返回 `queued:true`），当前 run 结束后自动开下一条；UI 仍以插话/停止为主。
 - 会话管理（E3）：轻宿主实现 `sessions.delete`（运行中拒绝）和 `sessions.search`（标题/历史/思考
-  正文，返回片段与命中数）；`sessions.pin` 的状态进 `SessionSummary.pinned`，抽屉据此分「置顶」组；
-  完整引擎对 delete/search 显式 unsupported。
+  正文，返回片段与命中数）；`sessions.pin` 的状态进 `SessionSummary.pinned`，抽屉据此分「置顶」组。
+  完整引擎同样实现 delete/search：删除 dsh 会话目录（含 200ms 写句柄兜底），搜索按需读
+  `session.vN.jsonl.zstd` 并复用 `projectRecords`，语义与轻引擎对齐；大历史首次搜索受
+  15s 请求超时约束。
 - 图片视觉（M2.4）：`engine/light/vision.ts` 按模型名启发式识别视觉能力；图片读成 data URL，
   单张 8MB、合计 16MB、最多 4 张；非视觉/超限降级为路径并在正文提示。历史只落 `imageFiles`（路径+MIME），
   请求前才读字节，provider 转成 OpenAI `content` array；不把 base64 写进会话 JSON。
@@ -489,9 +495,22 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 
 ### 8.7 未做
 
-U8 的完整引擎文件系统/终端、多工作区（M2）、小组件/悬浮球、通知直达会话。
-浅色/深色主题、字号档、动效 token、全部功能页、文件/工作区/只读终端均已完成；
-任务状态见 [AI-TASKS](AI-TASKS.md)。
+多工作区的置顶/分组/排序、悬浮球、E2E 加密 WS、多宿主索引/密钥分仓、完整离线状态机。
+完整引擎文件系统/终端/delete/search、工作区新建、浅色/深色主题、字号档、动效 token、
+全部功能页、通知直达、QS 磁贴、桌面小组件均已完成；任务状态见 [AI-TASKS](AI-TASKS.md)。
+
+### 8.8 LAN 发现与系统入口（M3.2/M3.3 第一步）
+
+- 桥身份：`engine/src/real/identity.ts` 把 hostId/name/fingerprint 持久化到
+  `DSH_PALM_DEVICES` 同目录；`capabilities.host` 带 `fingerprint`。
+- mDNS：`engine/src/real/discovery.ts` 广播 `_dsh-palm._tcp`，TXT 只含 id/name/kind/path/fp/v；
+  不广播会话正文或凭据。找不到组播时静默降级。
+- Android：`HostModule.discoverLanHosts` 用 `NsdManager` 扫描并 resolve；HostService 持有
+  Wi-Fi multicast lock；Android 16 声明 `ACCESS_LOCAL_NETWORK` 并按需请求。
+- 连接页：扫描结果点一下填 `ws://host:port/ws`，配对码仍由用户输入；`remoteHost` 存在
+  UI cache，断线后可「重连」。仍未做多宿主密钥分仓和 E2E。
+- 系统入口：`DshTileService`（QS）、`DshWidgetProvider`（桌面小组件）、通知 ACTION_VIEW
+  直达会话/审批；HostService 常驻通知也可点回 App。悬浮球未接。
 
 > 注：1.5 的「生成文件」弹层（`GeneratedFilesSheet`，只列本会话工具生成的文件、可打开）已落地，
 > 不等于这里的 U8 全功能文件面板（全工作区浏览/上传管理/重命名/搜索/分享）。
