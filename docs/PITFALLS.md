@@ -753,3 +753,19 @@
   手机 ping PC 100% 丢包，mDNS 因此无法跨设备验收。要么加防火墙规则，要么换同一交换机/
   关闭 AP 隔离。
 - 验证：手机允许附近设备权限后扫描仍空时，先查 `ping <pc>` 和防火墙，不要先怀疑代码。
+
+### I22. 会话抽屉展开卡顿（2026-11-06）
+
+- 现象：点左上角打开抽屉，展开瞬间明显掉帧；`dumpsys gfxinfo` 8 次开合
+  Janky 6.42%（14/218），每次展开约 1 帧超时。
+- 原因 1：抽屉关闭时整棵内容卸载，展开时一边启动 200ms 位移动画、一边挂载
+  129 个原生 View 并 layout，挂载和动画抢同一帧。
+- 原因 2：`renderToHardwareTextureAndroid` 在动画首帧申请整块面板纹理，
+  首帧额外卡顿。
+- 原因 3：每次 store patch 都重算 `sessionRows()`/筛选/分组；抽屉展开时
+  HomeScreen 也订阅整份 store。
+- 处理：Home 空闲 350ms 预挂载抽屉并保持挂载（关闭只移出屏幕，`pointerEvents`
+  置 none）；首次未预挂载时等一帧再启动动画；去掉 backdrop/panel 的硬件纹理；
+  `sessionRows`/搜索/筛选/分组改用 `useMemo`。
+- 验证：同机同脚本 8 次开合 Janky **3.51%（8/228）**；单独 5 次展开均
+  **0 janky frame**，5 次关闭 4 次 0、1 次 1 帧。`npm run verify` 全绿。

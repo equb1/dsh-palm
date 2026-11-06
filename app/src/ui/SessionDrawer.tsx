@@ -129,6 +129,8 @@ export function SessionDrawer({
       : maskPhone(phone)
     : 'DeepSeek 账号';
   const [mounted, setMounted] = React.useState(visible);
+  const mountedRef = React.useRef(mounted);
+  mountedRef.current = mounted;
   const [q, setQ] = React.useState('');
   const [filter, setFilter] = React.useState<SessionFilter>('all');
   /** U6 文件夹：筛选 + 给会话改名/移动 */
@@ -140,16 +142,37 @@ export function SessionDrawer({
   const [renameText, setRenameText] = React.useState('');
   const [searchFocused, setSearchFocused] = React.useState(false);
 
+  /**
+   * 抽屉内容提前 mount（Home 空闲 350ms 后）并保持挂载。
+   *
+   * 之前每次展开都在动画启动的同一帧挂载整棵会话树，129 个原生 View 的
+   * layout 会和位移动画抢帧，表现就是展开瞬间卡一下。预挂载后展开只是一次
+   * native transform；关闭只把面板移出屏幕，不再卸载/重建。
+   */
+  React.useEffect(() => {
+    if (visible || mounted) return;
+    const timer = setTimeout(() => setMounted(true), 350);
+    return () => clearTimeout(timer);
+  }, [visible, mounted]);
+
   React.useEffect(() => {
     if (visible) setMounted(true);
-    Animated.timing(anim, {
+    const animation = Animated.timing(anim, {
       toValue: visible ? 1 : 0,
       duration: motion.duration.base,
       easing: motion.easing.standard,
       useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished && !visible) setMounted(false);
     });
+    if (visible && !mountedRef.current) {
+      // 极端情况下用户在预挂载前就点开：等一帧让内容完成 layout 再动画。
+      const timer = setTimeout(() => animation.start(), 16);
+      return () => {
+        clearTimeout(timer);
+        animation.stop();
+      };
+    }
+    animation.start();
+    return () => animation.stop();
   }, [visible, anim]);
 
   React.useEffect(() => {
@@ -157,39 +180,54 @@ export function SessionDrawer({
     void loadAccountPhone().then(setLocalPhone);
   }, [visible]);
 
-  if (!mounted) return null;
-
   const presets = state.caps?.presets ?? [];
   const currentEngine = state.engineKind === 'light' ? 'light' : 'full';
-  const sessions = store.sessionRows();
+  const sessions = React.useMemo(
+    () => store.sessionRows(),
+    [state.sessions, state.sessionCache, state.engineKind],
+  );
   const keyword = q.trim().toLowerCase();
-  const matched = keyword
-    ? sessions.filter((s) => `${s.title}${s.preview}`.toLowerCase().includes(keyword))
-    : sessions;
-  const folderNames = Array.from(new Set(Object.values(state.sessionFolders))).sort();
-  const filtered = matched.filter((s) => {
-    if (folderFilter && state.sessionFolders[s.id] !== folderFilter) return false;
-    if (filter === 'running') return s.status === 'running' || s.status === 'waiting_approval';
-    if (filter === 'waiting') return s.status === 'waiting_approval';
-    if (filter === 'unread') return s.unread > 0;
-    return true;
-  });
-
-  const running = filtered.filter((s) => s.status === 'running' || s.status === 'waiting_approval');
-  const pinned = filtered.filter((s) => s.pinned === true && !running.includes(s));
-  const today = filtered.filter(
-    (s) => !running.includes(s) && !pinned.includes(s) && s.updatedAt >= startOfToday(),
+  const matched = React.useMemo(
+    () =>
+      keyword
+        ? sessions.filter((s) => `${s.title}${s.preview}`.toLowerCase().includes(keyword))
+        : sessions,
+    [sessions, keyword],
   );
-  const older = filtered.filter(
-    (s) => !running.includes(s) && !pinned.includes(s) && s.updatedAt < startOfToday(),
+  const folderNames = React.useMemo(
+    () => Array.from(new Set(Object.values(state.sessionFolders))).sort(),
+    [state.sessionFolders],
+  );
+  const filtered = React.useMemo(
+    () =>
+      matched.filter((s) => {
+        if (folderFilter && state.sessionFolders[s.id] !== folderFilter) return false;
+        if (filter === 'running') return s.status === 'running' || s.status === 'waiting_approval';
+        if (filter === 'waiting') return s.status === 'waiting_approval';
+        if (filter === 'unread') return s.unread > 0;
+        return true;
+      }),
+    [matched, folderFilter, state.sessionFolders, filter],
   );
 
-  const groups: Array<{ title: string; items: SessionRow[] }> = [
-    { title: '置顶', items: pinned },
-    { title: '运行中', items: running },
-    { title: '今天', items: today },
-    { title: '更早', items: older },
-  ].filter((g) => g.items.length > 0);
+  const groups = React.useMemo(() => {
+    const running = filtered.filter((s) => s.status === 'running' || s.status === 'waiting_approval');
+    const pinned = filtered.filter((s) => s.pinned === true && !running.includes(s));
+    const today = filtered.filter(
+      (s) => !running.includes(s) && !pinned.includes(s) && s.updatedAt >= startOfToday(),
+    );
+    const older = filtered.filter(
+      (s) => !running.includes(s) && !pinned.includes(s) && s.updatedAt < startOfToday(),
+    );
+    return [
+      { title: '置顶', items: pinned },
+      { title: '运行中', items: running },
+      { title: '今天', items: today },
+      { title: '更早', items: older },
+    ].filter((g) => g.items.length > 0);
+  }, [filtered]);
+
+  if (!mounted) return null;
 
   const renderRow = (s: SessionRow): React.ReactElement => {
     const preset = presets.find((p) => p.id === s.presetId);
@@ -303,16 +341,17 @@ export function SessionDrawer({
   };
 
   return (
-    <View style={styles.overlay}>
-      <Animated.View
-        renderToHardwareTextureAndroid
-        style={[styles.backdrop, { opacity: anim }]}
-      >
+    <View
+      style={styles.overlay}
+      pointerEvents={visible ? 'auto' : 'none'}
+      accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
+    >
+      <Animated.View style={[styles.backdrop, { opacity: anim }]}>
         <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="关闭会话抽屉" />
       </Animated.View>
 
       <Animated.View
-        renderToHardwareTextureAndroid
         style={[
           styles.panel,
           {
@@ -573,7 +612,6 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
       right: 0,
       bottom: 0,
       justifyContent: 'flex-start',
-      pointerEvents: 'box-none',
     },
     backdrop: {
       position: 'absolute',

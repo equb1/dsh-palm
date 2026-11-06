@@ -304,6 +304,8 @@
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）
+  - 2026-11-06 夜间抽屉展开优化：空闲预挂载 + 关闭不卸载 + 去掉面板硬件纹理 +
+    useMemo；同机 8 次开合 Janky 6.42%→3.51%，单独展开 0 掉帧（PITFALLS I22）。
 
 #### 可并行 UI 项（2026-11-03，给 agent）
 
@@ -609,7 +611,7 @@ type AttachmentChipsProps = {
     装 release 再还原」走不通。首装/升级仍等用户确认后执行（路径 A 干净首装 / 路径 B 同签名升级）。
   - 2026-11-06 夜间：versionCode bump 到 `2` / versionName `0.2.0`，重新 `assembleRelease`
     （包含完整引擎平权、深色主题、M2.1–M2.4、LAN 发现、系统入口）；APK 244.2MiB、
-    sha256 `500651F1…`，设备已同签名 `install -r` 升级成功（数据保留）。
+    sha256 `ADA52EA0…`，设备已同签名 `install -r` 升级成功（数据保留）。
 
 
 ## 4. 待决事项
