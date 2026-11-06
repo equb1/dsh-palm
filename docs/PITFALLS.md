@@ -648,6 +648,15 @@
   算中心点再 tap；点击后截图确认状态，不连点。输入用 `adb shell input text`（空格写 `%s`）。
 - 验证：2026-11-06 用 bounds 点发送/选项/批准，提问/审批/能力门三类卡片一次走通。
 
+### I12. `verify` 偶发 ENOTEMPTY 清理失败（2026-11-06，观察）
+
+- 现象：`npm run verify` 偶发 `ENOTEMPTY: directory not empty, rmdir …/dsh-palm-light-*/sessions`，
+  单跑重试即过；首次 240 pass，第二次 240 pass / 1 fail，第三次又全绿。
+- 原因：`test/light-engine.test.ts` 的 `after` 用 `rm(recursive)` 清临时目录时，测试内仍有
+  异步落盘收尾，属于测试清理竞争，不是产品代码失败。
+- 处理：偶发时重跑确认；频繁出现再给 `after` 的 `rm` 加退避重试或等宿主句柄关闭。
+- 验证：连续重跑 `npm run verify` 全绿（数量以命令输出为准）。
+
 
 
 

@@ -33,7 +33,7 @@ npm run release:preflight           # 只读预检
 ## 风险 / 未完成
 
 - **深色主题**未做，需按 `docs/DARK-THEME.md` 单独重构样式层。
-- **M2.7 OAuth** 只差用户在浏览器完成一次授权（代码路径已就绪）。
-- **release 首装**未执行：当前设备 debug 与 release 证书不同，切换会清 App 数据，需用户确认。
+- **M2.7 OAuth** 已在 release 真机完成授权闭环（2026-11-06）；3.1 的「拒绝授权」路径仍未验证。
+- **release 首装**已通过（2026-11-06，release 签名，首启解压约 46s）；正式升级演练仍未做。
 - release APK 的 versionCode 仍为 1；正式覆盖升级前要 bump `DSH_PALM_VERSION_CODE`。
 - `develop` 与远端有历史分叉（43 个本地提交未推），合并前先确认 develop 状态。

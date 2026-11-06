@@ -42,8 +42,8 @@
   用 `x-dsh-auth-token` 调模型，**账号已登录时不需要手动填 API Key**；切回轻引擎也不再报失败。
 - 轻引擎工具历史已清洗（2026-11-05）：中断/停止后 assistant `tool_calls` 悬空会导致下一次
   请求 400，现于发请求前统一补齐 `[已停止] 未执行` 并丢弃孤立 tool 消息（`light/history.ts`）。
-- 真机发现（2026-11-05）：轻引擎账号模式的 token 过期后模型调用返回 401，错误横幅已能显示
-  「登录或 API Key 无效/已过期（401）」，但还没有重登入口（M2.7）。
+- 账号重登闭环（2026-11-06 验收）：轻引擎 401 横幅的「重新登录」入口已可用；release 上浏览器
+  OAuth 授权完成（页面「授权已完成」），回 App 已登录、模型可选（见 M2.7）。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎附件只给路径，不解析图片/PDF；
   轻引擎无文档编辑、无 pptx（复杂/编辑/pptx 走完整引擎）。
@@ -198,7 +198,7 @@
     真机：预热约 20s 后 `engine=ready bridge=ready :8788`、状态环变绿，停止后回 stopped
     （`131-engine-screen.png`、`132-engine-running.png`、`133-engine-stopped.png`）。
     失败卡未真机触发（需要坏命令/坏 rootfs），代码路径已接。
-- [ ] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
+- [x] **U6 全部功能页 + 抽屉**：卡片网格、筛选胶囊、文件夹/长按菜单、整页搜索
   - 2026-11-06 第一步：抽屉加筛选胶囊「全部 / 运行中 / 待确认 / 未读」，按 `SessionSummary.status`
     和 `unread` 过滤，空结果有单独空状态；长按菜单（置顶/归档/改名/反向交接）原有。
   - 真机：全部/待确认/未读切换、空状态（`139-drawer-filters.png`、`140-drawer-filter-empty.png`）。
@@ -211,7 +211,8 @@
     返回片段/命中数，20 条上限）；抽屉搜索框加「全文」，新 `ui/SearchScreen.tsx`（250ms 防抖、
     命中卡片、点开直接进会话）。真机搜 `python` 命中 3 条会话、点结果打开原会话
     （`153-search-results.png`、`154-search-open-session.png`）；单测覆盖命中/空词拒绝。
-  - 未做：文件夹分组；正文搜索只覆盖轻引擎本地会话，完整引擎显式 unsupported。
+  - 未做：自动/多层文件夹分组（自定义文件夹已完成）；正文搜索只覆盖轻引擎本地会话，
+    完整引擎显式 unsupported。
   - 2026-11-06 第四步：置顶分组——`SessionSummary` 带 `pinned`（轻宿主 summary 透出），
     抽屉把置顶会话放在最上面的「置顶」组（运行中的仍优先归「运行中」）。真机长按「Use the bash」
     → 置顶 → 顶部出现置顶组；再取消置顶组消失（`155-drawer-pinned.png`）；单测覆盖 pin 状态。
@@ -221,6 +222,8 @@
     真机：移到 `work` 后行标签和胶囊出现，点 work 只剩 1 条会话（`162-folder-tag.png`、
     `163-folder-filter.png`）。
   - 文件夹是 UI 层标签，不改宿主/工作区；协议没有 folder 字段。
+  - 2026-11-06 验收：筛选/全部功能/正文搜索/置顶/自定义文件夹全部通过
+    （`ACCEPTANCE-2026-11-06`）；完整引擎正文搜索与多工作区仍属后续项。
 - [ ] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
   - 2026-11-06 前置：外观组加了「完成后收起过程」开关（`collapseProcess`，默认开，
     持久化在 UI cache）；关掉后完成的回合默认展开思考/工具过程，收起/展开仍可手动点。
@@ -234,6 +237,8 @@
     对话字号」点按循环 标准/大/特大；`MarkdownView` 按倍率重建模块样式（fontSize/lineHeight），
     `TurnView` 用户气泡同步缩放；真机同一会话标准 vs 特大对比（`166-font-standard.png`、
     `167-font-large.png`、`168-settings-font.png`）。
+  - 2026-11-06 验收：字号档 + 页面/设置行动效 ✅；深色主题 ❌（唯一剩余项，方案见
+    [DARK-THEME](DARK-THEME.md)）。
 - [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
   - 2026-11-06 第一步：轻宿主加 `fs.list`（列 `/workspace` 目录，返回 name/kind/size/mtime，
     子项 500 条上限、单子项 stat 失败不拖垮整页）；新增 `ui/FilesScreen.tsx` 文件浏览器
@@ -261,11 +266,16 @@
     → `EACCES: read-only file system`（`164-terminal.png`、`165-terminal-readonly.png`）；
     单测覆盖 pwd/echo/ls/写拒绝/空命令。
   - 未做：多工作区创建/置顶/分组（M2）；完整引擎 fs/终端。
+  - 2026-11-06 验收：文件浏览/搜索/重命名/删除/分享、工作区概览、只读终端 ✅；
+    完整引擎 fs/终端未实现（显式 unsupported），整体保持未完成。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）
 
 #### 可并行 UI 项（2026-11-03，给 agent）
+
+> 历史规划。U1/U4/U5/U6/U9 已完成，U7/U8 部分完成；当前状态以上方任务清单和
+> `ACCEPTANCE-2026-11-06` 为准，下表的「现在不要做」不再适用。
 
 **背景**：1.2/1.3/1.4 会改 `App.tsx`、`store.ts`、`SettingsScreen.tsx`、
 `ConnectScreen.tsx`、`Composer.tsx`、`ChatScreen.tsx` 的逻辑。
@@ -411,30 +421,34 @@ type AttachmentChipsProps = {
     `model=deepseek-chat`），seed 气泡被 strip；原完整会话在完整引擎里变只读。
     单测 `turnDetailToHistory`/`buildReverseSeedText`；`npm run verify` 218 pass。
     截图 `scratch/shots/114-reverse-handoff.png`、`115-reverse-continued.png`。
-- [ ] **2.7 账号 token 生命周期**
+- [x] **2.7 账号 token 生命周期**
   - 轻引擎 401 时明确提示“账号登录已过期，切完整模式重新登录”；
   - 提供重登入口；不要静默失败。
   - 现状（2026-11-05）：401 横幅已能显示（真机验证 `Authentication Fails (governor)`），
     并加了「重新登录」按钮（切完整引擎 + 打开设置；账号卡已登录时也有「重新登录」= 退出后重走 OAuth）。
     真机已验证：点 401 横幅「重新登录」→ 完整引擎 ready → 设置「模型与凭据」页，
     账号卡「已登录」且有 重新登录/退出登录/查看用量，底部「当前引擎 完整引擎（本机）」。
-    浏览器 OAuth 授权本身仍未真机走完；重登后切回轻引擎自动用新 token 的代码路径已补（见下）。
+    2026-11-05 时浏览器 OAuth 授权未真机走完；现已于 2026-11-06 在 release 完成（见下）。
     2026-11-05 新证据：**同一账号 token 在完整引擎可用**（bash python 三库返回版本），
     根因是旧保存配置缺 `authMode/authToken`，轻引擎以 `auth=none` 请求（PITFALLS I7）。
     已在 `resolveLightSetup` 自动补账号 token 并加 `[light] auth=…` 日志；真机日志已变
     `auth=account(64) base=https://api.deepseek.com/v1`。**已真机复验通过（2026-11-05 20:49）**：
     发 “hi” 得到 `[light] ttft=982ms stream=1312ms model=deepseek-chat step=1 first=content tools=0
     usage=in:2152,out:42 run=…` 且 `done`，不再 401。
-    恢复入口/重登按钮保留，浏览器 OAuth 重登流程仍未走完。
+    恢复入口/重登按钮保留。
     2026-11-06：新增 `withFreshAccountToken`（`engine/light/config.ts`），`resolveLightSetup`
     在账号模式每次重连都重读 `loadAccountToken()`，缓存里的旧 token 只在新 token 读不到时回退；
     浏览器 OAuth 重登后切回轻引擎不会再用旧 64 字符 token。单测 4 条；
-    真机仍受“需要用户完成一次授权”限制，未走完整闭环。
+    **2026-11-06 release 真机验收**：浏览器 OAuth 授权完成（页面显示「授权已完成」），
+    回 App 已登录、模型可选（`ACCEPTANCE-2026-11-06` M2.7 行），重登闭环通过。
+    token 无 refresh，过期后仍走 401 横幅「重新登录」恢复。
 
 
-### M3 · 未开始
+### M3 · 进行中
 
 - [ ] **3.1 官方 OAuth 真机验证**（loopback + 拒绝授权）
+  - [x] 正常授权 loopback：release 真机通过（2026-11-06，页面「授权已完成」、回 App 已登录）
+  - [ ] 用户拒绝授权路径未验证（需确认上游回调对 `error` 参数的处理）
 - [ ] **3.2 LAN 直连**（mDNS、E2E WS、索引同步、离线状态机）
 - [ ] **3.3 系统入口**（小组件、悬浮球、QS、通知直达、后台分享）
 
