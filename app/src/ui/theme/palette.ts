@@ -316,6 +316,26 @@ export const motion = {
     accelerate: Easing.in(Easing.cubic),
     emphasis: Easing.inOut(Easing.quad),
   },
+  spring: {
+    /** 页面 push/pop：约 300ms 收敛，临界阻尼，不 overshoot */
+    page: {
+      stiffness: 600,
+      damping: 44,
+      mass: 0.9,
+      overshootClamping: true,
+      restDisplacementThreshold: 0.5,
+      restSpeedThreshold: 0.5,
+    },
+    /** 抽屉/底部弹层：跟手松手后约 300ms 收敛 */
+    sheet: {
+      stiffness: 700,
+      damping: 46,
+      mass: 0.9,
+      overshootClamping: true,
+      restDisplacementThreshold: 0.5,
+      restSpeedThreshold: 0.5,
+    },
+  },
 } as const;
 
 export const topInset = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) : 0;

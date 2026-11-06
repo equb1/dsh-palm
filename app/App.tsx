@@ -12,7 +12,7 @@ import { SearchScreen } from './src/ui/SearchScreen';
 import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
 import { TerminalScreen } from './src/ui/TerminalScreen';
 import { PluginsScreen } from './src/ui/PluginsScreen';
-import { ScreenFade } from './src/ui/components/ScreenFade';
+import { ScreenStack } from './src/ui/components/ScreenStack';
 import { store, useStore } from './src/ui/useStore';
 import { ThemeProvider, useTheme, useThemedStyles, type Theme } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
@@ -173,8 +173,18 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
     );
 
   // web 上收成一列手机宽度，两边留黑，看起来才像手机
-  const screenKey = `${state.view}:${state.detail?.id ?? ''}:${state.connectModalOpen ? 'connect' : ''}`;
-  const shown = <ScreenFade trigger={screenKey}>{screen}</ScreenFade>;
+  // 详情页只占栈里的一层：在聊天页里换会话不重复 push（否则越切越深）。
+  const screenKey =
+    state.detail && !state.connectModalOpen
+      ? 'main:detail'
+      : `${state.view}:${state.connectModalOpen ? 'connect' : ''}`;
+  const screenDepth =
+    state.view === 'main' && !state.detail && !state.connectModalOpen ? 0 : 1;
+  const shown = (
+    <ScreenStack screenKey={screenKey} depth={screenDepth}>
+      {screen}
+    </ScreenStack>
+  );
 
   const statusBar = <StatusBar barStyle={theme.resolved === 'dark' ? 'light-content' : 'dark-content'} />;
 

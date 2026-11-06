@@ -213,6 +213,8 @@ export interface AppState {
   sessionCache: Record<SessionEngine, SessionSummary[]>;
   currentId: string | null;
   detail: SessionDetail | null;
+  /** 详情页已先推入、正文还在后台拉取（转场期间显示骨架） */
+  detailLoading: boolean;
   approvals: Record<string, Approval>;
   error: string | null;
   busy: boolean;
@@ -414,6 +416,7 @@ export class Store {
     sessionCache: { light: [], full: [] },
     currentId: null,
     detail: null,
+    detailLoading: false,
     approvals: {},
     error: null,
     busy: false,
@@ -1181,6 +1184,7 @@ export class Store {
       conn: 'closed',
       caps: hostAvailable ? LOCAL_DEFAULT_CAPS : null,
       detail: null,
+      detailLoading: false,
       currentId: null,
       account: null,
       engineKind: null,
@@ -1468,15 +1472,35 @@ export class Store {
     const logicalId = link?.id ?? id;
     const cached = this.detailCache.get(logicalId);
     this.detailCache.delete(logicalId);
-    // 重进会话先把 currentId/detail 切过去，避免 sessions.get 期间到达的流式帧被丢
-    this.patch(
-      cached
-        ? { busy: true, error: null, currentId: logicalId, detail: cached }
-        : { busy: true, error: null },
-    );
+    // 先推一个空壳详情：点击后右侧页面立刻滑入，标题/输入框先到位，
+    // sessions.get 在转场动画期间并行拉取；不要让用户等 IPC 再开始转场。
+    const summary = this.state.sessions.find((s) => s.id === logicalId || s.id === id);
+    const fallback: SessionDetail = summary
+      ? { ...summary, turns: [], contract: { tools: [], net: 'allow' } }
+      : {
+          id: logicalId,
+          title: '会话',
+          presetId: this.state.draftPresetId ?? 'standard',
+          workspaceId: '',
+          hostId: this.state.caps?.host.id ?? 'local',
+          status: 'idle',
+          updatedAt: Date.now(),
+          unread: 0,
+          preview: '',
+          turns: [],
+          contract: { tools: [], net: 'allow' },
+        };
+    this.patch({
+      busy: true,
+      error: null,
+      currentId: logicalId,
+      detail: cached ?? fallback,
+      detailLoading: !cached,
+    });
 
     if (link) {
       await this.openLinkedSession(link, cached);
+      this.patch({ detailLoading: false });
       return;
     }
 
@@ -1489,7 +1513,7 @@ export class Store {
         : undefined;
       if (live) turns = overlayLiveTurn(turns, live);
       turns = normalizeTurns(turns);
-      this.patch({ detail: { ...session, turns }, currentId: id, busy: false });
+      this.patch({ detail: { ...session, turns }, currentId: id, busy: false, detailLoading: false });
       // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
       const { approvals } = await this.client.request('approvals.list', { sessionId: id });
       const map: Record<string, Approval> = {};
@@ -1498,6 +1522,7 @@ export class Store {
       }
       this.patch({ approvals: map });
     } catch (err) {
+      this.patch({ detailLoading: false });
       this.fail(err);
     }
   }
@@ -1581,7 +1606,7 @@ export class Store {
       // 只有轻引擎侧的 detail 才值得作为 merge 基底；完整侧不要反向覆盖
       if (!link || link.activeSide === 'light') this.baseDetails.set(currentId, detail);
     }
-    this.patch({ detail: null, currentId: null });
+    this.patch({ detail: null, currentId: null, detailLoading: false });
   }
 
   async createSession(presetId: string, workspaceId?: string): Promise<void> {

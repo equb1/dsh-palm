@@ -22,6 +22,7 @@ import { LabScreen } from './settings/LabScreen';
 import { ProvidersScreen } from './settings/ProvidersScreen';
 import { ThemeScreen } from './settings/ThemeScreen';
 import { SettingsGroup, type SettingsRow } from './settings/SettingsTile';
+import { ScreenStack } from './components/ScreenStack';
 
 /** U4：设置首页只做导航；每行点进独立二级页 */
 type SettingsRoute =
@@ -340,9 +341,11 @@ export function SettingsScreen(): React.ReactElement {
     }))
     .filter((group) => group.rows.length > 0);
 
-  // HomeScreen 的「配置轻引擎」入口：进设置后直接落在这个页面
-  if (state.lightSetupOpen) {
-    return (
+  // 二级页也走页面栈：设置首页保留挂载/滚动位置，二级页从右侧推入。
+  const subKey = state.lightSetupOpen ? 'light-setup' : route;
+  let subScreen: React.ReactNode = null;
+  if (subKey === 'light-setup') {
+    subScreen = (
       <LightEngineScreen
         onClose={() => {
           store.closeLightSetup();
@@ -350,33 +353,25 @@ export function SettingsScreen(): React.ReactElement {
         }}
       />
     );
-  }
-  if (route === 'theme') {
-    return <ThemeScreen onClose={() => setRoute(null)} />;
-  }
-  if (route === 'engine') {
-    return <EngineScreen onClose={() => setRoute(null)} />;
-  }
-  if (route === 'light') {
-    return <LightEngineScreen onClose={() => setRoute(null)} />;
-  }
-  if (route === 'account') {
-    return <AccountScreen onClose={() => setRoute(null)} />;
-  }
-  if (route === 'credentials') {
-    return <CredentialsScreen onClose={() => setRoute(null)} />;
-  }
-  if (route === 'providers') {
-    return <ProvidersScreen onClose={() => setRoute(null)} />;
-  }
-  if (route === 'host') {
-    return <HostScreen onClose={() => setRoute(null)} />;
-  }
-  if (route === 'lab') {
-    return <LabScreen onClose={() => setRoute(null)} />;
+  } else if (subKey === 'theme') {
+    subScreen = <ThemeScreen onClose={() => setRoute(null)} />;
+  } else if (subKey === 'engine') {
+    subScreen = <EngineScreen onClose={() => setRoute(null)} />;
+  } else if (subKey === 'light') {
+    subScreen = <LightEngineScreen onClose={() => setRoute(null)} />;
+  } else if (subKey === 'account') {
+    subScreen = <AccountScreen onClose={() => setRoute(null)} />;
+  } else if (subKey === 'credentials') {
+    subScreen = <CredentialsScreen onClose={() => setRoute(null)} />;
+  } else if (subKey === 'providers') {
+    subScreen = <ProvidersScreen onClose={() => setRoute(null)} />;
+  } else if (subKey === 'host') {
+    subScreen = <HostScreen onClose={() => setRoute(null)} />;
+  } else if (subKey === 'lab') {
+    subScreen = <LabScreen onClose={() => setRoute(null)} />;
   }
 
-  return (
+  const homeScreen = (
     <View style={styles.root}>
       <View style={styles.header}>
         <IconButton glyph="‹" label="返回" onPress={() => store.closeSettings()} />
@@ -420,6 +415,12 @@ export function SettingsScreen(): React.ReactElement {
         </ScrollView>
       </SmoothKeyboardAvoid>
     </View>
+  );
+
+  return (
+    <ScreenStack screenKey={subKey ?? 'settings-home'} depth={subKey ? 1 : 0}>
+      {subKey ? subScreen : homeScreen}
+    </ScreenStack>
   );
 }
 

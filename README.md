@@ -83,6 +83,7 @@ cd app/android && sh gradlew :app:assembleDebug
 | [docs/PITFALLS.md](docs/PITFALLS.md) | **踩坑**：现象 → 原因 → 处理 → 验证 |
 | [docs/AI-TASKS.md](docs/AI-TASKS.md) | **给 AI 的清单**：任务、工程债、待决、分支/提交规则、命令 |
 | [docs/STREAMING-FIX.md](docs/STREAMING-FIX.md) | **专项方案**：长会话流式的根因、改动、验证与剩余项 |
+| [docs/ANIMATION.md](docs/ANIMATION.md) | **动效方案**：页面栈、抽屉弹簧/手势、底部弹层、性能实测 |
 
 旧文档在 [docs/archive/](docs/archive/)（只读，2026-11-03 归档）。
 

@@ -402,7 +402,8 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 
 通用 token：圆角 4 / 8 / 12 / 16 / 20 / 28 / 999；间距 4 / 8 / 12 / 16 / 20 / 28；
 字体系统/monospace，正文 14/22、次级 13/20、说明 12/18；动效 100 / 200 / 300ms，
-`cubic-bezier(.4,0,.2,1)`。主题模式 `system` / `light` / `dark` 存 UI cache，
+`cubic-bezier(.4,0,.2,1)`；页面/抽屉/弹层用 `motion.spring.page|sheet`（约 300ms 收敛）。
+主题模式 `system` / `light` / `dark` 存 UI cache，
 `ThemeProvider` 用 `useColorScheme()` 解析 system；根 View/StatusBar、启动 Overlay 和
 web `colorScheme` 一起切换。深色对比度按正文 ≥ 4.5:1 选值。
 
@@ -419,7 +420,8 @@ web `colorScheme` 一起切换。深色对比度按正文 ≥ 4.5:1 选值。
 | 工作区 `WorkspaceScreen` | 宿主工作区概览（root/会话数/运行中/锦囊数）+ 文件入口（轻引擎单工作区） |
 | 终端 `TerminalScreen` | `shell.run` 只读终端：pwd/ls/cat/grep，写操作被沙箱拒绝，15s/20k |
 | 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区；字号档 `chatFontScale`；深色由 palette 驱动 |
-| 动效 `ScreenFade` | 页面切换淡入（motion.duration.base/standard）；设置行按压 0.98（fast） |
+| 动效 `ScreenStack` | 页面 push 从右滑入、旧页左移 24% + 压暗；返回滑出；非当前页冻结 store 订阅并用 `display:none` 隔离；详见 [ANIMATION](ANIMATION.md) |
+| 动效 `BottomSheet` | 遮罩淡入 + 面板底部弹簧；ModelSheet / GeneratedFilesSheet 共用 |
 | 设置 `SettingsScreen` | 6 组首页（搜索 / SettingsTile / 右侧当前值），只做导航 |
 | 设置二级页 | `AccountScreen` / `CredentialsScreen` / `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen` / `ThemeScreen` |
 | 引擎 `EngineScreen` | 状态环、启停/重启、失败卡、保活、日志、高级启动命令 |
@@ -432,7 +434,7 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 代码高亮在 `syntax.ts`（js/ts、py、sh、json、html；未知语言回退纯文本）。
 聊天渲染在 `app/src/ui/chat/*`（`TurnView` / `ApprovalCard` / `CapabilityCard` / `ChatCard`），`ChatScreen.tsx` 只负责顶栏、滚动和 Composer 组装。
 生成文件面板在 `GeneratedFilesSheet.tsx`（`lib/generatedFiles.ts` 解析工具结果 + `fileActions.native.ts`
-用 expo File 的 `canPreview/preview` 打开；分享暂未做）。
+用 expo File 的 `canPreview/preview` 打开/分享）。
 
 ### 8.3 聊天页：现状与目标
 
@@ -514,6 +516,22 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 
 > 注：1.5 的「生成文件」弹层（`GeneratedFilesSheet`，只列本会话工具生成的文件、可打开）已落地，
 > 不等于这里的 U8 全功能文件面板（全工作区浏览/上传管理/重命名/搜索/分享）。
+
+### 8.9 页面栈与动效（2026-11-07）
+
+- `ScreenStack` 维护页面栈：push 时旧页保留挂载并左移 24%，新页从右滑入；
+  pop 时当前页右滑出，目标页从 -24% 回 0。动画结束后非当前页 `display:none`，
+  不卸载以保留滚动位置/输入态。
+- `ScreenActiveContext` 冻结非当前页的 `useStore` 订阅；详情页流式输出时，
+  底下首页/设置页不跟着重渲染。
+- `openSession` 先同步推入空壳 `detail`（`detailLoading=true`），转场和
+  `sessions.get` 并行；`ChatScreen` 首屏 `initialNumToRender=8`，顶栏初始高度
+  `topInset+52`，避免首帧跳高。
+- 抽屉：`motion.spring.sheet` + `PanResponder` 左滑跟手 + 首页 42px 视差；
+  预挂载内容，关闭只移出屏幕。
+- 底部弹层：`BottomSheet` 遮罩淡入 + 面板弹簧滑出；ModelSheet /
+  GeneratedFilesSheet 已接入。
+- 详细方案与实测见 [ANIMATION](ANIMATION.md)。
 
 ## 9. 构建与验证
 

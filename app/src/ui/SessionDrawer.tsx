@@ -1,5 +1,15 @@
 import React from 'react';
-import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Animated,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import type { SessionSummary } from '../protocol';
 import type { SessionRow } from '../state/sessionList';
@@ -109,9 +119,12 @@ function StatusTag({ s }: { s: SessionSummary }): React.ReactElement | null {
 export function SessionDrawer({
   visible,
   onClose,
+  progress,
 }: {
   visible: boolean;
   onClose: () => void;
+  /** 和首页主体共享的 0→1 进度，用来做背景视差/手势 */
+  progress?: Animated.Value;
 }): React.ReactElement | null {
   const state = useStore();
   const { palette } = useTheme();
@@ -137,7 +150,8 @@ export function SessionDrawer({
   const [folderFilter, setFolderFilter] = React.useState<string | null>(null);
   const [folderPromptFor, setFolderPromptFor] = React.useState<string | null>(null);
   const [folderText, setFolderText] = React.useState('');
-  const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const localAnim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const anim = progress ?? localAnim;
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
   const [searchFocused, setSearchFocused] = React.useState(false);
@@ -157,10 +171,9 @@ export function SessionDrawer({
 
   React.useEffect(() => {
     if (visible) setMounted(true);
-    const animation = Animated.timing(anim, {
+    const animation = Animated.spring(anim, {
       toValue: visible ? 1 : 0,
-      duration: motion.duration.base,
-      easing: motion.easing.standard,
+      ...motion.spring.sheet,
       useNativeDriver: true,
     });
     if (visible && !mountedRef.current) {
@@ -174,6 +187,42 @@ export function SessionDrawer({
     animation.start();
     return () => animation.stop();
   }, [visible, anim]);
+
+  // 打开状态下手势左滑关闭：跟手 + 松手按速度/位移决定回弹或收起。
+  const panResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          visible && gesture.dx < -6 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderGrant: () => {
+          anim.stopAnimation();
+        },
+        onPanResponderMove: (_event, gesture) => {
+          const next = Math.max(0, Math.min(1, 1 + gesture.dx / PANEL_WIDTH));
+          anim.setValue(next);
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          const next = Math.max(0, Math.min(1, 1 + gesture.dx / PANEL_WIDTH));
+          if (next < 0.72 || gesture.vx < -0.35) {
+            onClose();
+          } else {
+            Animated.spring(anim, {
+              toValue: 1,
+              ...motion.spring.sheet,
+              useNativeDriver: true,
+            }).start();
+          }
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(anim, {
+            toValue: 1,
+            ...motion.spring.sheet,
+            useNativeDriver: true,
+          }).start();
+        },
+      }),
+    [anim, onClose, visible],
+  );
 
   React.useEffect(() => {
     if (!visible) return;
@@ -352,6 +401,7 @@ export function SessionDrawer({
       </Animated.View>
 
       <Animated.View
+        {...panResponder.panHandlers}
         style={[
           styles.panel,
           {

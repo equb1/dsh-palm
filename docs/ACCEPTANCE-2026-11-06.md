@@ -19,6 +19,7 @@
 | U7 字号档 | ✅ | 标准/大/特大；`166`–`168` |
 | U7 动效 | ✅ | 页面淡入 + 设置行按压；10 步回归通过 |
 | U7 深色主题 | ✅ | 深色 `device:regression` 10/10；浅色轮次仍可再补（`DARK-THEME.md`） |
+| U7 动效重做 | ✅ | ScreenStack 页面栈、设置二级页、抽屉弹簧/手势/视差、BottomSheet；展开 5/5 0 掉帧（`ANIMATION.md`） |
 | U8 文件 | ✅ | 浏览/搜索/重命名/删除/分享；`143`–`157` |
 | U8 工作区 | ✅ | 概览 + 文件入口 + 新建工作区；`158` |
 | U8 终端 | ✅ | 只读 `shell.run`；`164`–`165`；写操作 EACCES |
@@ -33,7 +34,7 @@
 | 完整引擎 delete/search/shell | ✅ 代码/单测 | `sessions.delete` / `sessions.search` / `shell.run`；待 release 真机复核 |
 | LAN 发现 | ◐ 第一步 | hostId + mDNS + NSD + 设置页扫描/重连；权限弹窗通过，跨设备被 PC 防火墙/网络隔离挡住 |
 | 系统入口 | ✅ 第一步 | QS 磁贴 + 桌面小组件 + 通知直达；悬浮球未做 |
-| release 首装/升级 | ✅ 覆盖升级通过 | 设备已装 `0.2.0 (2)`，同签名 `install -r`；APK sha256 `ADA52EA0…`，预检 PASS |
+| release 首装/升级 | ✅ 覆盖升级通过 | 设备已装 `0.2.0 (2)`，同签名 `install -r`；APK sha256 `D078796D…`，预检 PASS |
 | MR 合 develop | ✅ | `feat/settings-pages` 已经 MR #4 合入 `develop` |
 
 ## 结论

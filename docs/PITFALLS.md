@@ -769,3 +769,14 @@
   `sessionRows`/搜索/筛选/分组改用 `useMemo`。
 - 验证：同机同脚本 8 次开合 Janky **3.51%（8/228）**；单独 5 次展开均
   **0 janky frame**，5 次关闭 4 次 0、1 次 1 帧。`npm run verify` 全绿。
+
+### I23. 页面切换像“雪花/闪白”而不是进入动画（2026-11-07）
+
+- 现象：首页点会话进详情，旧页瞬间消失、新页先以 opacity 1 画一帧再变透明淡入，
+  像换台闪屏；返回也没有方向。
+- 原因：`ScreenFade` 在 `useEffect` 里才 `setValue(0)`，且 App 是单容器条件渲染，
+  旧页在切页瞬间卸载；没有 push/pop 栈。
+- 处理：`ScreenStack` 保留旧页做 24% 视差 + 新页右侧滑入；非当前页冻结 store
+  订阅并 `display:none`；点会话先推空壳详情，`sessions.get` 并行。
+- 验证：真机 push/pop 方向正确、返回保留首页滚动；每次 push 约 1 帧小 hitch，
+  比原来的闪白大幅改善（见 [ANIMATION](ANIMATION.md)）。

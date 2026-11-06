@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Animated,
   BackHandler,
   Pressable,
   RefreshControl,
@@ -62,6 +63,8 @@ export function HomeScreen(): React.ReactElement {
   const [draft, setDraft] = React.useState('');
   const [refreshing, setRefreshing] = React.useState(false);
   const [drawer, setDrawer] = React.useState(false);
+  // 抽屉 0→1 进度；首页主体同步轻微右移，形成“推开”而不是一张死板的面板。
+  const drawerAnim = React.useRef(new Animated.Value(0)).current;
 
   // 从系统分享菜单进来的文字：填进输入框（只填一次；回前台再分享也生效）
   React.useEffect(() => {
@@ -134,6 +137,16 @@ export function HomeScreen(): React.ReactElement {
 
   return (
     <View style={styles.root}>
+      <Animated.View
+        style={{
+          flex: 1,
+          transform: [
+            {
+              translateX: drawerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 42] }),
+            },
+          ],
+        }}
+      >
       <View style={styles.header}>
         <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
         <View style={styles.brandMark}>
@@ -280,8 +293,9 @@ export function HomeScreen(): React.ReactElement {
           onRemoveAttachment={(id) => store.removeAttachment(id)}
         />
       </SmoothKeyboardAvoid>
+      </Animated.View>
 
-      <SessionDrawer visible={drawer} onClose={() => setDrawer(false)} />
+      <SessionDrawer visible={drawer} onClose={() => setDrawer(false)} progress={drawerAnim} />
       <ModelSheet />
     </View>
   );

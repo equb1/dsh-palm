@@ -42,7 +42,8 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const [showJump, setShowJump] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
   // 浮动顶栏：先量高度给正文留位，列表滚起来再加底色/描边（玻璃感用半透明近似，不引原生 blur）
-  const [headerH, setHeaderH] = React.useState(0);
+  // 先给顶栏一个稳定高度，避免首帧 onLayout 后列表整体下跳；实际高度仍以 onLayout 为准。
+  const [headerH, setHeaderH] = React.useState(Math.round(topInset + 52));
   const [scrolled, setScrolled] = React.useState(false);
   const listRef = React.useRef<FlatList<Turn>>(null);
   const following = React.useRef(true);
@@ -251,11 +252,20 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const renderEmpty = React.useCallback(
     (): React.ReactElement => (
       <View style={styles.emptyChat}>
-        <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
-        <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
+        {state.detailLoading ? (
+          <>
+            <Text style={styles.emptyChatTitle}>正在打开会话…</Text>
+            <Text style={styles.emptyChatText}>消息马上到</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
+            <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
+          </>
+        )}
       </View>
     ),
-    [preset?.name, preset?.tagline, styles],
+    [preset?.name, preset?.tagline, state.detailLoading, styles],
   );
 
   return (
@@ -323,8 +333,8 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             scrollEventThrottle={16}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
-            initialNumToRender={12}
-            maxToRenderPerBatch={8}
+            initialNumToRender={8}
+            maxToRenderPerBatch={6}
             windowSize={9}
             updateCellsBatchingPeriod={32}
             removeClippedSubviews={false}
