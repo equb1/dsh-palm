@@ -40,8 +40,11 @@
 - 切换后不重启 App；浅色模式与本轮之前的截图一致。
 - `npm --prefix app run typecheck` + `npm run verify` 全绿。
 - 2026-11-06 Web 验收：浅色/深色各截设置首页、主题页、聊天、审批卡、文件页；
-  系统跟随在 `prefers-color-scheme` 切换时即时更新。真机 `npm run device:regression`
-  浅色/深色各跑一次待补（本机没有 release keystore，当前 release 设备不能覆盖安装）。
+  系统跟随在 `prefers-color-scheme` 切换时即时更新。
+- 2026-11-06 真机验收（并行安装测试包 `cool.cnb.dshpalm.test`，不动 release 数据）：
+  主题页/设置页/首页/聊天在深色下通过；`device:regression` 跑到 9/10，搜索步骤因中文 IME
+  把 `input text` 留在候选栏失败（已改为空格提交，手动确认 3 处匹配）；后续两次被
+  uiautomator `null root node`/抽屉动画 flake 中断。设备已暂停使用，待恢复后补 10/10 与浅色轮次。
 
 ## 4. 为什么不更早做
 

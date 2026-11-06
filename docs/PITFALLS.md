@@ -556,9 +556,8 @@
 - 现象：`input text 'create docx file docs/x.docx'` 落进输入框变成
   `Create啊small docx file at docs／verify－share。docx`（空格变“啊”、`/` 和 `.` 变全角）。
 - 原因：注入的按键先经过当前中文 IME（Gboard/Sogou），被当作拼音/中文标点处理；`%s` 也会被转换。
-- 处理：验证 UI 前临时禁用 IME：
-  `adb shell ime disable com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME`，
-  输入框仍能收硬件键事件，ASCII 原样落进去；验完 `ime enable` 恢复。
+- 处理：验证 UI 前临时禁用中文 IME（或 `ime set` 到英文 Gboard）；即使换了 Gboard，
+  `input text python` 仍可能停在候选栏，断言前补一个 `keyevent SPACE` 提交（搜索词会被 trim）。
   更稳的做法是用 mock 模型/深链/直接调 native，不依赖 UI 输入。
 - 验证：`uiautomator dump` 里出现原样的 `create docx file docs/verify-share.docx`。
 
@@ -673,3 +672,13 @@
   不要沿用白字；`onDanger` 在深色下也用深色字保证对比度。
 - 验证：全局搜颜色字面量只剩 `theme/palette.ts`；Web 深色/浅色截图（设置、主题页、聊天、
   审批卡）；`npm --prefix app run typecheck` + `npm run verify` 全绿。
+
+
+### I14. `device:regression` 的 uiautomator 偶发 flake（2026-11-06）
+
+- 现象：偶发 `ERROR: null root node returned by UiTestAutomationBridge`，或抽屉已开但
+  `waitFor('账号与设置')` 超时；重跑同一路径又通过。
+- 原因：uiautomator 在窗口动画/输入法切换时拿不到 hierarchy，不是 App 崩溃。
+- 处理：`scripts/device-ui.ts` 的 `dumpNodes` 已加 3 次重试（250ms）；`device:regression`
+  支持 `DSH_PALM_PKG` 覆盖包名、显式用 `cool.cnb.dshpalm.MainActivity` 启动测试包。
+- 验证：深色测试包跑到 9/10，剩余失败为 IME 候选和上述 flake；设备恢复后复跑。
