@@ -26,7 +26,7 @@ npm run device:regression           # 需要先补 docs/weekly.docx fixture
 
 ## 风险 / 未完成
 
-- `device:regression` 在 release 0.2.0 上前 3 步 + 文件根通过；轻工作区为空，后 7 步未跑。
+- `device:regression` 在 release 0.2.0 上 8/10 通过；全文搜索在轻会话为空/输入焦点异常时未过。
 - E2E 加密 WS、多宿主密钥/索引分仓、完整离线状态机、悬浮球未做。
 - 完整引擎搜索按需扫日志，大历史首次搜索可能受 15s 请求超时限制。
 - PDF/OCR/LibreOffice render/旧格式/TTS 仍按决策暂缓。

@@ -581,10 +581,10 @@ type AttachmentChipsProps = {
     用 uiautomator 文本断言，失败自动截图。真机一次通过 10 步；键盘弹起时先 `hideKeyboard()`
     再按返回，否则第一次返回只收键盘。
   - 仍只有一条主路径；登录/审批/流式长会话/引擎启停/文件操作等还没进脚本。
-  - 2026-11-06 夜间 release 0.2.0 已装，`device:regression` 跑到文件页；当前轻工作区
-    (`/workspace`) 只有 `deepseek-harness/default-workspace` 且为空，脚本依赖的
-    `docs/weekly.docx` fixture 不存在，后 7 步未跑。需要在有 fixture 的工作区或先切完整
-    引擎后重跑；不是安装/启动失败。
+  - 2026-11-06 夜间 release 0.2.0 已装，`device:regression` **8/10**：冷启动、抽屉、
+    全部功能、文件根、文件操作菜单（用 `uploads/weekly.docx` fixture）、返回、设置 6 组、
+    设置二级页、引擎启停均过；全文搜索在“当前轻会话列表为空 + 搜索输入焦点异常”时
+    没有结果，未完成最后一步。脚本已兼容 `docs/` 和 `uploads/` fixture。
   - 2026-11-06 手工补审批路径：真机新会话发「Use the bash tool to run: echo approval-ok…」→
     审批卡（`拒绝/批准`，显示 `执行命令`/`echo approval-ok`）→ 批准 → 工具输出 `approval-ok`
     （`169-approval-card.png`、`170-approval-approved.png`）。流式与工具行同时可见；
