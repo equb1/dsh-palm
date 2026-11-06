@@ -80,6 +80,7 @@
 koffi/node-pty/sharp/sherpa 也没有 Android prebuild。**所以 L2 不设独立运行时**。
 
 > 插件市场 v1 只做「启用/禁用 + 配置下发 + 内置插件」，不下载 JS 执行（App Store 2.5.2）。
+> App 内提供离线兼容矩阵（M2.3）：内置快照 + 搜索 + L0–L4 徽章 + 判定理由。
 
 ## 6. 账号与多端
 

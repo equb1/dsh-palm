@@ -14,7 +14,8 @@
     "release:preflight": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-preflight.ps1",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test",
-    "plugin:check": "node --import tsx scripts/plugin-compat.ts"
+    "plugin:check": "node --import tsx scripts/plugin-compat.ts",
+    "plugin:data": "node scripts/plugin-data.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

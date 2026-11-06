@@ -144,11 +144,10 @@ export function FeaturesScreen(): React.ReactElement {
         {
           id: 'plugins',
           title: '插件',
-          hint: '兼容矩阵已有，App 入口未接',
+          hint: '305 个包 · L0–L4 徽章',
           icon: '◈',
           tone: 'amber',
-          disabled: true,
-          onPress: () => flash('插件入口还没接；兼容矩阵在 docs/archive/24。'),
+          onPress: () => store.openPlugins(),
         },
         {
           id: 'community',

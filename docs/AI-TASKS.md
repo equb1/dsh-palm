@@ -382,7 +382,15 @@ type AttachmentChipsProps = {
 
 - [ ] **2.1 WebView 与 RN 会话态联动**（token 暴露、双向跳转、生命周期）
 - [ ] **2.2 会话迁移完整版**（事件回放/结构化交接；P0 的 1.4 只做 v1）
-- [ ] **2.3 插件徽章**（矩阵已有，App 入口 + 搜索 + 判定理由）
+- [x] **2.3 插件徽章**（矩阵已有，App 入口 + 搜索 + 判定理由）
+  - 2026-11-06：新增 `npm run plugin:data`，把 `reports/plugin-compat.json` 转成
+    `app/src/data/pluginCompat.ts`（305 包快照，离线可看）；`lib/pluginCatalog.ts` 提供
+    搜索、等级过滤、按「含依赖」等级排序和计数；`ui/PluginsScreen.tsx` 显示 L0–L4/无代码徽章、
+    判定理由、Node 内建、DSH 依赖和原厂标记，Features「插件」卡启用（`view=plugins`）。
+  - 单测 `test/plugin-catalog.test.ts` 5 条：App 数据与报告同步、计数、搜索包名/理由/内建、
+    L3 过滤与排序、空结果；`npm run verify` 245 pass / 0 fail。
+  - Web 验收：深色/浅色插件页、搜索 `dsh-client-ui-chat`、L3 过滤、展开判定理由；
+    当前矩阵 305 包（L0 64 / L1 131 / L2 66 / L3 43 / 无代码 1，按含依赖）。
 - [ ] **2.4 轻引擎附件引用**（图片视觉/路径消费；与 1.3 原生收件不重复）
 - [x] **2.5 轻引擎多提供商 + 账号模型目录**
   - [x] 轻引擎实现 `providers.list/save/discover`，设置页复用 ProvidersCard；
