@@ -5,7 +5,7 @@ import type { WorkspaceEntry } from '../protocol';
 import { openWorkspaceFile, shareWorkspaceFile } from '../lib/fileActions';
 import { store } from './useStore';
 import { Btn, IconButton } from './parts';
-import { colors, radius, space, topInset } from './theme';
+import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 /** U8 第一步：工作区文件浏览（只列目录 + 用系统查看器打开文件） */
 function formatSize(bytes: number): string {
@@ -20,6 +20,8 @@ function joinPath(base: string, name: string): string {
 }
 
 export function FilesScreen(): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [path, setPath] = React.useState('/');
   const [entries, setEntries] = React.useState<WorkspaceEntry[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -170,7 +172,7 @@ export function FilesScreen(): React.ReactElement {
               value={filter}
               onChangeText={setFilter}
               placeholder="按文件名过滤"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoFocus
               autoCapitalize="none"
               autoCorrect={false}
@@ -226,7 +228,7 @@ export function FilesScreen(): React.ReactElement {
                   style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
                 >
                   <View style={[styles.icon, isDir && styles.iconDir]}>
-                    <Text style={[styles.iconGlyph, isDir && { color: colors.blue }]}>
+                    <Text style={[styles.iconGlyph, isDir && { color: palette.blue }]}>
                       {isDir ? '▸' : '▤'}
                     </Text>
                   </View>
@@ -266,7 +268,7 @@ export function FilesScreen(): React.ReactElement {
                       </Pressable>
                     )}
                     <Pressable accessibilityRole="button" onPress={() => confirmDelete(entry)}>
-                      <Text style={[styles.menuItem, { color: colors.danger }]}>删除</Text>
+                      <Text style={[styles.menuItem, { color: palette.danger }]}>删除</Text>
                     </Pressable>
                   </View>
                 ) : null}
@@ -283,8 +285,9 @@ export function FilesScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -292,12 +295,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
+  title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
   scroll: { padding: space.lg, gap: space.md, paddingBottom: space.xxl },
   crumbs: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
-  crumb: { color: colors.blue, fontSize: 12.5, paddingHorizontal: 2 },
-  crumbActive: { color: colors.textFaint },
-  crumbSep: { color: colors.textFaint, fontSize: 12.5 },
+  crumb: { color: c.blue, fontSize: 12.5, paddingHorizontal: 2 },
+  crumbActive: { color: c.textFaint },
+  crumbSep: { color: c.textFaint, fontSize: 12.5 },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -305,52 +308,52 @@ const styles = StyleSheet.create({
     height: 40,
     paddingHorizontal: 14,
     borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
   },
-  searchGlyph: { color: colors.textFaint, fontSize: 15 },
-  searchInput: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 0 },
-  searchClear: { color: colors.textFaint, fontSize: 16, paddingHorizontal: 2 },
-  notice: { color: colors.warn, fontSize: 12, lineHeight: 17 },
-  hint: { color: colors.textFaint, fontSize: 12.5, lineHeight: 18 },
+  searchGlyph: { color: c.textFaint, fontSize: 15 },
+  searchInput: { flex: 1, color: c.text, fontSize: 13, paddingVertical: 0 },
+  searchClear: { color: c.textFaint, fontSize: 16, paddingHorizontal: 2 },
+  notice: { color: c.warn, fontSize: 12, lineHeight: 17 },
+  hint: { color: c.textFaint, fontSize: 12.5, lineHeight: 18 },
   renameCard: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
     padding: space.md,
     gap: space.sm,
   },
-  renameLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  renameLabel: { color: c.text, fontSize: 13, fontWeight: '600' },
   renameInput: {
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    color: colors.text,
+    color: c.text,
     fontSize: 13,
   },
   renameActions: { flexDirection: 'row', gap: space.sm },
   moreButton: { paddingHorizontal: 4, paddingVertical: 4 },
-  moreText: { color: colors.textFaint, fontSize: 16, lineHeight: 18 },
+  moreText: { color: c.textFaint, fontSize: 16, lineHeight: 18 },
   actionsMenu: {
     marginLeft: 44,
     marginBottom: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radius.sm,
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     gap: 2,
   },
-  menuItem: { color: colors.blue, fontSize: 13, lineHeight: 20, paddingVertical: 4 },
+  menuItem: { color: c.blue, fontSize: 13, lineHeight: 20, paddingVertical: 4 },
   list: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     paddingHorizontal: space.md,
     paddingVertical: 4,
     gap: 2,
@@ -363,20 +366,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: radius.md,
   },
-  rowPressed: { backgroundColor: colors.glassStrong },
+  rowPressed: { backgroundColor: c.glassStrong },
   icon: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconDir: { backgroundColor: colors.blueSoft },
-  iconGlyph: { color: colors.textFaint, fontSize: 14, fontWeight: '600' },
+  iconDir: { backgroundColor: c.blueSoft },
+  iconGlyph: { color: c.textFaint, fontSize: 14, fontWeight: '600' },
   rowTexts: { flex: 1, gap: 1 },
-  name: { color: colors.text, fontSize: 14 },
-  meta: { color: colors.textFaint, fontSize: 11 },
-  chevron: { color: colors.textFaint, fontSize: 14 },
-  footnote: { color: colors.textFaint, fontSize: 11.5, lineHeight: 17, paddingHorizontal: space.xs },
-});
+  name: { color: c.text, fontSize: 14 },
+  meta: { color: c.textFaint, fontSize: 11 },
+  chevron: { color: c.textFaint, fontSize: 14 },
+  footnote: { color: c.textFaint, fontSize: 11.5, lineHeight: 17, paddingHorizontal: space.xs },
+  });

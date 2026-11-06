@@ -8,7 +8,7 @@ import { IconButton } from './parts';
 import { EmptyState } from './components';
 import { loadAccountPhone } from '../lib/accountPhone';
 import type { ConversationLink } from '../lib/handoff';
-import { colors, motion, radius, semantic, space, topInset } from './theme';
+import { motion, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 const PANEL_WIDTH = 302;
 
@@ -50,16 +50,18 @@ function maskPhone(raw: string): string {
 
 /** 逻辑会话当前在哪一侧：轻 / 完整。第二个物理会话在列表里不出现。 */
 function SideTag({ link }: { link?: ConversationLink }): React.ReactElement | null {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   if (!link) return null;
   const full = link.activeSide === 'full';
   return (
     <View
       style={[
         styles.tag,
-        { backgroundColor: full ? colors.blueSoft : colors.glassStrong },
+        { backgroundColor: full ? palette.blueSoft : palette.glassStrong },
       ]}
     >
-      <Text style={[styles.tagText, { color: full ? colors.blue : colors.textFaint }]}>
+      <Text style={[styles.tagText, { color: full ? palette.blue : palette.textFaint }]}>
         {full ? '完整' : '轻'}
       </Text>
     </View>
@@ -68,10 +70,12 @@ function SideTag({ link }: { link?: ConversationLink }): React.ReactElement | nu
 
 /** 另一个引擎的会话：行上标「轻/完整」，点了先切引擎再打开 */
 function EngineTag({ engine }: { engine: SessionRow['engine'] }): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const full = engine === 'full';
   return (
-    <View style={[styles.tag, { backgroundColor: full ? colors.blueSoft : colors.glassStrong }]}>
-      <Text style={[styles.tagText, { color: full ? colors.blue : colors.textFaint }]}>
+    <View style={[styles.tag, { backgroundColor: full ? palette.blueSoft : palette.glassStrong }]}>
+      <Text style={[styles.tagText, { color: full ? palette.blue : palette.textFaint }]}>
         {full ? '完整' : '轻'}
       </Text>
     </View>
@@ -79,17 +83,19 @@ function EngineTag({ engine }: { engine: SessionRow['engine'] }): React.ReactEle
 }
 
 function StatusTag({ s }: { s: SessionSummary }): React.ReactElement | null {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   if (s.status === 'waiting_approval') {
     return (
-      <View style={[styles.tag, { backgroundColor: colors.warnSoft }]}>
-        <Text style={[styles.tagText, { color: colors.warn }]}>待确认</Text>
+      <View style={[styles.tag, { backgroundColor: palette.warnSoft }]}>
+        <Text style={[styles.tagText, { color: palette.warn }]}>待确认</Text>
       </View>
     );
   }
   if (s.status === 'error') {
     return (
-      <View style={[styles.tag, { backgroundColor: colors.dangerSoft }]}>
-        <Text style={[styles.tagText, { color: colors.danger }]}>出错</Text>
+      <View style={[styles.tag, { backgroundColor: palette.dangerSoft }]}>
+        <Text style={[styles.tagText, { color: palette.danger }]}>出错</Text>
       </View>
     );
   }
@@ -108,6 +114,8 @@ export function SessionDrawer({
   onClose: () => void;
 }): React.ReactElement | null {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const account = state.account;
   const [localPhone, setLocalPhone] = React.useState('');
   const phone =
@@ -259,7 +267,7 @@ export function SessionDrawer({
             <Text style={styles.menuItem}>取消置顶</Text>
           </Pressable>
           <Pressable onPress={() => { void store.archiveSession(s.id, true); setMenuFor(null); }}>
-            <Text style={[styles.menuItem, { color: colors.danger }]}>归档</Text>
+            <Text style={[styles.menuItem, { color: palette.danger }]}>归档</Text>
           </Pressable>
           <Pressable
             onPress={() => {
@@ -274,7 +282,7 @@ export function SessionDrawer({
               ]);
             }}
           >
-            <Text style={[styles.menuItem, { color: colors.danger }]}>删除</Text>
+            <Text style={[styles.menuItem, { color: palette.danger }]}>删除</Text>
           </Pressable>
           <View style={styles.renameRow}>
             <TextInput
@@ -282,7 +290,7 @@ export function SessionDrawer({
               value={renameText}
               onChangeText={setRenameText}
               placeholder="会话标题"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
             />
             <Pressable onPress={() => { void store.renameSession(s.id, renameText); setMenuFor(null); }}>
               <Text style={styles.menuItem}>保存</Text>
@@ -339,7 +347,7 @@ export function SessionDrawer({
             value={q}
             onChangeText={setQ}
             placeholder="搜索会话"
-            placeholderTextColor={colors.textFaint}
+            placeholderTextColor={palette.textFaint}
             accessibilityLabel="搜索会话"
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
@@ -424,7 +432,7 @@ export function SessionDrawer({
                 value={folderText}
                 onChangeText={setFolderText}
                 placeholder="留空则移出文件夹"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={palette.textFaint}
                 autoFocus
                 accessibilityLabel="文件夹名"
                 onSubmitEditing={() => {
@@ -556,224 +564,225 @@ export function SessionDrawer({
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'flex-start',
-    pointerEvents: 'box-none',
-  },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(15,17,21,0.28)',
-  },
-  panel: {
-    width: PANEL_WIDTH,
-    height: '100%',
-    backgroundColor: semantic.sidebar,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: colors.border,
-    paddingTop: topInset + 12,
-  },
-  panelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.sm,
-  },
-  panelTitle: { color: colors.text, fontSize: 16, lineHeight: 28, fontWeight: '500', letterSpacing: 0.2 },
-  panelHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginHorizontal: space.md,
-    paddingHorizontal: 12,
-    height: 36,
-    borderRadius: radius.sm,
-    backgroundColor: colors.glass,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  searchWrapFocused: {
-    borderColor: colors.blue,
-    backgroundColor: colors.glass,
-  },
-  searchIcon: { color: colors.textFaint, fontSize: 13 },
-  search: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 20, paddingVertical: 0 },
-  searchAll: { color: colors.blue, fontSize: 11.5, fontWeight: '600' },
-  filters: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: space.md,
-    paddingTop: space.sm,
-  },
-  filterPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    backgroundColor: colors.glass,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  filterPillActive: { backgroundColor: colors.blueSoft, borderColor: colors.blue },
-  filterText: { color: colors.textDim, fontSize: 11.5 },
-  filterTextActive: { color: colors.blue, fontWeight: '600' },
-  folderScroll: { flexGrow: 0, flexShrink: 0, height: 42 },
-  folderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: space.md,
-    paddingVertical: 3,
-  },
-  folderEditorTop: {
-    marginHorizontal: space.md,
-    marginTop: 8,
-    padding: 10,
-    borderRadius: radius.sm,
-    backgroundColor: colors.bgElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    gap: 6,
-  },
-  folderEditor: {
-    marginLeft: 46,
-    marginBottom: 6,
-    padding: 8,
-    borderRadius: radius.sm,
-    backgroundColor: colors.bgElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    gap: 6,
-  },
-  folderLabel: { color: colors.textFaint, fontSize: 11 },
-  folderQuick: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  folderQuickText: {
-    color: colors.blue,
-    fontSize: 11.5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-    backgroundColor: colors.blueSoft,
-  },
-  folderTag: {
-    backgroundColor: colors.glassStrong,
-    borderRadius: radius.xs,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-  },
-  folderTagText: { color: colors.textDim, fontSize: 10 },
-  listScroll: { flex: 1 },
-  list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
-  workspaceBlock: {
-    marginTop: space.md,
-    marginHorizontal: space.md,
-    padding: space.md,
-    borderRadius: radius.sm,
-    backgroundColor: colors.glass,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    gap: 6,
-  },
-  workspaceLabel: { color: semantic.textSecondary, fontSize: 12, lineHeight: 18, fontWeight: '500' },
-  workspaceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  workspaceGlyph: { color: colors.textFaint, fontSize: 14 },
-  workspaceTexts: { flex: 1 },
-  workspaceName: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
-  workspacePath: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
-  workspaceHint: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
-  workspaceEmpty: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
-  autoRouteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginHorizontal: space.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    borderRadius: radius.sm,
-    backgroundColor: colors.glass,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  autoRouteLabel: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
-  autoRouteHint: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
-  autoRoutePill: {
-    minWidth: 34,
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
-  },
-  autoRoutePillOn: { backgroundColor: colors.blueSoft },
-  autoRouteValue: { color: colors.textFaint, fontSize: 11, fontWeight: '600' },
-  autoRouteValueOn: { color: colors.blue },
-  groupTitle: {
-    color: semantic.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-    marginLeft: 8,
-    marginBottom: 4,
-  },
-  emptyState: { paddingTop: space.md },
-  menu: {
-    marginLeft: 46,
-    marginBottom: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.sm,
-    backgroundColor: colors.bgElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    gap: 4,
-  },
-  menuItem: { color: colors.blue, fontSize: 13, lineHeight: 20, paddingVertical: 5 },
-  renameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  renameInput: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 12.5,
-    backgroundColor: colors.glassStrong,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 8, borderRadius: radius.sm },
-  rowActive: { backgroundColor: semantic.sidebarActive },
-  rowPressed: { backgroundColor: semantic.sidebarHover },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rowTitle: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500', flex: 1 },
-  rowTime: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
-  rowBottom: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rowPreview: { color: colors.textFaint, fontSize: 12, lineHeight: 18, flex: 1 },
-  tag: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.xs },
-  tagText: { fontSize: 10, fontWeight: '500' },
-  account: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.xl,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: semantic.sidebar,
-  },
-  accountPressed: { backgroundColor: semantic.sidebarHover },
-  accountInfo: { flex: 1 },
-  accountName: { color: colors.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
-  accountSub: { color: colors.textFaint, fontSize: 11, lineHeight: 16 },
-  accountGear: { color: colors.textFaint, fontSize: 16 },
-});
+const createStyles = ({ palette: c, semantic: s }: Theme) =>
+  StyleSheet.create({
+    overlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      justifyContent: 'flex-start',
+      pointerEvents: 'box-none',
+    },
+    backdrop: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: c.backdrop,
+    },
+    panel: {
+      width: PANEL_WIDTH,
+      height: '100%',
+      backgroundColor: s.sidebar,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderRightColor: c.border,
+      paddingTop: topInset + 12,
+    },
+    panelHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: space.lg,
+      paddingTop: space.md,
+      paddingBottom: space.sm,
+    },
+    panelTitle: { color: c.text, fontSize: 16, lineHeight: 28, fontWeight: '500', letterSpacing: 0.2 },
+    panelHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+    searchWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginHorizontal: space.md,
+      paddingHorizontal: 12,
+      height: 36,
+      borderRadius: radius.sm,
+      backgroundColor: c.glass,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    searchWrapFocused: {
+      borderColor: c.blue,
+      backgroundColor: c.glass,
+    },
+    searchIcon: { color: c.textFaint, fontSize: 13 },
+    search: { flex: 1, color: c.text, fontSize: 13, lineHeight: 20, paddingVertical: 0 },
+    searchAll: { color: c.blue, fontSize: 11.5, fontWeight: '600' },
+    filters: {
+      flexDirection: 'row',
+      gap: 6,
+      paddingHorizontal: space.md,
+      paddingTop: space.sm,
+    },
+    filterPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: radius.pill,
+      backgroundColor: c.glass,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
+    filterPillActive: { backgroundColor: c.blueSoft, borderColor: c.blue },
+    filterText: { color: c.textDim, fontSize: 11.5 },
+    filterTextActive: { color: c.blue, fontWeight: '600' },
+    folderScroll: { flexGrow: 0, flexShrink: 0, height: 42 },
+    folderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: space.md,
+      paddingVertical: 3,
+    },
+    folderEditorTop: {
+      marginHorizontal: space.md,
+      marginTop: 8,
+      padding: 10,
+      borderRadius: radius.sm,
+      backgroundColor: c.bgElevated,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      gap: 6,
+    },
+    folderEditor: {
+      marginLeft: 46,
+      marginBottom: 6,
+      padding: 8,
+      borderRadius: radius.sm,
+      backgroundColor: c.bgElevated,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      gap: 6,
+    },
+    folderLabel: { color: c.textFaint, fontSize: 11 },
+    folderQuick: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    folderQuickText: {
+      color: c.blue,
+      fontSize: 11.5,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.pill,
+      backgroundColor: c.blueSoft,
+    },
+    folderTag: {
+      backgroundColor: c.glassStrong,
+      borderRadius: radius.xs,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+    },
+    folderTagText: { color: c.textDim, fontSize: 10 },
+    listScroll: { flex: 1 },
+    list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
+    workspaceBlock: {
+      marginTop: space.md,
+      marginHorizontal: space.md,
+      padding: space.md,
+      borderRadius: radius.sm,
+      backgroundColor: c.glass,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      gap: 6,
+    },
+    workspaceLabel: { color: s.textSecondary, fontSize: 12, lineHeight: 18, fontWeight: '500' },
+    workspaceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    workspaceGlyph: { color: c.textFaint, fontSize: 14 },
+    workspaceTexts: { flex: 1 },
+    workspaceName: { color: c.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+    workspacePath: { color: c.textFaint, fontSize: 11, lineHeight: 16 },
+    workspaceHint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
+    workspaceEmpty: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
+    autoRouteRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginHorizontal: space.md,
+      paddingHorizontal: space.md,
+      paddingVertical: space.sm,
+      borderRadius: radius.sm,
+      backgroundColor: c.glass,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
+    autoRouteLabel: { color: c.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+    autoRouteHint: { color: c.textFaint, fontSize: 11, lineHeight: 16 },
+    autoRoutePill: {
+      minWidth: 34,
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.pill,
+      backgroundColor: c.glassStrong,
+    },
+    autoRoutePillOn: { backgroundColor: c.blueSoft },
+    autoRouteValue: { color: c.textFaint, fontSize: 11, fontWeight: '600' },
+    autoRouteValueOn: { color: c.blue },
+    groupTitle: {
+      color: s.textSecondary,
+      fontSize: 12,
+      lineHeight: 18,
+      fontWeight: '500',
+      letterSpacing: 0.2,
+      marginLeft: 8,
+      marginBottom: 4,
+    },
+    emptyState: { paddingTop: space.md },
+    menu: {
+      marginLeft: 46,
+      marginBottom: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: radius.sm,
+      backgroundColor: c.bgElevated,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      gap: 4,
+    },
+    menuItem: { color: c.blue, fontSize: 13, lineHeight: 20, paddingVertical: 5 },
+    renameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+    renameInput: {
+      flex: 1,
+      color: c.text,
+      fontSize: 12.5,
+      backgroundColor: c.glassStrong,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 8, borderRadius: radius.sm },
+    rowActive: { backgroundColor: s.sidebarActive },
+    rowPressed: { backgroundColor: s.sidebarHover },
+    rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    rowTitle: { color: c.text, fontSize: 13, lineHeight: 20, fontWeight: '500', flex: 1 },
+    rowTime: { color: c.textFaint, fontSize: 11, lineHeight: 16 },
+    rowBottom: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    rowPreview: { color: c.textFaint, fontSize: 12, lineHeight: 18, flex: 1 },
+    tag: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.xs },
+    tagText: { fontSize: 10, fontWeight: '500' },
+    account: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: space.lg,
+      paddingTop: space.md,
+      paddingBottom: space.xl,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: c.border,
+      backgroundColor: s.sidebar,
+    },
+    accountPressed: { backgroundColor: s.sidebarHover },
+    accountInfo: { flex: 1 },
+    accountName: { color: c.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+    accountSub: { color: c.textFaint, fontSize: 11, lineHeight: 16 },
+    accountGear: { color: c.textFaint, fontSize: 16 },
+  });

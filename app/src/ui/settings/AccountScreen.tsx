@@ -4,7 +4,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fro
 import { store, useStore } from '../useStore';
 import { Btn, IconButton, Pill } from '../parts';
 import { SmoothKeyboardAvoid } from '../SmoothKeyboardAvoid';
-import { colors, radius, space, topInset } from '../theme';
+import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from '../theme';
 import { loadAccountPhone, saveAccountPhone } from '../../lib/accountPhone';
 
 /** 登录尝试的阶段 → 一句人能看懂的话 */
@@ -38,6 +38,8 @@ function attemptText(phase: string | undefined, errorCode: string | undefined): 
  */
 export function AccountScreen({ onClose }: { onClose: () => void }): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [phone, setPhone] = React.useState('');
   const [phoneSaved, setPhoneSaved] = React.useState(false);
 
@@ -77,7 +79,7 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
             <View style={styles.rowTop}>
               <Text style={styles.cardTitle}>DeepSeek 账号</Text>
               <Pill>
-                <Text style={[styles.status, signedIn && { color: colors.ok }]}>
+                <Text style={[styles.status, signedIn && { color: palette.ok }]}>
                   {signedIn ? '已登录' : waiting ? '登录中' : '未登录'}
                 </Text>
               </Pill>
@@ -96,7 +98,7 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
                   setPhoneSaved(false);
                 }}
                 placeholder="15912345670"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={palette.textFaint}
                 keyboardType="phone-pad"
                 accessibilityLabel="账号手机号"
               />
@@ -178,43 +180,44 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
-  body: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
-  scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
-  card: {
-    backgroundColor: colors.glass,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    padding: space.md,
-    gap: space.sm,
-  },
-  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  status: { color: colors.textFaint, fontSize: 11 },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
-  label: { color: colors.text, fontSize: 12, fontWeight: '500', marginTop: 2 },
-  phoneRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  phoneInput: {
-    flex: 1,
-    backgroundColor: colors.glassStrong,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    color: colors.text,
-    fontSize: 13,
-  },
-  actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
-  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.xs },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
+    body: { flex: 1 },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.sm,
+      paddingHorizontal: space.lg,
+      paddingVertical: space.sm,
+    },
+    title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
+    scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
+    card: {
+      backgroundColor: c.glass,
+      borderRadius: radius.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      padding: space.md,
+      gap: space.sm,
+    },
+    rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    cardTitle: { color: c.text, fontSize: 14, fontWeight: '600' },
+    status: { color: c.textFaint, fontSize: 11 },
+    hint: { color: c.textDim, fontSize: 12, lineHeight: 17 },
+    label: { color: c.text, fontSize: 12, fontWeight: '500', marginTop: 2 },
+    phoneRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+    phoneInput: {
+      flex: 1,
+      backgroundColor: c.glassStrong,
+      borderRadius: radius.sm,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.borderStrong,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      color: c.text,
+      fontSize: 13,
+    },
+    actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
+    error: { color: c.danger, fontSize: 12, paddingHorizontal: space.xs },
+  });

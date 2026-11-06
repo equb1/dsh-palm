@@ -6,7 +6,7 @@ import { Btn, IconButton } from '../parts';
 import { JustBashProbe } from '../JustBashProbe';
 import { LightEngineScreen } from '../LightEngineScreen';
 import { SmoothKeyboardAvoid } from '../SmoothKeyboardAvoid';
-import { colors, radius, space, topInset } from '../theme';
+import { radius, space, topInset, useThemedStyles, type Theme } from '../theme';
 import { WebSurface } from '../WebSurface';
 
 /** 从宿主日志里捞本机引擎的 token（`dsh web: http://127.0.0.1:8787/?token=…`） */
@@ -26,6 +26,7 @@ async function resolveEngineToken(): Promise<string | null> {
  * 三个实验入口的路由留在这一页；关闭它们回到这里，再按 header 的 ‹ 回设置首页。
  */
 export function LabScreen({ onClose }: { onClose: () => void }): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   /** 实验室：L0（WebView 官方前端）/ L1（just-bash 前置）两个 spike */
   const [lab, setLab] = React.useState<'none' | 'web' | 'bash' | 'light'>('none');
   const [webUrl, setWebUrl] = React.useState<string | null>(null);
@@ -101,27 +102,28 @@ export function LabScreen({ onClose }: { onClose: () => void }): React.ReactElem
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
-  body: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
-  scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
-  card: {
-    backgroundColor: colors.glass,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    padding: space.md,
-    gap: space.sm,
-  },
-  cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
-  actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
+    body: { flex: 1 },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.sm,
+      paddingHorizontal: space.lg,
+      paddingVertical: space.sm,
+    },
+    title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
+    scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
+    card: {
+      backgroundColor: c.glass,
+      borderRadius: radius.lg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      padding: space.md,
+      gap: space.sm,
+    },
+    cardTitle: { color: c.text, fontSize: 14, fontWeight: '600' },
+    hint: { color: c.textDim, fontSize: 12, lineHeight: 17 },
+    actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
+  });

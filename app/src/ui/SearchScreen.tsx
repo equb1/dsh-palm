@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import type { SessionSearchHit } from '../protocol';
 import { store } from './useStore';
 import { IconButton } from './parts';
-import { colors, font, radius, space, topInset } from './theme';
+import { font, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 /** E3 / 整页搜索：轻引擎正文全文搜索，点结果直接打开会话 */
 function relTime(ts: number): string {
@@ -17,6 +17,8 @@ function relTime(ts: number): string {
 }
 
 export function SearchScreen(): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<SessionSearchHit[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -70,7 +72,7 @@ export function SearchScreen(): React.ReactElement {
           value={query}
           onChangeText={setQuery}
           placeholder="搜索全部会话正文"
-          placeholderTextColor={colors.textFaint}
+          placeholderTextColor={palette.textFaint}
           autoFocus
           autoCapitalize="none"
           autoCorrect={false}
@@ -121,8 +123,9 @@ export function SearchScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -130,7 +133,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
+  title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -140,26 +143,26 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
     paddingHorizontal: 14,
     borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
   },
-  searchGlyph: { color: colors.textFaint, fontSize: 15 },
-  input: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 0 },
-  clear: { color: colors.textFaint, fontSize: 16, paddingHorizontal: 2 },
+  searchGlyph: { color: c.textFaint, fontSize: 15 },
+  input: { flex: 1, color: c.text, fontSize: 13, paddingVertical: 0 },
+  clear: { color: c.textFaint, fontSize: 16, paddingHorizontal: 2 },
   scroll: { paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: 8 },
-  hint: { color: colors.textFaint, fontSize: 12.5, lineHeight: 18, paddingVertical: 4 },
-  error: { color: colors.danger, fontSize: 12, lineHeight: 17 },
+  hint: { color: c.textFaint, fontSize: 12.5, lineHeight: 18, paddingVertical: 4 },
+  error: { color: c.danger, fontSize: 12, lineHeight: 17 },
   row: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     padding: space.md,
     gap: 4,
   },
-  rowPressed: { backgroundColor: colors.glassStrong },
+  rowPressed: { backgroundColor: c.glassStrong },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rowTitle: { flex: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
-  rowTime: { color: colors.textFaint, fontSize: 11 },
-  snippet: { color: colors.textDim, fontSize: 12.5, lineHeight: 18 },
-  matches: { color: colors.textFaint, fontSize: 10.5, fontFamily: font.mono },
-});
+  rowTitle: { flex: 1, color: c.text, fontSize: 14, fontWeight: '600' },
+  rowTime: { color: c.textFaint, fontSize: 11 },
+  snippet: { color: c.textDim, fontSize: 12.5, lineHeight: 18 },
+  matches: { color: c.textFaint, fontSize: 10.5, fontFamily: font.mono },
+  });

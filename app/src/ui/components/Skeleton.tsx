@@ -1,7 +1,7 @@
 import React from 'react';
 import { Animated, StyleSheet, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
 
-import { motion, radius as radiusToken } from '../theme';
+import { motion, radius as radiusToken, useThemedStyles, type Theme } from '../theme';
 
 export interface SkeletonProps {
   width?: DimensionValue;
@@ -17,6 +17,7 @@ export function Skeleton({
   cornerRadius = radiusToken.sm,
   style,
 }: SkeletonProps): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   const opacity = React.useRef(new Animated.Value(0.45)).current;
 
   React.useEffect(() => {
@@ -47,6 +48,7 @@ export function Skeleton({
   );
 }
 
-const styles = StyleSheet.create({
-  base: { backgroundColor: 'rgba(0,0,0,0.06)' },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    base: { backgroundColor: c.skeleton },
+  });

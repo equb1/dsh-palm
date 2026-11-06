@@ -13,7 +13,7 @@ import {
   type GeneratedFile,
 } from '../lib/generatedFiles';
 import { Btn } from './parts';
-import { colors, radius, semantic, space, typography } from './theme';
+import { radius, space, typography, useThemedStyles, type Theme } from './theme';
 
 export interface GeneratedFilesSheetProps {
   visible: boolean;
@@ -26,6 +26,7 @@ export function GeneratedFilesSheet({
   files,
   onClose,
 }: GeneratedFilesSheetProps): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   const [opening, setOpening] = React.useState<string | null>(null);
   const [sharing, setSharing] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -133,14 +134,15 @@ export function GeneratedFilesSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,17,21,0.28)', justifyContent: 'flex-end' },
+const createStyles = ({ palette: c, semantic: s }: Theme) =>
+  StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: colors.bg,
+    backgroundColor: c.bg,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     maxHeight: '76%',
     paddingBottom: 14,
   },
@@ -152,13 +154,13 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
   },
-  title: { ...typography.heading, color: colors.text },
+  title: { ...typography.heading, color: c.text },
   close: { paddingHorizontal: 8, paddingVertical: 4 },
-  closeText: { color: colors.blue, fontSize: 14 },
+  closeText: { color: c.blue, fontSize: 14 },
   list: { maxHeight: 520 },
   listContent: { paddingHorizontal: 12, paddingBottom: 8, gap: 4 },
-  empty: { color: colors.textFaint, fontSize: 13, lineHeight: 20, padding: 12 },
-  count: { ...typography.meta, color: colors.textFaint, paddingHorizontal: 8, paddingBottom: 6 },
+  empty: { color: c.textFaint, fontSize: 13, lineHeight: 20, padding: 12 },
+  count: { ...typography.meta, color: c.textFaint, paddingHorizontal: 8, paddingBottom: 6 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -173,15 +175,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: radius.xs,
-    backgroundColor: semantic.accentSoft,
+    backgroundColor: s.accentSoft,
     alignItems: 'center',
   },
-  badgeText: { color: colors.blue, fontSize: 11, fontWeight: '600' },
+  badgeText: { color: c.blue, fontSize: 11, fontWeight: '600' },
   meta: { flex: 1, gap: 2 },
-  name: { color: colors.text, fontSize: 14, fontWeight: '500' },
-  path: { color: colors.textFaint, fontSize: 11 },
+  name: { color: c.text, fontSize: 14, fontWeight: '500' },
+  path: { color: c.textFaint, fontSize: 11 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   openBtn: { height: 34, paddingHorizontal: 8 },
-  notice: { color: colors.textDim, fontSize: 12, lineHeight: 18, paddingHorizontal: 18, paddingTop: 6 },
-  footer: { color: colors.textFaint, fontSize: 11, lineHeight: 16, paddingHorizontal: 18, paddingTop: 8 },
+  notice: { color: c.textDim, fontSize: 12, lineHeight: 18, paddingHorizontal: 18, paddingTop: 6 },
+  footer: { color: c.textFaint, fontSize: 11, lineHeight: 16, paddingHorizontal: 18, paddingTop: 8 },
 });

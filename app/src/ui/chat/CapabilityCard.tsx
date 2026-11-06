@@ -5,7 +5,7 @@ import type { Block } from '../../protocol';
 import { hostAvailable } from '../../lib/host';
 import { store, useStore } from '../useStore';
 import { Btn } from '../parts';
-import { colors, font, radius } from '../theme';
+import { font, radius, useThemedStyles, type Theme } from '../theme';
 import { ChatCard, ChatCardCodeBox } from './ChatCard';
 
 type CapabilityBlock = Extract<Block, { kind: 'capability' }>;
@@ -19,6 +19,7 @@ type CapabilityBlock = Extract<Block, { kind: 'capability' }>;
  */
 export function CapabilityCard({ block }: { block: CapabilityBlock }): React.ReactElement {
   const state = useStore();
+  const styles = useThemedStyles(createStyles);
   const [confirmed, setConfirmed] = React.useState(false);
   const [settled, setSettled] = React.useState<'idle' | 'handed' | 'stay'>(
     block.status === 'handed_off' ? 'handed' : 'idle',
@@ -136,34 +137,35 @@ export function CapabilityCard({ block }: { block: CapabilityBlock }): React.Rea
   );
 }
 
-const styles = StyleSheet.create({
-  summary: { color: colors.text, fontSize: 13, lineHeight: 19 },
-  reason: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  summary: { color: c.text, fontSize: 13, lineHeight: 19 },
+  reason: { color: c.textDim, fontSize: 12.5, lineHeight: 19 },
   missingRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   missingChip: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     borderRadius: radius.xs,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
   },
-  missingText: { color: colors.textDim, fontFamily: font.mono, fontSize: 11 },
+  missingText: { color: c.textDim, fontFamily: font.mono, fontSize: 11 },
   warning: {
-    backgroundColor: colors.warnSoft,
+    backgroundColor: c.warnSoft,
     borderRadius: radius.md,
     padding: 10,
     gap: 4,
   },
-  warningTitle: { color: colors.warn, fontSize: 12.5, fontWeight: '600', lineHeight: 18 },
-  warningBody: { color: colors.textDim, fontSize: 11.5, lineHeight: 17 },
+  warningTitle: { color: c.warn, fontSize: 12.5, fontWeight: '600', lineHeight: 18 },
+  warningBody: { color: c.textDim, fontSize: 11.5, lineHeight: 17 },
   confirmRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingTop: 4 },
   checkbox: {
     width: 14,
     height: 14,
     borderRadius: 3,
     borderWidth: 1.5,
-    borderColor: colors.warn,
+    borderColor: c.warn,
   },
-  confirmText: { color: colors.warn, fontSize: 12, fontWeight: '600' },
+  confirmText: { color: c.warn, fontSize: 12, fontWeight: '600' },
 });

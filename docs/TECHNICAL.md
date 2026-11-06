@@ -358,32 +358,45 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 
 原则：**暗色优先、单手、首屏不阻塞、状态写进控件而不是堆横幅、错误可行动**。
 
-### 8.1 设计 token
+### 8.1 设计 token 与主题运行时
 
-对齐官方 DSH `packages/client/ui-theme` 的 light alias（默认；dark 是系统深色模式的另一套），取值不是近似色：
+两套 palette 都在 `app/src/ui/theme/palette.ts`；页面不直接引用颜色常量，走
+`useTheme()` / `useThemedStyles(createStyles)`（`theme/context.tsx`）。
+
+浅色（默认基线）对齐官方 DSH light alias：
 
 | 项 | 值 |
 |---|---|
 | 背景 | `#FFFFFF`；侧栏 `#F9FAFB`；浮层 `#F9FAFB` |
 | 卡片/气泡/输入 | `#FFFFFF`；hover `#F1F3F5`；按下 `#EBEEF2`；用户气泡 `#EDF3FE` |
 | 描边 | `rgba(0,0,0,.08)` / 强 `.12` |
-| 文字 | `#0F1115` / `#4D5258` / `#6B7076` / 说明 `#6B7076` |
+| 文字 | `#0F1115` / `#4D5258` / `#6B7076` |
 | 交互色 | deepseek 蓝 `#4176E6`；浅蓝底 `#E4EDFD`；品牌字标黑 `#0F1115` |
 | 状态 | 成功 `#22C55E`、警告 `#F59E0B`、危险 `#EC1313` |
-| 圆角 | 4 / 8 / 12 / 16 / 20 / 28 / 999（胶囊） |
-| 间距 | 4 / 8 / 12 / 16 / 20 / 28 |
-| 字体 | 系统字体；等宽 `monospace`；正文 14/22、次级 13/20、说明 12/18，标题 16–24 |
-| 动效 | 100 / 200 / 300ms，`cubic-bezier(.4,0,.2,1)` |
 
-浅色层次靠 白 → `#F9FAFB` → `#F1F3F5` 叠，卡片用黑色 hairline 区分；
-官方 light 的次级文字偏淡，真机上按 DeepSeek App 的对比度加深一档
-（secondary `#61666B → #4D5258`，tertiary `#81858C → #6B7076`）。深色主题以后只换这一层，不动屏幕代码。
+深色（官方 Neutral 色阶；`palette.ts` 的 `darkColors`）：
+
+| 项 | 值 |
+|---|---|
+| 背景 / 面板 | `#0F1115` / `#151920`；hover `#1C2129`；按下 `#242A33` |
+| 用户气泡 | `#1A2A44` |
+| 描边 | `rgba(255,255,255,.10)` / 强 `.16` |
+| 文字 | `#E6E8EB` / `#A8B0BA` / `#8B949E` |
+| 交互色 | 蓝 `#7AAAFF`；浅蓝底 `rgba(65,118,230,.24)`；主按钮字 `#0F1115` |
+| 状态 | 成功 `#4ADE80`、警告 `#FBBF24`、危险 `#FF6B6B` |
+| 代码 | 块底 `#0B0D11`、行内 `#1A1F27`、正文 `#D7DBE0` |
+
+通用 token：圆角 4 / 8 / 12 / 16 / 20 / 28 / 999；间距 4 / 8 / 12 / 16 / 20 / 28；
+字体系统/monospace，正文 14/22、次级 13/20、说明 12/18；动效 100 / 200 / 300ms，
+`cubic-bezier(.4,0,.2,1)`。主题模式 `system` / `light` / `dark` 存 UI cache，
+`ThemeProvider` 用 `useColorScheme()` 解析 system；根 View/StatusBar、启动 Overlay 和
+web `colorScheme` 一起切换。深色对比度按正文 ≥ 4.5:1 选值。
 
 ### 8.2 屏幕与组件（现状）
 
 | 屏 | 内容 |
 |---|---|
-| 启动层 `LaunchOverlay` | 品牌 + 进度，覆盖首屏，就绪后淡出 |
+| 启动层 `LaunchOverlay` | 品牌 + 进度，覆盖首屏，就绪后淡出；跟随主题 |
 | 首页 `HomeScreen` | 品牌、时段问候、最近会话、Composer（权限/锦囊在输入框上方） |
 | 抽屉 `SessionDrawer` | 工作区、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
 | 全部功能 `FeaturesScreen` | 卡片网格：对话/设置/引擎/实验室 + 文件/工作区/终端（可用）+ 插件/社区（未接入标灰） |
@@ -391,10 +404,10 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 | 搜索 `SearchScreen` | `sessions.search` 全文搜索（标题/历史/思考），命中片段，点开进会话 |
 | 工作区 `WorkspaceScreen` | 宿主工作区概览（root/会话数/运行中/锦囊数）+ 文件入口（轻引擎单工作区） |
 | 终端 `TerminalScreen` | `shell.run` 只读终端：pwd/ls/cat/grep，写操作被沙箱拒绝，15s/20k |
-| 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区；字号档 `chatFontScale` |
+| 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区；字号档 `chatFontScale`；深色由 palette 驱动 |
 | 动效 `ScreenFade` | 页面切换淡入（motion.duration.base/standard）；设置行按压 0.98（fast） |
 | 设置 `SettingsScreen` | 6 组首页（搜索 / SettingsTile / 右侧当前值），只做导航 |
-| 设置二级页 | `AccountScreen` / `CredentialsScreen` / `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen` |
+| 设置二级页 | `AccountScreen` / `CredentialsScreen` / `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen` / `ThemeScreen` |
 | 引擎 `EngineScreen` | 状态环、启停/重启、失败卡、保活、日志、高级启动命令 |
 | 模型 `ModelSheet` | 模型列表 + 推理等级；权限/工作区不在这里 |
 | 提供商 `ProvidersCard` | 目录/自定义两个 tab、发现模型、增删 |
@@ -450,8 +463,9 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
   `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen`（轻引擎渠道直进 LightEngineScreen）。
   二级页 header 的 ‹ 和安卓返回键都先回设置首页。
 - 每行右侧显示当前值（已登录/未配置/运行中/受限制），异常值用警告色；
-- 外观/通用部分只读（主题浅色、字号标准、通知系统管理），点按提示未接后端（深色/字号在 U7）；
-- 「完成后收起过程」是可用开关（`collapseProcess`，UI cache 持久化）：关掉后完成回合默认展开过程。
+- 外观：主题进 `ThemeScreen`（跟随系统/浅色/深色，`themeMode` 存 UI cache）；对话字号
+  标准/大/特大（`chatFontScale`）；「完成后收起过程」开关（`collapseProcess`）。
+- 通用：通知由系统管理；后台保活进引擎页。
 - 抽屉分组：置顶 / 运行中 / 今天 / 更早；筛选胶囊「全部 / 运行中 / 待确认 / 未读」；文件夹胶囊
   「全部文件夹 + 自定义文件夹」（长按「移到文件夹…」，UI cache 的 `sessionFolders`）；行尾最多一个状态标记；
   长按出「置顶/取消置顶/归档/改名/删除」；搜索框右侧「全文」进 SearchScreen；标题右侧 ⊞ 进「全部功能」；
@@ -465,9 +479,9 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 
 ### 8.7 未做
 
-浅色主题、字号档、动效 token、全部功能页、**U8 的全功能文件面板/终端/工作区**、
-小组件/悬浮球、通知直达会话。对应任务见 [AI-TASKS](AI-TASKS.md) 的 UI 工作流；其中**不冲突、可立即并行**的 UI 项单独列在
-「可并行 UI 项」，附文件禁区与组件契约。
+U8 的完整引擎文件系统/终端、多工作区（M2）、小组件/悬浮球、通知直达会话。
+浅色/深色主题、字号档、动效 token、全部功能页、文件/工作区/只读终端均已完成；
+任务状态见 [AI-TASKS](AI-TASKS.md)。
 
 > 注：1.5 的「生成文件」弹层（`GeneratedFilesSheet`，只列本会话工具生成的文件、可打开）已落地，
 > 不等于这里的 U8 全功能文件面板（全工作区浏览/上传管理/重命名/搜索/分享）。

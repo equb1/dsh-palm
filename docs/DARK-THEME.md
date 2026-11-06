@@ -1,57 +1,49 @@
-# 深色主题改造方案（U7 剩余项）
+# 深色主题（U7）实现与验收
 
-> 状态：2026-11-06。**尚未实现**。U7 的字号档、页面淡入、设置行按压已完成；深色主题是最后一项。
-> 本文记录为什么不在这几轮硬做，以及后续怎么安全落地。
+> 状态：2026-11-06 已实现。浅色保持 2026-11-06 之前的基线；深色按官方 Neutral 色阶。
+> 运行方式、设置入口和验收命令见 [TECHNICAL §8](TECHNICAL.md)；任务状态见 [AI-TASKS](AI-TASKS.md)。
 
-## 1. 现状
+## 1. 实现形态
 
-- `app/src/ui/theme.ts` 只有一套浅色 token（`colors` / `semantic`）；所有页面在模块加载时
-  `StyleSheet.create({...})`，颜色是**字面量快照**。
-- 全 App 约 15 个页面、几十个 StyleSheet，直接改 `colors` 的值不会让已创建的样式更新。
-- 因此不存在“加一个开关 + 调几个颜色”就能正确切深色；硬做会出现「背景黑了、文字还是深灰」的
-  半成品，比不做更糟。
+- `app/src/ui/theme/palette.ts`：`lightColors` / `darkColors` / `lightSemantic` / `darkSemantic`
+  与 `riskTone(risk, palette)`；颜色、语法高亮、backdrop、阴影、header 半透明层都进 palette。
+- `app/src/ui/theme/context.tsx`：`ThemeProvider`（按 `themeMode` + `useColorScheme()` 解析）、
+  `useTheme()`、`useThemedStyles(createStyles)`；palette 和 context value 用 `useMemo` 固定。
+- `AppState.themeMode`：`system` / `light` / `dark`，存在 UI cache（`dsh-palm.ui-cache`）。
+  设置 → 外观 → 主题（`ui/settings/ThemeScreen.tsx`）三选一，切换即时生效。
+- 所有页面把模块级 `StyleSheet.create` 改成 `createStyles(theme)` + `useThemedStyles`；
+  页面内联颜色、`placeholderTextColor`、`ActivityIndicator color` 全部走 palette。
+- `MarkdownView` 用 `MarkdownStylesContext` 下发「主题 + 字号」后的样式和语法高亮，
+  不再使用模块级可变 `styles`；memo 子组件靠 context 更新重渲染。
+- 系统层：`App.tsx` 根 View/StatusBar 按 resolved mode 切换；`LaunchOverlay` 也在 Provider 内；
+  `app.json` 的 `userInterfaceStyle` 改为 `automatic`；Android `values-night/colors.xml`
+  补启动窗口背景。
 
-## 2. 目标形态
+## 2. 迁移顺序（已完成）
 
-```tsx
-// theme/context.tsx
-type ThemeMode = 'light' | 'dark';
-const ThemeContext = createContext<{ mode: ThemeMode; colors: Palette; semantic: Semantic }>(...);
-export function useTheme(): ThemeContextValue;
+1. [x] `theme.ts` 拆成 `theme/palette.ts`、`theme/context.tsx`、`theme/index.ts`；dark 按
+   `#0F1115` 背景、`#151920` 面板、`#E6E8EB` 正文、`#A8B0BA` 次文字、`rgba(255,255,255,.10)` 描边。
+2. [x] Chat：`ChatScreen`、`Composer`、`MarkdownView`、`chat/ChatCard`、`ApprovalCard`、
+   `CapabilityCard`、`TurnView`、`JumpButton`。
+3. [x] Home / Drawer / Settings + 二级页 / Features / Files / Search / Workspace / Terminal /
+   Engine / ModelSheet / ProvidersCard / LightEngineScreen / GeneratedFilesSheet。
+4. [x] 系统层：StatusBar、启动 Overlay、web `color-scheme`；系统查看器保持外部控制。
+5. [x] 验收：浅色/深色各走设置、聊天、文件、终端、审批卡、错误横幅、Markdown 代码块。
 
-// 每个页面
-const styles = useThemedStyles(createStyles); // createStyles(colors) => StyleSheet
-```
+## 3. 验收口径
 
-- `createStyles(theme)` 是纯函数，按当前 palette 重建 StyleSheet；
-- 页面里不再直接 import `colors`；一律走 `useTheme()`/`useThemedStyles()`；
-- 根节点按 mode 切换 `StatusBar`、`bg`、`LaunchOverlay`；
-- 系统深色/浅色可做「跟随系统」+ 手动覆盖，存 UI cache（与 `chatFontScale` 同一处）。
+- 全局搜 `#RRGGBB` / `rgba(` / `white` / `black`，只允许出现在 `theme/palette.ts`；
+  `transparent` 仅用于刻意透明。
+- 深色正文对比度 ≥ 4.5:1：`text #E6E8EB`、`textDim #A8B0BA`、`textFaint #8B949E`、
+  `blue #7AAAFF`、`codeText #D7DBE0`；主色按钮在深色下用深色字（`onAccent #0F1115`），
+  不再沿用白字。
+- 切换后不重启 App；浅色模式与本轮之前的截图一致。
+- `npm --prefix app run typecheck` + `npm run verify` 全绿。
+- 2026-11-06 Web 验收：浅色/深色各截设置首页、主题页、聊天、审批卡、文件页；
+  系统跟随在 `prefers-color-scheme` 切换时即时更新。真机 `npm run device:regression`
+  浅色/深色各跑一次待补（本机没有 release keystore，当前 release 设备不能覆盖安装）。
 
-## 3. 迁移顺序（每步可独立验收）
+## 4. 为什么不更早做
 
-1. `theme.ts` 拆成 `theme/light.ts`、`theme/dark.ts`、`theme/index.ts`；dark 先按官方 Neutral 色阶
-   对齐（背景 #0F1115、面板 #151920、文字 #E6E8EB、次文字 #A8B0BA、边框 rgba(255,255,255,.10)）。
-2. 先迁 **Chat 相关**：`ChatScreen`、`TurnView`、`MarkdownView`、`Composer`、`ChatCard` —— 阅读面最大，
-   深色收益最高。
-3. 再迁 **Home / Drawer / Settings + 二级页 / Features / Files / Search / Workspace / Terminal /
-   Engine**。
-4. 最后处理系统层：StatusBar、启动 Overlay、系统查看器（外部不可控，保持浅色即可）、图片
-   （深色下加轻微提亮/降低对比度可选）。
-5. 真机验收：浅色/深色各跑 `npm run device:regression` 10 步；深色下检查聊天、设置、文件、终端、
-   审批卡、错误横幅、Markdown 代码块。
-
-## 4. 验收口径
-
-- 没有硬编码浅色残留（全局搜 `#FFF`/`#FFFFFF`/`rgba(0,0,0` 只允许出现在 token 或刻意的高光里）；
-- 两套主题对比度 ≥ 4.5:1（正文）；
-- 切换后不需要重启 App（样式随 context 重建）；
-- 浅色模式与本轮之前的截图一致（不能为了深色改浅色）。
-
-## 5. 为什么本轮不硬做
-
-- 这是跨 15+ 文件的样式架构改造，不是单点功能；在当前「一轮一个可验收项」的节奏里，
-  半迁会造成两套主题混用、回归面反而更大。
-- 更安全的做法是单独排一轮（或几轮）按上面的顺序做，每迁完一组就跑一次 10 步回归 + 截图。
-
-在深色主题落地前，App 保持**浅色固定**；字号档与动效已经可用。
+这是跨 15+ 页面、40+ StyleSheet 的样式架构改造，不是单点开关。先前按「一轮一个可验收项」
+先做字号档和动效；深色单独一轮完成，避免半迁移时两套主题混用。

@@ -5,7 +5,7 @@ import type { AttachmentEngine, AttachmentKind } from '../lib/attachments/types'
 import type { PermissionOption, Preset } from '../protocol';
 import { AttachmentChips } from './AttachmentChips';
 import { PickerSheet } from './components';
-import { colors, radius, space } from './theme';
+import { radius, space, useTheme, useThemedStyles, type Theme } from './theme';
 
 export interface ComposerAttachment {
   id: string;
@@ -98,6 +98,8 @@ export function Composer({
   onPickAttachment?: (kind: AttachmentKind) => void;
   onRemoveAttachment?: (id: string) => void;
 }): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const hasText = draft.trim().length > 0;
   const hasAttachments = attachments.length > 0;
   const reading = attaching || attachments.some((a) => a.status === 'reading');
@@ -244,7 +246,7 @@ export function Composer({
           value={draft}
           onChangeText={onChangeDraft}
           placeholder={placeholder}
-          placeholderTextColor={colors.textFaint}
+          placeholderTextColor={palette.textFaint}
           multiline
           scrollEnabled={contentHeight >= 120}
           onContentSizeChange={(e) => {
@@ -261,11 +263,11 @@ export function Composer({
           accessibilityLabel={showStop ? '停止' : '发送'}
           style={({ pressed }) => [
             styles.send,
-            showStop && { backgroundColor: colors.glassStrong },
+            showStop && { backgroundColor: palette.glassStrong },
             { opacity: showStop || canSend ? (pressed ? 0.75 : 1) : 0.3 },
           ]}
         >
-          <Text style={[styles.sendGlyph, showStop && { color: colors.text }]}>{showStop ? '■' : '↑'}</Text>
+          <Text style={[styles.sendGlyph, showStop && { color: palette.text }]}>{showStop ? '■' : '↑'}</Text>
         </Pressable>
       </View>
 
@@ -329,7 +331,8 @@ export function Composer({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
   wrap: {
     paddingHorizontal: space.md,
     paddingTop: space.sm,
@@ -337,16 +340,16 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tray: { gap: 4 },
-  attachHint: { color: colors.textDim, fontSize: 11.5, lineHeight: 16, paddingHorizontal: 4 },
+  attachHint: { color: c.textDim, fontSize: 11.5, lineHeight: 16, paddingHorizontal: 4 },
   plusPanel: {
     flexDirection: 'row',
     gap: 8,
     padding: 10,
-    backgroundColor: colors.bg,
+    backgroundColor: c.bg,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
-    shadowColor: '#0F1115',
+    borderColor: c.borderStrong,
+    shadowColor: c.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -357,12 +360,12 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  plusIconText: { color: colors.blue, fontSize: 13, fontWeight: '700' },
-  plusLabel: { color: colors.text, fontSize: 12 },
+  plusIconText: { color: c.blue, fontSize: 13, fontWeight: '700' },
+  plusLabel: { color: c.text, fontSize: 12 },
   bar: { flexDirection: 'row', gap: 6, paddingRight: space.sm },
   barPill: {
     flexDirection: 'row',
@@ -372,21 +375,21 @@ const styles = StyleSheet.create({
     maxWidth: 160,
     paddingHorizontal: 10,
     borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
   },
-  barPillGlyph: { color: colors.textDim, fontSize: 11, fontWeight: '600' },
-  barPillText: { color: colors.text, fontSize: 12, flexShrink: 1 },
-  barChevron: { color: colors.textFaint, fontSize: 9 },
+  barPillGlyph: { color: c.textDim, fontSize: 11, fontWeight: '600' },
+  barPillText: { color: c.text, fontSize: 12, flexShrink: 1 },
+  barChevron: { color: c.textFaint, fontSize: 9 },
   box: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.panel,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.12)',
+    borderColor: c.borderStrong,
     padding: 8,
-    shadowColor: '#0F1115',
+    shadowColor: c.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -396,7 +399,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -405,14 +408,14 @@ const styles = StyleSheet.create({
     width: 15,
     height: 1.8,
     borderRadius: 1,
-    backgroundColor: colors.textDim,
+    backgroundColor: c.textDim,
   },
   plusBarV: {
     position: 'absolute',
     width: 1.8,
     height: 15,
     borderRadius: 1,
-    backgroundColor: colors.textDim,
+    backgroundColor: c.textDim,
   },
   input: {
     flex: 1,
@@ -421,7 +424,7 @@ const styles = StyleSheet.create({
     paddingTop: 9,
     paddingBottom: 9,
     paddingHorizontal: 2,
-    color: colors.text,
+    color: c.text,
     fontSize: 15,
     lineHeight: 23,
     includeFontPadding: false,
@@ -430,19 +433,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.blue,
+    backgroundColor: c.blue,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendGlyph: {
-    color: colors.bg,
+    color: c.bg,
     fontSize: 16,
     fontWeight: '700',
     includeFontPadding: false,
   },
   riskBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15,17,21,0.35)',
+    backgroundColor: c.backdrop,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -450,23 +453,23 @@ const styles = StyleSheet.create({
   riskCard: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: colors.bg,
+    backgroundColor: c.bg,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
     padding: 20,
     gap: 12,
   },
-  riskTitle: { color: colors.text, fontSize: 16, lineHeight: 24, fontWeight: '600' },
-  riskText: { color: colors.textDim, fontSize: 13, lineHeight: 20 },
+  riskTitle: { color: c.text, fontSize: 16, lineHeight: 24, fontWeight: '600' },
+  riskText: { color: c.textDim, fontSize: 13, lineHeight: 20 },
   riskActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
   riskCancel: { paddingHorizontal: 12, paddingVertical: 10 },
-  riskCancelText: { color: colors.textDim, fontSize: 13 },
+  riskCancelText: { color: c.textDim, fontSize: 13 },
   riskConfirm: {
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: radius.sm,
-    backgroundColor: colors.dangerSoft,
+    backgroundColor: c.dangerSoft,
   },
-  riskConfirmText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
+  riskConfirmText: { color: c.danger, fontSize: 13, fontWeight: '600' },
 });

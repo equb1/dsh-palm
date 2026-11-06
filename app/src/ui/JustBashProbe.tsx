@@ -9,7 +9,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import '../lib/polyfills';
 import { Btn, IconButton } from './parts';
-import { colors, font, radius, space, topInset } from './theme';
+import { font, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 interface ProbeResult {
   command: string;
@@ -31,6 +31,8 @@ const CASES: string[] = [
 ];
 
 export function JustBashProbe({ onClose }: { onClose: () => void }): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [results, setResults] = React.useState<ProbeResult[]>([]);
   const [running, setRunning] = React.useState(false);
   const [status, setStatus] = React.useState('点「运行」开始');
@@ -101,11 +103,11 @@ export function JustBashProbe({ onClose }: { onClose: () => void }): React.React
             <Text style={styles.command}>{item.command}</Text>
             <View style={styles.kv}>
               <Text style={styles.k}>耗时</Text>
-              <Text style={[styles.v, item.ms > 1000 && { color: colors.warn }]}>{item.ms} ms</Text>
+              <Text style={[styles.v, item.ms > 1000 && { color: palette.warn }]}>{item.ms} ms</Text>
             </View>
             <View style={styles.kv}>
               <Text style={styles.k}>退出码</Text>
-              <Text style={[styles.v, item.exitCode !== 0 && { color: colors.danger }]}>{item.exitCode}</Text>
+              <Text style={[styles.v, item.exitCode !== 0 && { color: palette.danger }]}>{item.exitCode}</Text>
             </View>
             {item.out ? <Text style={styles.out}>{item.out}</Text> : null}
             {item.error ? <Text style={styles.error}>{item.error}</Text> : null}
@@ -116,8 +118,9 @@ export function JustBashProbe({ onClose }: { onClose: () => void }): React.React
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -125,31 +128,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
+  title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
   scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
   card: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     padding: space.md,
     gap: space.sm,
   },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
-  status: { color: colors.textDim, fontSize: 12 },
+  hint: { color: c.textDim, fontSize: 12, lineHeight: 17 },
+  status: { color: c.textDim, fontSize: 12 },
   actions: { flexDirection: 'row', gap: space.sm, marginTop: 4 },
-  command: { color: colors.text, fontSize: 12.5, fontFamily: font.mono },
+  command: { color: c.text, fontSize: 12.5, fontFamily: font.mono },
   kv: { flexDirection: 'row', justifyContent: 'space-between' },
-  k: { color: colors.textDim, fontSize: 12 },
-  v: { color: colors.text, fontSize: 12, fontWeight: '600' },
+  k: { color: c.textDim, fontSize: 12 },
+  v: { color: c.text, fontSize: 12, fontWeight: '600' },
   out: {
-    color: colors.textDim,
+    color: c.textDim,
     fontSize: 11.5,
     fontFamily: font.mono,
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
-  error: { color: colors.danger, fontSize: 11.5, fontFamily: font.mono },
+  error: { color: c.danger, fontSize: 11.5, fontFamily: font.mono },
 });

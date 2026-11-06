@@ -4,7 +4,7 @@ import { BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, TextInput,
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
-import { colors, radius, space, topInset } from './theme';
+import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 import { hostAvailable, hostBatteryWhitelisted, hostLogs } from '../lib/host';
 import { EngineScreen } from './EngineScreen';
 import { LightEngineScreen } from './LightEngineScreen';
@@ -13,10 +13,19 @@ import { CredentialsScreen } from './settings/CredentialsScreen';
 import { HostScreen } from './settings/HostScreen';
 import { LabScreen } from './settings/LabScreen';
 import { ProvidersScreen } from './settings/ProvidersScreen';
+import { ThemeScreen } from './settings/ThemeScreen';
 import { SettingsGroup, type SettingsRow } from './settings/SettingsTile';
 
 /** U4：设置首页只做导航；每行点进独立二级页 */
-type SettingsRoute = 'account' | 'credentials' | 'providers' | 'host' | 'lab' | 'engine' | 'light';
+type SettingsRoute =
+  | 'account'
+  | 'credentials'
+  | 'providers'
+  | 'host'
+  | 'lab'
+  | 'engine'
+  | 'light'
+  | 'theme';
 
 /**
  * 设置首页。
@@ -26,6 +35,8 @@ type SettingsRoute = 'account' | 'credentials' | 'providers' | 'host' | 'lab' | 
  */
 export function SettingsScreen(): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   /** null = 问不到（非 Android / 老系统） */
   const [batteryOk, setBatteryOk] = React.useState<boolean | null>(null);
   const [route, setRoute] = React.useState<SettingsRoute | null>(null);
@@ -160,10 +171,15 @@ export function SettingsScreen(): React.ReactElement {
         {
           id: 'theme',
           title: '主题',
-          value: '浅色',
+          value:
+            state.themeMode === 'system'
+              ? '跟随系统'
+              : state.themeMode === 'dark'
+                ? '深色'
+                : '浅色',
           icon: '◐',
           tone: 'violet',
-          onPress: () => flash('主题跟着官方浅色 token 走；深色主题在 U7 做。'),
+          onPress: () => setRoute('theme'),
         },
         {
           id: 'font',
@@ -287,6 +303,9 @@ export function SettingsScreen(): React.ReactElement {
       />
     );
   }
+  if (route === 'theme') {
+    return <ThemeScreen onClose={() => setRoute(null)} />;
+  }
   if (route === 'engine') {
     return <EngineScreen onClose={() => setRoute(null)} />;
   }
@@ -326,7 +345,7 @@ export function SettingsScreen(): React.ReactElement {
               value={query}
               onChangeText={setQuery}
               placeholder="搜索设置"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="搜索设置"
@@ -356,31 +375,32 @@ export function SettingsScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
-  bodyWrap: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-  },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
-  scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    height: 40,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
-    backgroundColor: colors.glassStrong,
-  },
-  searchGlyph: { color: colors.textFaint, fontSize: 15 },
-  searchInput: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 0 },
-  searchClear: { color: colors.textFaint, fontSize: 16, paddingHorizontal: 2 },
-  notice: { color: colors.textDim, fontSize: 12, lineHeight: 17, paddingHorizontal: space.xs },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
-  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.xs },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
+    bodyWrap: { flex: 1 },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: space.sm,
+      paddingHorizontal: space.lg,
+      paddingVertical: space.sm,
+    },
+    title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
+    scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
+    searchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      height: 40,
+      paddingHorizontal: 14,
+      borderRadius: radius.pill,
+      backgroundColor: c.glassStrong,
+    },
+    searchGlyph: { color: c.textFaint, fontSize: 15 },
+    searchInput: { flex: 1, color: c.text, fontSize: 13, paddingVertical: 0 },
+    searchClear: { color: c.textFaint, fontSize: 16, paddingHorizontal: 2 },
+    notice: { color: c.textDim, fontSize: 12, lineHeight: 17, paddingHorizontal: space.xs },
+    hint: { color: c.textDim, fontSize: 12, lineHeight: 17 },
+    error: { color: c.danger, fontSize: 12, paddingHorizontal: space.xs },
+  });

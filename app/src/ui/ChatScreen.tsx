@@ -24,18 +24,20 @@ import { GeneratedFilesSheet } from './GeneratedFilesSheet';
 import { collectGeneratedFiles } from '../lib/generatedFiles';
 import { TurnView, JumpButton } from './chat';
 import type { AttachmentKind } from '../lib/attachments/types';
-import { colors, radius, space, topInset } from './theme';
+import { radius, space, topInset, useThemedStyles, type Theme } from './theme';
 
 /* ------------------------------------------------------------------ *
  * 会话页
  * ------------------------------------------------------------------ */
 
 function TurnSeparator(): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   return <View style={styles.turnSeparator} />;
 }
 
 export function ChatScreen({ session }: { session: SessionDetail }): React.ReactElement {
   const state = useStore();
+  const styles = useThemedStyles(createStyles);
   const [draft, setDraft] = React.useState('');
   const [showJump, setShowJump] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
@@ -253,7 +255,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
       </View>
     ),
-    [preset?.name, preset?.tagline],
+    [preset?.name, preset?.tagline, styles],
   );
 
   return (
@@ -416,8 +418,9 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   bodyWrap: { flex: 1 },
 
   header: {
@@ -433,24 +436,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
     // 玻璃感近似：半透明白；列表滚到下面时再加深并补描边/投影
-    backgroundColor: 'rgba(255,255,255,0.86)',
+    backgroundColor: c.headerOverlay,
   },
   headerScrolled: {
-    backgroundColor: 'rgba(255,255,255,0.97)',
+    backgroundColor: c.headerSolid,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomColor: c.border,
     elevation: 3,
-    shadowColor: '#000000',
+    shadowColor: c.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
   titlePill: { flexShrink: 1, paddingVertical: 3 },
-  titleText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  titleText: { color: c.text, fontSize: 14, fontWeight: '600' },
   presetPill: { flexShrink: 1 },
-  presetText: { color: colors.textDim, fontSize: 12 },
+  presetText: { color: c.textDim, fontSize: 12 },
   readOnly: {
-    color: colors.warn,
+    color: c.warn,
     fontSize: 11.5,
     lineHeight: 17,
     paddingHorizontal: space.lg,
@@ -464,8 +467,8 @@ const styles = StyleSheet.create({
   jumpWrap: { position: 'absolute', right: space.lg, bottom: space.lg },
 
   emptyChat: { paddingTop: 80, alignItems: 'center', gap: 6 },
-  emptyChatTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  emptyChatText: { color: colors.textFaint, fontSize: 12.5 },
+  emptyChatTitle: { color: c.text, fontSize: 16, fontWeight: '600' },
+  emptyChatText: { color: c.textFaint, fontSize: 12.5 },
 
   errorCard: {
     flexDirection: 'row',
@@ -477,26 +480,26 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(236,19,19,0.18)',
-    backgroundColor: colors.dangerSoft,
+    borderColor: c.dangerBorderSoft,
+    backgroundColor: c.dangerSoft,
   },
   errorGlyphWrap: {
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.danger,
+    backgroundColor: c.danger,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  errorGlyph: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', lineHeight: 13 },
-  errorText: { flex: 1, color: colors.danger, fontSize: 12, lineHeight: 17 },
+  errorGlyph: { color: c.onDanger, fontSize: 11, fontWeight: '700', lineHeight: 13 },
+  errorText: { flex: 1, color: c.danger, fontSize: 12, lineHeight: 17 },
   errorAction: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.pill,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.glass,
   },
-  errorActionText: { color: colors.danger, fontSize: 12, fontWeight: '600' },
+  errorActionText: { color: c.danger, fontSize: 12, fontWeight: '600' },
   errorClose: { paddingHorizontal: 2, paddingVertical: 2 },
-  errorCloseText: { color: colors.danger, fontSize: 16, lineHeight: 18 },
+  errorCloseText: { color: c.danger, fontSize: 16, lineHeight: 18 },
 });

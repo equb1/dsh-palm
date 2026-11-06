@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { semantic, space, typography } from '../theme';
+import { space, typography, useThemedStyles, type Theme } from '../theme';
 
 export interface SectionHeaderProps {
   title: string;
@@ -17,6 +17,7 @@ export function SectionHeader({
   right,
   style,
 }: SectionHeaderProps): React.ReactElement {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={[styles.row, style]}>
       <View style={styles.texts}>
@@ -28,14 +29,15 @@ export function SectionHeader({
   );
 }
 
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: space.sm,
-  },
-  texts: { flex: 1, gap: 1 },
-  title: { ...typography.subheading, color: semantic.textPrimary },
-  subtitle: { ...typography.caption, color: semantic.textSecondary },
-  right: { marginLeft: space.sm },
-});
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: space.sm,
+    },
+    texts: { flex: 1, gap: 1 },
+    title: { ...typography.subheading, color: c.text },
+    subtitle: { ...typography.caption, color: c.textDim },
+    right: { marginLeft: space.sm },
+  });

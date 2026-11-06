@@ -4,7 +4,7 @@ import { ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-nati
 import { store, useStore } from './useStore';
 import { Btn, IconButton } from './parts';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
-import { colors, font, radius, space, topInset } from './theme';
+import { font, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 import {
   hostAvailable,
   hostBatteryWhitelisted,
@@ -28,6 +28,8 @@ const PREWARM_TIERS = [
 
 export function EngineScreen({ onClose }: { onClose: () => void }): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [batteryOk, setBatteryOk] = React.useState<boolean | null>(null);
 
   const host = state.host;
@@ -93,12 +95,12 @@ export function EngineScreen({ onClose }: { onClose: () => void }): React.ReactE
   };
 
   const ringColor = hostReady
-    ? colors.ok
+    ? palette.ok
     : hostFailed
-      ? colors.danger
+      ? palette.danger
       : hostStarting || engine.mode === 'starting-proot'
-        ? colors.blue
-        : colors.borderStrong;
+        ? palette.blue
+        : palette.borderStrong;
   const ringTitle = hostReady
     ? '运行中'
     : hostFailed
@@ -140,7 +142,7 @@ export function EngineScreen({ onClose }: { onClose: () => void }): React.ReactE
               </View>
               <View style={styles.kv}>
                 <Text style={styles.k}>保活</Text>
-                <Text style={[styles.v, batteryOk === false && { color: colors.warn }]}>
+                <Text style={[styles.v, batteryOk === false && { color: palette.warn }]}>
                   {batteryOk == null ? '未知' : batteryOk ? '已放行' : '受限制'}
                 </Text>
               </View>
@@ -211,7 +213,7 @@ export function EngineScreen({ onClose }: { onClose: () => void }): React.ReactE
           <View style={styles.card}>
             <View style={styles.rowTop}>
               <Text style={styles.cardTitle}>后台保活</Text>
-              <Text style={[styles.status, batteryOk === false && { color: colors.warn }]}>
+              <Text style={[styles.status, batteryOk === false && { color: palette.warn }]}>
                 {batteryOk == null ? '未知' : batteryOk ? '已放行' : '受限制'}
               </Text>
             </View>
@@ -263,7 +265,7 @@ export function EngineScreen({ onClose }: { onClose: () => void }): React.ReactE
               value={state.hostEngineCmd}
               onChangeText={(t) => store.setHostCommands(t, state.hostBridgeCmd)}
               placeholder="引擎命令，例如 sh /data/local/tmp/engine.sh"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="引擎启动命令"
@@ -273,7 +275,7 @@ export function EngineScreen({ onClose }: { onClose: () => void }): React.ReactE
               value={state.hostBridgeCmd}
               onChangeText={(t) => store.setHostCommands(state.hostEngineCmd, t)}
               placeholder="桥命令，可用 {token} 和 {port} 占位符"
-              placeholderTextColor={colors.textFaint}
+              placeholderTextColor={palette.textFaint}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="桥启动命令"
@@ -300,8 +302,9 @@ export function EngineScreen({ onClose }: { onClose: () => void }): React.ReactE
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   body: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -310,7 +313,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  title: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '700' },
+  title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
   scroll: { padding: space.lg, gap: 12, paddingBottom: space.xxl },
 
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
@@ -322,58 +325,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
   },
-  ringTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  ringSub: { color: colors.textFaint, fontSize: 11.5 },
+  ringTitle: { color: c.text, fontSize: 18, fontWeight: '700' },
+  ringSub: { color: c.textFaint, fontSize: 11.5 },
   meta: { flex: 1, gap: 2 },
   kv: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, paddingVertical: 3 },
-  k: { color: colors.textDim, fontSize: 12.5 },
-  v: { color: colors.text, fontSize: 12.5, fontWeight: '500', flexShrink: 1, textAlign: 'right' },
+  k: { color: c.textDim, fontSize: 12.5 },
+  v: { color: c.text, fontSize: 12.5, fontWeight: '500', flexShrink: 1, textAlign: 'right' },
 
   card: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     padding: space.md,
     gap: space.sm,
   },
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  status: { color: colors.textFaint, fontSize: 11 },
-  hint: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
-  label: { color: colors.text, fontSize: 12, fontWeight: '500', marginTop: 2 },
+  cardTitle: { color: c.text, fontSize: 14, fontWeight: '600' },
+  status: { color: c.textFaint, fontSize: 11 },
+  hint: { color: c.textDim, fontSize: 12, lineHeight: 17 },
+  label: { color: c.text, fontSize: 12, fontWeight: '500', marginTop: 2 },
   actions: { flexDirection: 'row', gap: space.sm, marginTop: 2 },
   input: {
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
+    borderColor: c.borderStrong,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: colors.text,
+    color: c.text,
     fontSize: 13,
   },
 
   failCard: {
-    backgroundColor: colors.dangerSoft,
+    backgroundColor: c.dangerSoft,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(236,19,19,0.24)',
+    borderColor: c.dangerBorderMedium,
     padding: space.md,
     gap: space.sm,
   },
-  failTitle: { color: colors.danger, fontSize: 14, fontWeight: '700' },
-  failBody: { color: colors.textDim, fontSize: 12, lineHeight: 17 },
+  failTitle: { color: c.danger, fontSize: 14, fontWeight: '700' },
+  failBody: { color: c.textDim, fontSize: 12, lineHeight: 17 },
 
   logBox: {
-    backgroundColor: colors.bgElevated,
+    backgroundColor: c.bgElevated,
     borderRadius: radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 2,
   },
-  logLine: { color: colors.textDim, fontSize: 10.5, fontFamily: font.mono },
-  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.xs },
+  logLine: { color: c.textDim, fontSize: 10.5, fontFamily: font.mono },
+  error: { color: c.danger, fontSize: 12, paddingHorizontal: space.xs },
 });

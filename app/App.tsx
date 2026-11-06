@@ -13,12 +13,30 @@ import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
 import { TerminalScreen } from './src/ui/TerminalScreen';
 import { ScreenFade } from './src/ui/components/ScreenFade';
 import { store, useStore } from './src/ui/useStore';
-import { colors } from './src/ui/theme';
+import { ThemeProvider, useTheme, useThemedStyles, type Theme } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
 import { parseDeepLink } from './src/lib/lightLink';
+import type { AppState as DshAppState } from './src/state/store';
 
 export default function App(): React.ReactElement {
   const state = useStore();
+  return (
+    <ThemeProvider mode={state.themeMode}>
+      <AppShell state={state} />
+    </ThemeProvider>
+  );
+}
+
+function AppShell({ state }: { state: DshAppState }): React.ReactElement {
+  const theme = useTheme();
+  const styles = useThemedStyles(createStyles);
+
+  // web 上把浏览器 color-scheme 和页面底色跟着主题走
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    document.documentElement.style.colorScheme = theme.resolved;
+    document.body.style.backgroundColor = theme.palette.webOuter;
+  }, [theme.resolved, theme.palette.webOuter]);
 
   // 冷启动：恢复本地缓存 → 连轻引擎（冷启动到可输入 <1s，proot 不自动连接）
   const autoStarted = React.useRef(false);
@@ -143,10 +161,12 @@ export default function App(): React.ReactElement {
   const screenKey = `${state.view}:${state.detail?.id ?? ''}:${state.connectModalOpen ? 'connect' : ''}`;
   const shown = <ScreenFade trigger={screenKey}>{screen}</ScreenFade>;
 
+  const statusBar = <StatusBar barStyle={theme.resolved === 'dark' ? 'light-content' : 'dark-content'} />;
+
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webOuter}>
-        <StatusBar barStyle="dark-content" />
+        {statusBar}
         <View style={styles.webFrame}>
           {shown}
           {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
@@ -157,27 +177,28 @@ export default function App(): React.ReactElement {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
+      {statusBar}
       {shown}
       {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  webOuter: {
-    flex: 1,
-    backgroundColor: '#050608',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  webFrame: {
-    width: 430,
-    maxWidth: '100%',
-    height: '100%',
-    maxHeight: 932,
-    backgroundColor: colors.bg,
-    overflow: 'hidden',
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: theme.palette.bg },
+    webOuter: {
+      flex: 1,
+      backgroundColor: theme.palette.webOuter,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    webFrame: {
+      width: 430,
+      maxWidth: '100%',
+      height: '100%',
+      maxHeight: 932,
+      backgroundColor: theme.palette.bg,
+      overflow: 'hidden',
+    },
+  });

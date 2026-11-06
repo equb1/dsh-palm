@@ -5,9 +5,11 @@ import { hostAvailable } from '../lib/host';
 import { store, useStore } from './useStore';
 import { Btn } from './parts';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
-import { colors, font, radius, space, topInset } from './theme';
+import { font, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 export function ConnectScreen(): React.ReactElement {
+  const { palette } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const state = useStore();
   const host = state.host;
   const engine = state.engine;
@@ -49,7 +51,7 @@ export function ConnectScreen(): React.ReactElement {
                 value={state.url}
                 onChangeText={(t) => store.setUrl(t)}
                 placeholder="ws://192.168.1.10:8787/ws"
-                placeholderTextColor={colors.textFaint}
+                placeholderTextColor={palette.textFaint}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
@@ -72,7 +74,7 @@ export function ConnectScreen(): React.ReactElement {
                   value={state.pairCode}
                   onChangeText={(t) => store.setPairCode(t)}
                   placeholder="6 位数字，宿主启动时会打印"
-                  placeholderTextColor={colors.textFaint}
+                  placeholderTextColor={palette.textFaint}
                   keyboardType="number-pad"
                   maxLength={6}
                   accessibilityLabel="配对码"
@@ -122,7 +124,7 @@ export function ConnectScreen(): React.ReactElement {
                 onPress={() => store.closeConnectModal()}
                 style={styles.settingsRow}
               >
-                <Text style={[styles.settingsText, { color: colors.blue }]}>返回首页</Text>
+                <Text style={[styles.settingsText, { color: palette.blue }]}>返回首页</Text>
               </Pressable>
             ) : null}
 
@@ -144,22 +146,23 @@ export function ConnectScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg, paddingTop: topInset },
+const createStyles = ({ palette: c }: Theme) =>
+  StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, paddingTop: topInset },
   scrollOuter: { flexGrow: 1, justifyContent: 'center' },
   content: { paddingHorizontal: space.xl, paddingVertical: space.xxl },
   mark: {
     width: 62,
     height: 62,
     borderRadius: 31,
-    backgroundColor: colors.goldSoft,
+    backgroundColor: c.goldSoft,
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
   },
-  markText: { color: colors.gold, fontSize: 26, fontWeight: '700' },
+  markText: { color: c.gold, fontSize: 26, fontWeight: '700' },
   title: {
-    color: colors.text,
+    color: c.text,
     fontSize: 30,
     fontWeight: '700',
     textAlign: 'center',
@@ -167,7 +170,7 @@ const styles = StyleSheet.create({
     letterSpacing: 6,
   },
   subtitle: {
-    color: colors.textDim,
+    color: c.textDim,
     fontSize: 13,
     textAlign: 'center',
     marginTop: space.xs,
@@ -178,58 +181,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingVertical: 10,
     borderRadius: radius.md,
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     gap: 4,
   },
-  bootText: { color: colors.text, fontSize: 13, textAlign: 'center', fontWeight: '600' },
-  bootHint: { color: colors.textFaint, fontSize: 11, textAlign: 'center', lineHeight: 16 },
+  bootText: { color: c.text, fontSize: 13, textAlign: 'center', fontWeight: '600' },
+  bootHint: { color: c.textFaint, fontSize: 11, textAlign: 'center', lineHeight: 16 },
   spacer: { height: space.xl },
   pairedRow: { gap: 6, paddingVertical: 4 },
-  pairedText: { color: colors.textDim, fontSize: 13 },
-  pairedAction: { color: colors.blue, fontSize: 13 },
+  pairedText: { color: c.textDim, fontSize: 13 },
+  pairedAction: { color: c.blue, fontSize: 13 },
 
-  label: { color: colors.textDim, fontSize: 12, marginBottom: 6, letterSpacing: 0.5 },
+  label: { color: c.textDim, fontSize: 12, marginBottom: 6, letterSpacing: 0.5 },
   inputWrap: {
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: space.md,
   },
-  input: { color: colors.text, fontSize: 14, padding: 0 },
+  input: { color: c.text, fontSize: 14, padding: 0 },
   submit: { marginTop: space.sm },
   settingsRow: { alignItems: 'center', paddingVertical: 10 },
-  settingsText: { color: colors.textDim, fontSize: 12.5 },
-  error: { color: colors.danger, fontSize: 12, textAlign: 'center', marginBottom: space.sm },
+  settingsText: { color: c.textDim, fontSize: 12.5 },
+  error: { color: c.danger, fontSize: 12, textAlign: 'center', marginBottom: space.sm },
   hintBox: {
     marginTop: space.xxl,
     padding: space.md,
-    backgroundColor: colors.glass,
+    backgroundColor: c.glass,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: c.border,
     gap: 4,
   },
-  hintTitle: { color: colors.text, fontSize: 12, fontWeight: '600' },
+  hintTitle: { color: c.text, fontSize: 12, fontWeight: '600' },
   hintCode: {
     fontFamily: font.mono,
-    color: colors.blue,
+    color: c.blue,
     fontSize: 12,
-    backgroundColor: colors.glassStrong,
+    backgroundColor: c.glassStrong,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     alignSelf: 'flex-start',
     marginVertical: 2,
   },
-  hint: { color: colors.textDim, fontSize: 11.5, lineHeight: 17 },
+  hint: { color: c.textDim, fontSize: 11.5, lineHeight: 17 },
   footnote: {
     marginTop: space.lg,
-    color: colors.textFaint,
+    color: c.textFaint,
     fontSize: 11,
     textAlign: 'center',
   },

@@ -648,15 +648,28 @@
   算中心点再 tap；点击后截图确认状态，不连点。输入用 `adb shell input text`（空格写 `%s`）。
 - 验证：2026-11-06 用 bounds 点发送/选项/批准，提问/审批/能力门三类卡片一次走通。
 
-### I12. `verify` 偶发 ENOTEMPTY 清理失败（2026-11-06，观察）
+### I12. `verify` 偶发 ENOTEMPTY 清理失败（2026-11-06，已修）
 
 - 现象：`npm run verify` 偶发 `ENOTEMPTY: directory not empty, rmdir …/dsh-palm-light-*/sessions`，
   单跑重试即过；首次 240 pass，第二次 240 pass / 1 fail，第三次又全绿。
 - 原因：`test/light-engine.test.ts` 的 `after` 用 `rm(recursive)` 清临时目录时，测试内仍有
   异步落盘收尾，属于测试清理竞争，不是产品代码失败。
-- 处理：偶发时重跑确认；频繁出现再给 `after` 的 `rm` 加退避重试或等宿主句柄关闭。
-- 验证：连续重跑 `npm run verify` 全绿（数量以命令输出为准）。
+- 处理：已给 `after` 的 `rm` 加 `maxRetries: 5, retryDelay: 50`（Node 对 ENOTEMPTY 自动重试）。
+- 验证：连续 3 次 `npm run verify` 均为 240 pass / 0 fail（数量以命令输出为准）。
 
 
 
 
+
+### I13. 深色主题不能靠改 `colors` 常量（2026-11-06）
+
+- 现象：只加一个主题开关、把 `theme.ts` 的浅色值换掉，界面不会整体变色；部分页面黑了但文字还是深灰，
+  Markdown/审批卡仍是浅色。
+- 原因：所有页面在模块加载时 `StyleSheet.create`，颜色是字面量快照；`MarkdownView` 还有模块级可变
+  `styles` 和字号重建，`React.memo` 子组件不会因为父级重渲染自动更新。
+- 处理：颜色拆到 `theme/palette.ts`，`ThemeProvider` 下发 palette；页面用
+  `createStyles(theme)` + `useThemedStyles`；Markdown 用 `MarkdownStylesContext` 同时下发
+  主题/字号/语法色；memo 子组件自己消费 context。深色主按钮用 `onAccent`（深色字），
+  不要沿用白字；`onDanger` 在深色下也用深色字保证对比度。
+- 验证：全局搜颜色字面量只剩 `theme/palette.ts`；Web 深色/浅色截图（设置、主题页、聊天、
+  审批卡）；`npm --prefix app run typecheck` + `npm run verify` 全绿。
