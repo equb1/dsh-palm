@@ -1,6 +1,6 @@
 # 验收矩阵（2026-11-06，goal 第 20 轮收尾 + 夜间补验）
 
-> 分支：`develop`，HEAD 见 `git log -1`；
+> 分支：`feat/release-0.2.0`（已推送，待 MR 合 `develop`），HEAD 见 `git log -1`；
 > 基线：`npm --prefix app run typecheck` 通过、`npm run verify` 全绿（数量以输出为准）、
 > `npm run device:regression` 10 步全绿。
 > 证据目录：`scratch/shots/124`–`171`；发布预检：`scratch/release-preflight-2026-11-06b.txt`。
