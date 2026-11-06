@@ -8,7 +8,7 @@
 | 项 | 值 |
 |---|---|
 | APK | `app/android/app/build/outputs/apk/release/app-release.apk` |
-| 大小 / sha256 | 243.6 MiB（255,472,406 B）/ `BD99C90761F9336ABCA5DB2D523B15E5A869307C643B83ED725FACD96137DE29` |
+| 大小 / sha256 | 243.6 MiB（255,472,630 B）/ `FD7843540A885410A332659B77B6155A5389D53BAB497BD5F9787A0FAD25DCFC` |
 | applicationId | `cool.cnb.dshpalm` |
 | versionName / versionCode | `0.1.0` / `1` |
 | 签名 | V2，`CN=DSH Palm`，证书 SHA-256 `50de0609c1f781651301906c0781fe0dd039288bd5efc32883d03b9dac86628c` |
@@ -30,7 +30,7 @@
 > 模型 V4.1-Flash 可选。release 首装链路通过。
 > 2026-11-06 06:10 又修了 release 发消息报错：patch 脚本 CRLF + 完整引擎默认 provider
 > `deepseek-official` 不可路由（缺 `DEEPSEEK_API_KEY`）。现在 bridge 会自动切到
-> `deepseek-account`，真机完整引擎 `hi` 正常回复。
+> `deepseek-account`，真机完整引擎 `hi` 正常回复。当前 sha256 见上表。
 
 ## 2. 预检（只读，随时可跑）
 

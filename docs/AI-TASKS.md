@@ -5,7 +5,7 @@
 > 长会话流式见 [STREAMING-FIX](STREAMING-FIX.md)。交接：2026-11-05 见
 > [archive/32](archive/32-handoff-2026-11-05.md) / [archive/33](archive/33-handoff-2026-11-05.md)，
 > 2026-11-06 见 [archive/34](archive/34-handoff-2026-11-06.md) / [archive/35](archive/35-handoff-2026-11-06.md) /
-> [archive/36](archive/36-handoff-2026-11-06.md)。
+> [archive/36](archive/36-handoff-2026-11-06.md) / [archive/37](archive/37-handoff-2026-11-06.md)。
 > **每次做完任务，必须回来勾选/更新这里**；不要另开任务文档。
 
 ## 1. 当前基线

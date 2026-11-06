@@ -22,11 +22,11 @@
 | U8 完整引擎 fs | ❌ | 完整引擎未实现，UI 显式提示 |
 | E2 run 队列 | ✅ 协议层 | 同会话排队/自动开下一轮；UI 无主动排队按钮 |
 | E3 会话删除/正文搜索 | ✅ 轻引擎 | 完整引擎显式 unsupported |
-| E5 device 回归 | ✅ | 10 步脚本 + 手工审批路径；`169`–`170` |
+| E5 device 回归 | ✅ | 10 步脚本 + 手工审批路径；release 上只做登录/发消息 smoke |
 | 1.5 401/429/断网/超时 | ✅ 真机 | `159`–`161`、`171` |
 | 1.5 20MB/魔数 | ✅ 单测 | 真机未单独造 20MB 图 |
 | M2.7 浏览器 OAuth | ✅ 真机 | release 上打开浏览器授权，页面显示「授权已完成」；回 App 已登录、模型可选 |
-| release 首装/升级 | ✅ 首装通过 | release 签名 `55df28b9`，首启解压 46s；cleartext 修复后完整引擎就绪、OAuth 成功 |
+| release 首装/升级 | ✅ 首装通过 | release 签名 `55df28b9`，首启解压 46s；cleartext/CRLF/默认模型修复后完整引擎发消息正常 |
 | MR 合 develop | ⏸ 待操作 | 描述见 [MR-feat-settings-pages](MR-feat-settings-pages.md) |
 
 ## 结论
