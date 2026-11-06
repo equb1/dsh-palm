@@ -257,12 +257,24 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   }
 
   /** 回答一个 waterfall 事件 */
-  async function answerEvent(approvalId: string, outcome: { kind: 'result'; value?: unknown } | { kind: 'next' }): Promise<boolean> {
+  async function answerEvent(
+    approvalId: string,
+    outcome: { kind: 'result'; value?: unknown } | { kind: 'next' },
+    resolution?: { decision: 'approve' | 'reject'; by?: string; selected?: string[]; custom?: string },
+  ): Promise<boolean> {
     const pending = pendingEvents.get(approvalId);
     if (!pending) return false;
     await client.submitEventResult({ clientId: eventClientId, eventId: pending.eventId, outcome });
     pendingEvents.delete(approvalId);
-    broadcast('approval.resolved', { sessionId: pending.sessionId, approvalId });
+    broadcast('approval.resolved', {
+      sessionId: pending.sessionId,
+      approvalId,
+      decision: resolution?.decision ?? 'approve',
+      by: resolution?.by ?? 'user',
+      ...(resolution?.selected ? { selected: resolution.selected } : {}),
+      ...(resolution?.custom ? { custom: resolution.custom } : {}),
+      at: Date.now(),
+    });
     return true;
   }
 
@@ -966,7 +978,12 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       if (pending.length > 0) {
         let turns = detail.turns.slice();
         for (const a of pending) {
-          const block: Block = { kind: 'approval', id: 'ap-' + a.id, approvalId: a.id };
+          const block: Block = {
+            kind: 'approval',
+            id: 'ap-' + a.id,
+            approvalId: a.id,
+            snapshot: a,
+          };
           let placed = false;
           for (let i = turns.length - 1; i >= 0; i--) {
             const turn = turns[i]!;
@@ -1347,7 +1364,18 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       }
       const allIds = pending?.questionIds ?? [];
       const complete = allIds.length > 1 ? allIds.map((id) => answers.find((a) => a.id === id) ?? { id, selected: [] as string[] }) : answers;
-      const viaEvent = await answerEvent(eventId, { kind: 'result', value: { answers: complete } }).catch(() => false);
+      const first = answers[0];
+      const resolution = {
+        decision: 'approve' as const,
+        by: 'user',
+        ...(Array.isArray(first?.selected) ? { selected: first.selected } : {}),
+        ...(first?.custom ? { custom: first.custom } : {}),
+      };
+      const viaEvent = await answerEvent(
+        eventId,
+        { kind: 'result', value: { answers: complete } },
+        resolution,
+      ).catch(() => false);
       if (viaEvent) return { accepted: true as const };
 
       await client.rpc<boolean>('userQuestions/answer', {
@@ -1356,17 +1384,23 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         answer: { answers },
       });
       pendingEvents.delete(eventId);
-      broadcast('approval.resolved', { sessionId, approvalId: callId });
-      if (eventId !== callId) broadcast('approval.resolved', { sessionId, approvalId: eventId });
+      broadcast('approval.resolved', { sessionId, approvalId: callId, ...resolution, at: Date.now() });
+      if (eventId !== callId) {
+        broadcast('approval.resolved', { sessionId, approvalId: eventId, ...resolution, at: Date.now() });
+      }
       return { accepted: true as const };
     },
 
     // 审批：同样走 $events，真引擎只接受 'allowed-once' 这一种批准
     'approvals.resolve': async ({ approvalId, decision }) => {
-      const viaEvent = await answerEvent(approvalId, {
-        kind: 'result',
-        value: decision === 'approve' ? 'allowed-once' : 'rejected',
-      }).catch(() => false);
+      const viaEvent = await answerEvent(
+        approvalId,
+        {
+          kind: 'result',
+          value: decision === 'approve' ? 'allowed-once' : 'rejected',
+        },
+        { decision, by: 'user' },
+      ).catch(() => false);
       if (!viaEvent) {
         throw Object.assign(new Error('这条审批已经失效'), { code: 'not_found' satisfies ProtocolError['code'] });
       }

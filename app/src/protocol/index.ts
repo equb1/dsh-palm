@@ -135,7 +135,17 @@ export type Block =
       state: ToolState;
       detail?: string;
     }
-  | { kind: 'approval'; id: string; approvalId: string }
+  | {
+      kind: 'approval';
+      id: string;
+      approvalId: string;
+      /**
+       * 审批/提问卡的自包含快照。
+       * 历史回合里 approvals 已经清空，靠这份快照才能还原问题与回答；
+       * 新宿主会在 turn 里落快照，旧数据没有就退回 tool block 解析。
+       */
+      snapshot?: Approval;
+    }
   | {
       kind: 'capability';
       id: string;
@@ -295,6 +305,21 @@ export interface CatalogProvider {
 export type RiskLevel = 'low' | 'medium' | 'high';
 export type ApprovalDecision = 'approve' | 'reject';
 
+/**
+ * 审批/提问处理完的结果。
+ *
+ * 提问用 selected/custom 记录用户答了什么；审批只看 decision。
+ * by 记录是谁结束的（user / timeout / stop / run_finished），
+ * 历史卡据此区分「已回答 / 已跳过 / 已拒绝」。
+ */
+export interface ApprovalResolution {
+  decision: ApprovalDecision;
+  selected?: string[];
+  custom?: string;
+  by?: string;
+  at?: number;
+}
+
 export interface Approval {
   id: string;
   sessionId: string;
@@ -329,6 +354,11 @@ export interface Approval {
   intent?: { kind: string; approve: string };
   /** 这次要审阅的内容（确认型提问会带） */
   detail?: string;
+  /**
+   * 已处理结果。没有这个字段就是待回答；
+   * 历史回合/快照带上它后，界面只画只读问答卡。
+   */
+  resolution?: ApprovalResolution;
 }
 
 /* ------------------------------------------------------------------ *
@@ -375,7 +405,15 @@ export interface EventPayloads {
     block: Extract<Block, { kind: 'capability' }>;
   };
   'approval.requested': { approval: Approval };
-  'approval.resolved': { approvalId: string; decision: ApprovalDecision; by: string };
+  'approval.resolved': {
+    approvalId: string;
+    decision: ApprovalDecision;
+    by: string;
+    /** 提问回答（旧宿主可能不带；界面只在本地知道答案时补） */
+    selected?: string[];
+    custom?: string;
+    at?: number;
+  };
   /** 账号状态变化（登录流程每个阶段都会推一次） */
   'account.updated': { account: AccountState };
   'job.progress': { jobId: string; pct: number; note?: string };

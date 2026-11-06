@@ -91,6 +91,7 @@ import type {
   RequestParams,
   RequestResults,
   ApprovalDecision,
+  ApprovalResolution,
   SessionDetail,
   SessionSearchHit,
   SessionSummary,
@@ -98,6 +99,7 @@ import type {
   Workspace,
   WorkspaceEntry,
 } from '../protocol';
+import { withApprovalResolution } from '../protocol/qa';
 import {
   findRunTurnIndex,
   overlayLiveTurn,
@@ -2598,6 +2600,47 @@ export class Store {
     }
   }
 
+  private approvalSnapshot(approvalId: string): Approval | undefined {
+    for (const turn of this.state.detail?.turns ?? []) {
+      for (const block of turn.blocks) {
+        if (block.kind === 'approval' && block.approvalId === approvalId && block.snapshot) {
+          return block.snapshot;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /** 把处理结果写进时间线快照；后续即使 approvals 被清掉，也只画只读卡 */
+  private markApprovalResolved(approvalId: string, resolution: ApprovalResolution): void {
+    const detail = this.state.detail;
+    if (!detail) return;
+    const base = this.state.approvals[approvalId] ?? this.approvalSnapshot(approvalId);
+    let turns = detail.turns;
+    let changed = false;
+    for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
+      const turn = turns[turnIndex]!;
+      let blocks = turn.blocks;
+      for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+        const block = blocks[blockIndex]!;
+        if (block.kind !== 'approval' || block.approvalId !== approvalId) continue;
+        const snapshot = base ?? block.snapshot;
+        if (!snapshot) continue;
+        if (blocks === turn.blocks) blocks = turn.blocks.slice();
+        blocks[blockIndex] = {
+          ...block,
+          snapshot: withApprovalResolution(snapshot, resolution),
+        };
+        changed = true;
+      }
+      if (blocks !== turn.blocks) {
+        if (turns === detail.turns) turns = detail.turns.slice();
+        turns[turnIndex] = { ...turn, blocks };
+      }
+    }
+    if (changed) this.patch({ detail: { ...detail, turns } });
+  }
+
   async resolveApproval(approvalId: string, decision: ApprovalDecision): Promise<void> {
     if (!this.client) return;
     const sessionStatus = this.state.detail?.status;
@@ -2610,6 +2653,11 @@ export class Store {
     }
     try {
       await this.client.request('approvals.resolve', { approvalId, decision });
+      this.markApprovalResolved(approvalId, {
+        decision,
+        by: 'user',
+        at: Date.now(),
+      });
       const next = { ...this.state.approvals };
       delete next[approvalId];
       this.patch({ approvals: next });
@@ -2642,6 +2690,13 @@ export class Store {
         sessionId: this.physicalIdFor(currentId),
         callId,
         answers: [{ id: questionId, selected, ...(custom ? { custom } : {}) }],
+      });
+      this.markApprovalResolved(callId, {
+        decision: 'approve',
+        selected,
+        ...(custom ? { custom } : {}),
+        by: 'user',
+        at: Date.now(),
       });
       const next = { ...this.state.approvals };
       delete next[callId];
@@ -3342,13 +3397,26 @@ export class Store {
           this.patch({ approvals: nextApprovals });
           return;
         }
-        const block: Block = { kind: 'approval', id: 'ap-' + approval.id, approvalId: approval.id };
+        const block: Block = {
+          kind: 'approval',
+          id: 'ap-' + approval.id,
+          approvalId: approval.id,
+          snapshot: approval,
+        };
         const turns = d.turns.slice();
         let placed = false;
         for (let i = turns.length - 1; i >= 0; i--) {
           const t = turns[i]!;
           if (t.role !== 'assistant') continue;
           if (t.blocks.some((b) => b.kind === 'approval' && b.approvalId === approval.id)) {
+            turns[i] = {
+              ...t,
+              blocks: t.blocks.map((b) =>
+                b.kind === 'approval' && b.approvalId === approval.id
+                  ? { ...b, snapshot: approval }
+                  : b
+              ),
+            };
             placed = true;
             break;
           }
@@ -3373,8 +3441,21 @@ export class Store {
       }
 
       case 'approval.resolved': {
+        const approvalId = data.approvalId as string;
+        const current = this.state.approvals[approvalId] ?? this.approvalSnapshot(approvalId);
+        const decision: ApprovalDecision =
+          data.decision === 'approve' || data.decision === 'reject'
+            ? data.decision
+            : current?.resolution?.decision ?? 'reject';
+        this.markApprovalResolved(approvalId, {
+          decision,
+          ...(Array.isArray(data.selected) ? { selected: data.selected as string[] } : {}),
+          ...(typeof data.custom === 'string' ? { custom: data.custom } : {}),
+          by: typeof data.by === 'string' ? data.by : 'user',
+          at: typeof data.at === 'number' ? data.at : Date.now(),
+        });
         const next = { ...this.state.approvals };
-        delete next[data.approvalId as string];
+        delete next[approvalId];
         const d = this.state.detail;
         this.patch({
           approvals: next,

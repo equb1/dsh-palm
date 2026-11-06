@@ -53,6 +53,46 @@ test('用户消息投影成回合，系统注入的 user/message 被忽略', () 
   assert.equal(projection.turns[0]!.status, 'done');
 });
 
+test('提问投影：tool/call + tool/result 生成带答案的 approval 快照', () => {
+  const args = JSON.stringify({
+    questions: [
+      {
+        id: 'q1',
+        header: '纪要格式',
+        question: '纪要要什么格式？',
+        options: [{ label: 'Markdown' }, { label: 'Word' }],
+      },
+    ],
+  });
+  const answer = JSON.stringify({ answers: [{ id: 'q1', selected: ['Word'] }] });
+  const records = [
+    {
+      event: {
+        type: 'tool/call',
+        time: 1,
+        data: { turn: 0, callId: 'call-1', name: 'ask_user_question', arguments: args },
+      },
+    },
+    {
+      event: {
+        type: 'tool/result',
+        time: 2,
+        data: {
+          turn: 0,
+          message: { toolCallId: 'call-1', content: [{ type: 'text', text: answer }] },
+        },
+      },
+    },
+  ] as RealRecord[];
+  const projection = projectRecords(records);
+  const block = projection.turns.flatMap((turn) => turn.blocks).find((b) => b.kind === 'approval');
+  assert.ok(block && block.kind === 'approval');
+  assert.equal(block.snapshot?.title, '纪要格式');
+  assert.equal(block.snapshot?.summary, '纪要要什么格式？');
+  assert.deepEqual(block.snapshot?.resolution?.selected, ['Word']);
+  assert.equal(block.snapshot?.resolution?.by, 'user');
+});
+
 test('用户消息中的 file 与 image 附件块被投影为可读标签，turn/end error 状态正确映射', () => {
   const records = [
     {

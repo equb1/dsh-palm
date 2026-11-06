@@ -47,7 +47,7 @@ export interface RunSink {
     risk: RiskLevel;
     summary: string;
   }): Promise<ApprovalDecision>;
-  askUser(question: AskQuestion): Promise<AskAnswer>;
+  askUser(question: AskQuestion, callId?: string): Promise<AskAnswer>;
   setStatus(status: SessionStatus): void;
   persist(): Promise<void>;
 }
@@ -417,6 +417,7 @@ export class Agent {
           const block = {
             kind: 'tool' as const,
             id: newBlockId('tool'),
+            callId: call.id,
             name: call.function.name,
             summary: toolSummary(call.function.name, args),
             state: 'running' as const,
@@ -425,7 +426,18 @@ export class Agent {
           sink.emit('block.appended', { sessionId: session.id, runId: run.runId, turn: cloneTurn(turn) });
 
           const updateBlock = (state: 'running' | 'done' | 'error', detail?: string): void => {
-            const next = { ...block, state, ...(detail ? { detail: clip(detail, 200) } : {}) };
+            const next = {
+              ...block,
+              state,
+              ...(detail
+                ? {
+                    detail:
+                      call.function.name === 'ask_user_question'
+                        ? detail.slice(0, 4000)
+                        : clip(detail, 200),
+                  }
+                : {}),
+            };
             const index = turn.blocks.findIndex((candidate) => candidate.id === block.id);
             if (index >= 0) turn.blocks[index] = next;
             sink.emit('block.updated', {
@@ -442,7 +454,7 @@ export class Agent {
           } else if (!tool) {
             output = `[错误] 没有这个工具：${call.function.name}`;
           } else {
-            output = await this.executeTool(tool, args, session, run, sink);
+            output = await this.executeTool(tool, args, session, run, sink, call.id);
           }
 
           const failed = output.startsWith('[错误]') || output.startsWith('[已拒绝]');
@@ -500,6 +512,7 @@ export class Agent {
     session: StoredSession,
     run: LightRun,
     sink: RunSink,
+    callId?: string,
   ): Promise<string> {
     if (tool.needsApproval && session.permission === 'workspace-write') {
       const descriptor = tool.describeApproval?.(args) ?? {
@@ -525,7 +538,7 @@ export class Agent {
         const decision = await sink.requestApproval(input);
         return decision === 'approve' ? 'approve' : 'reject';
       },
-      askUser: (question) => sink.askUser(question),
+      askUser: (question) => sink.askUser(question, callId),
     };
 
     try {
