@@ -92,3 +92,7 @@ app/android/app/src/main/assets/python.bin
 # release 签名配置（keystore 本身被 *.jks 忽略）
 app/android/keystore.properties
 
+
+# 本地证据/调试脚本：不进仓库（截图、备份、cookies、一次性脚本）
+scratch/
+
