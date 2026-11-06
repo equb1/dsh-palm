@@ -90,7 +90,8 @@ UI 侧统一经 `app/src/lib/errors.ts` 翻成人话。
 - **没有**会话删除、正文搜索的远程接口。
 - 文件接口 `fs.list/rename/delete` 不经过 dsh：桥在 proot 内直接用 Node fs 读写 `/root/work`（见 §5.1）。
 - 事件投影：`engine/src/real/project.ts` 把 `user/message`、`assistant/message`、工具调用等
-  折成 `Turn/Block`；`run.finished` 映射状态。
+  折成 `Turn/Block`；`run.finished` 映射状态。非流式 `assistant/message` 用最终全文覆盖
+  同一步骤的流式块，按 seq/message id 去重，工具调用按 callId 去重，usage 累加到回合。
 
 ### 3.3 账号
 
