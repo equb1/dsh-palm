@@ -70,8 +70,18 @@ describe('完整引擎 · 工作区文件接口（U8）', () => {
     assert.equal(normalizeWorkspacePath('/uploads/note.txt'), '/uploads/note.txt');
   });
 
-  it('软链不跟随、不出现在列表里', async () => {
-    await symlink('/etc/hosts', join(root, 'uploads', 'outside-link'));
+  it('软链不跟随、不出现在列表里', async (t) => {
+    try {
+      await symlink('/etc/hosts', join(root, 'uploads', 'outside-link'));
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      // Windows 默认没有创建软链的权限；这是环境限制，不是列表逻辑失败。
+      if (code === 'EPERM' || code === 'EACCES' || code === 'ENOSYS') {
+        t.skip(`当前环境不能创建软链（${code}）`);
+        return;
+      }
+      throw error;
+    }
     const result = await listWorkspace(root, '/uploads');
     assert.equal(result.entries.some((entry) => entry.name === 'outside-link'), false);
   });
