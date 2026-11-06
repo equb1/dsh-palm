@@ -87,6 +87,20 @@ export interface Workspace {
   presetIds: string[];
 }
 
+/**
+ * 官方 dsh web 前端的本机入口（M2.1）。
+ * 只有桥的客户端是 loopback、且上游 dsh 也是 loopback 时才会下发 token。
+ */
+export interface WebFrontendEndpoint {
+  /** 带 token 的官方前端地址（token 在 query 里） */
+  url: string;
+  /** 不含 token 的 origin，展示/校验用 */
+  origin: string;
+  /** 引擎启动 token；只在本机 loopback 下发 */
+  token: string;
+  local: true;
+}
+
 /* ------------------------------------------------------------------ *
  * 会话
  * ------------------------------------------------------------------ */
@@ -599,6 +613,12 @@ export interface RequestParams {
       };
   'providers.remove': { id: string };
 
+  /**
+   * 官方 dsh web 前端的本机入口（M2.1）。
+   * 非 loopback 客户端 / 非 loopback 上游返回 unsupported，不下发 token。
+   */
+  'web.session': Record<string, never>;
+
   /** 工作区文件浏览（U8，轻引擎实现；完整引擎未接） */
   'fs.list': { path?: string };
   'fs.rename': { path: string; to: string };
@@ -650,6 +670,7 @@ export interface RequestResults {
   'providers.discover': { models: ProviderModel[] };
   'providers.save': { providers: ProviderRow[] };
   'providers.remove': { providers: ProviderRow[] };
+  'web.session': WebFrontendEndpoint;
   'fs.list': { path: string; entries: WorkspaceEntry[] };
   'fs.rename': { ok: true };
   'fs.delete': { ok: true };

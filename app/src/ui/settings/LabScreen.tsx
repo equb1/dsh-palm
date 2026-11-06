@@ -1,23 +1,15 @@
 import React from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { hostLogs } from '../../lib/host';
+import { humanizeError } from '../../lib/errors';
+import type { WebFrontendTarget } from '../../lib/webFrontend';
 import { Btn, IconButton } from '../parts';
 import { JustBashProbe } from '../JustBashProbe';
 import { LightEngineScreen } from '../LightEngineScreen';
 import { SmoothKeyboardAvoid } from '../SmoothKeyboardAvoid';
+import { store, useStore } from '../useStore';
 import { radius, space, topInset, useThemedStyles, type Theme } from '../theme';
 import { WebSurface } from '../WebSurface';
-
-/** 从宿主日志里捞本机引擎的 token（`dsh web: http://127.0.0.1:8787/?token=…`） */
-async function resolveEngineToken(): Promise<string | null> {
-  const lines = await hostLogs();
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    const match = /dsh web: http:\/\/127\.0\.0\.1:8787\/\?token=([A-Za-z0-9_-]+)/.exec(lines[i] ?? '');
-    if (match?.[1]) return match[1];
-  }
-  return null;
-}
 
 /**
  * U4 二级页：实验室。
@@ -27,20 +19,28 @@ async function resolveEngineToken(): Promise<string | null> {
  */
 export function LabScreen({ onClose }: { onClose: () => void }): React.ReactElement {
   const styles = useThemedStyles(createStyles);
+  const state = useStore();
   /** 实验室：L0（WebView 官方前端）/ L1（just-bash 前置）两个 spike */
   const [lab, setLab] = React.useState<'none' | 'web' | 'bash' | 'light'>('none');
-  const [webUrl, setWebUrl] = React.useState<string | null>(null);
+  const [webTarget, setWebTarget] = React.useState<WebFrontendTarget | null>(null);
+  const [openingWeb, setOpeningWeb] = React.useState(false);
   const [labNote, setLabNote] = React.useState<string | null>(null);
 
-  const openWebSurface = async (): Promise<void> => {
+  const openWebSurface = async (withCurrentSession: boolean): Promise<void> => {
     setLabNote(null);
-    const token = await resolveEngineToken();
-    if (!token) {
-      setLabNote('还没抓到引擎 token：等「本机引擎」变成运行中再试。');
-      return;
+    setOpeningWeb(true);
+    try {
+      // 地址/token 由完整引擎的 web.session 下发；token 只在本机 loopback 可用
+      const target = await store.getWebFrontendTarget({
+        sessionId: withCurrentSession ? state.currentId : null,
+      });
+      setWebTarget(target);
+      setLab('web');
+    } catch (error) {
+      setLabNote(`打不开官方前端：${humanizeError(error)}`);
+    } finally {
+      setOpeningWeb(false);
     }
-    setWebUrl(`http://127.0.0.1:8787/?token=${token}`);
-    setLab('web');
   };
 
   if (lab === 'bash') {
@@ -49,13 +49,24 @@ export function LabScreen({ onClose }: { onClose: () => void }): React.ReactElem
   if (lab === 'light') {
     return <LightEngineScreen onClose={() => setLab('none')} />;
   }
-  if (lab === 'web' && webUrl) {
+  if (lab === 'web' && webTarget) {
     return (
       <WebSurface
-        url={webUrl}
+        target={webTarget}
         onClose={() => {
           setLab('none');
-          setWebUrl(null);
+          setWebTarget(null);
+        }}
+        onReload={() =>
+          store.getWebFrontendTarget({ sessionId: webTarget.sessionId ?? null })
+        }
+        onOpenSession={async (sessionId, engine) => {
+          const result = await store.openSessionFromWebView(sessionId, engine);
+          if (result.ok) {
+            setLab('none');
+            setWebTarget(null);
+          }
+          return result;
         }}
       />
     );
@@ -76,19 +87,39 @@ export function LabScreen({ onClose }: { onClose: () => void }): React.ReactElem
             <Text style={styles.hint}>
               L0 = 官方 web 界面（WebView，全部 web 插件原样）；L1 = just-bash 在 Hermes 上跑；
               轻引擎 = 进程内 agent loop（会话 / 流式 / 审批 / 提问 + 真实工作区）。
+              WebView 里点会话会切回 App；「当前会话」会尽量定位到同一条完整会话。
             </Text>
             {Platform.OS === 'web' ? (
               <Text style={styles.hint}>web 上不跑 WebView / just-bash / 轻引擎，请在 Android 真机试。</Text>
             ) : (
               <>
                 <View style={styles.actions}>
-                  <Btn label="打开完整界面" onPress={() => void openWebSurface()} style={{ flex: 1 }} />
-                  <Btn label="just-bash 自检" kind="ghost" onPress={() => setLab('bash')} style={{ flex: 1 }} />
+                  <Btn
+                    label={openingWeb ? '获取地址…' : '打开完整界面'}
+                    onPress={() => void openWebSurface(false)}
+                    disabled={openingWeb}
+                    style={{ flex: 1 }}
+                  />
+                  <Btn
+                    label="just-bash 自检"
+                    kind="ghost"
+                    onPress={() => setLab('bash')}
+                    disabled={openingWeb}
+                    style={{ flex: 1 }}
+                  />
                 </View>
                 <View style={styles.actions}>
                   <Btn
+                    label="当前会话（WebView）"
+                    kind="ghost"
+                    onPress={() => void openWebSurface(true)}
+                    disabled={openingWeb}
+                    style={{ flex: 1 }}
+                  />
+                  <Btn
                     label="轻引擎（工作区 + 模型）"
                     onPress={() => setLab('light')}
+                    disabled={openingWeb}
                     style={{ flex: 1 }}
                   />
                 </View>

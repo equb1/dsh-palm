@@ -16,6 +16,7 @@ import { store, useStore } from './src/ui/useStore';
 import { ThemeProvider, useTheme, useThemedStyles, type Theme } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
 import { parseDeepLink } from './src/lib/lightLink';
+import { parseWebSessionDeepLink } from './src/lib/webFrontend';
 import type { AppState as DshAppState } from './src/state/store';
 
 export default function App(): React.ReactElement {
@@ -63,6 +64,12 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
 
   React.useEffect(() => {
     const handle = (url: string | null): void => {
+      // dshpalm://session?id=…&engine=full —— WebView / 外部把官方会话带回 RN（M2.1）
+      const webSession = parseWebSessionDeepLink(url);
+      if (webSession) {
+        void store.openSessionFromWebView(webSession.sessionId, webSession.engine);
+        return;
+      }
       const link = parseDeepLink(url);
       if (!link) return;
       if (link.kind === 'pair') {

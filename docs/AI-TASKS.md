@@ -382,7 +382,21 @@ type AttachmentChipsProps = {
 
 ### M2 · 进行中
 
-- [ ] **2.1 WebView 与 RN 会话态联动**（token 暴露、双向跳转、生命周期）
+- [x] **2.1 WebView 与 RN 会话态联动**（token 暴露、双向跳转、生命周期）
+  - 2026-11-06：完整引擎新增 `web.session`，只在「桥客户端是 loopback + 上游 dsh 是 loopback」时
+    下发官方前端 URL/token；远程/非 loopback 明确返回 `unsupported`，不下发 token，也不打日志。
+    实验室不再从宿主日志捞 token，改用协议取地址；失败提示保留。
+  - RN → WebView：`getWebFrontendTarget` 先确保完整引擎在线，再按 `ConversationLink` 定位物理会话；
+    轻引擎会话只打开首页并显示降级说明。「打开完整界面」= 首页，「当前会话（WebView）」= 当前会话。
+  - WebView → RN：启动前注入 localStorage（`dsh.sessions.current`）定位会话，并观察用户点会话的变化；
+    支持 `dshpalm://session?id=…&engine=…` 与 loopback `?sessionId=` / `/session/<id>`；
+    未知深链停在 WebView 并显示 unsupported 说明。
+  - 生命周期：切后台/卸载停止 WebView 内轮询并停加载，回前台恢复；token 失效（401）、连接拒绝、
+    引擎重启都显示可读错误，并提供「重新获取地址」（重新调 `web.session`）。
+  - 单测 `test/webview-link.test.ts` 14 条（URL/token、注入脚本、深链、错误、生命周期）；
+    `npm --prefix app run typecheck`、`npm run verify`（254 pass）与 `expo export --platform web` 通过。
+    真机未跑（按要求只做代码/单测/Web 构建）；官方前端没有 URL 路由，WebView→RN 依赖其
+    localStorage 会话选择观察器。
 - [ ] **2.2 会话迁移完整版**（事件回放/结构化交接；P0 的 1.4 只做 v1）
 - [ ] **2.3 插件徽章**（矩阵已有，App 入口 + 搜索 + 判定理由）
 - [ ] **2.4 轻引擎附件引用**（图片视觉/路径消费；与 1.3 原生收件不重复）
