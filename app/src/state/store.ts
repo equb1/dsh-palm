@@ -218,8 +218,8 @@ export interface AppState {
   busy: boolean;
   /** 首页输入框当前选中的锦囊 */
   draftPresetId: string | null;
-  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 / 搜索 / 工作区 / 终端 */
-  view: 'main' | 'settings' | 'features' | 'files' | 'search' | 'workspace' | 'terminal';
+  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 / 搜索 / 工作区 / 终端 / 插件 */
+  view: 'main' | 'settings' | 'features' | 'files' | 'search' | 'workspace' | 'terminal' | 'plugins';
   /** 模型凭据状态（ref -> 是否已配置） */
   credentials: Record<string, { configured: boolean; writable: boolean }>;
   /** 宿主可用的模型 */
@@ -1616,6 +1616,15 @@ export class Store {
   }
 
   closeTerminal(): void {
+    this.patch({ view: 'main' });
+  }
+
+  /** M2.3：插件兼容矩阵（内置快照，离线可看） */
+  openPlugins(): void {
+    this.patch({ view: 'plugins', error: null });
+  }
+
+  closePlugins(): void {
     this.patch({ view: 'main' });
   }
 

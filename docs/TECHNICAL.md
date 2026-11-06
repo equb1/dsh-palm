@@ -551,6 +551,17 @@ cd app/android && sh gradlew :app:assembleDebug
 分析器：`scripts/plugin-compat.ts`（`npm run plugin:check`），输出 305 包矩阵。
 完整矩阵见 [archive/24-plugin-compat-matrix.md](archive/24-plugin-compat-matrix.md)。
 
+### 10.1 App 内插件兼容页（M2.3）
+
+- `reports/plugin-compat.json` 是静态扫描快照；`npm run plugin:data` 用
+  `scripts/plugin-data.mjs` 生成 `app/src/data/pluginCompat.ts`（只保留展示需要的字段），
+  App 打包后离线可看，不依赖运行时 `node_modules`。
+- `app/src/lib/pluginCatalog.ts` 是纯函数：按「含依赖」等级计数/过滤、搜索包名/理由/
+  Node 内建/DSH 依赖、按 L0→L3 排序；`app/src/ui/PluginsScreen.tsx` 只负责渲染和交互。
+- 入口：全部功能 →「插件」；`AppState.view = 'plugins'`，安卓返回回首页。
+- 更新矩阵后跑 `npm run plugin:check && npm run plugin:data`；`test/plugin-catalog.test.ts`
+  会校验 App 数据与 `reports/plugin-compat.json` 同步。
+
 ## 11. 目录结构
 
 ```

@@ -11,6 +11,7 @@ import { FilesScreen } from './src/ui/FilesScreen';
 import { SearchScreen } from './src/ui/SearchScreen';
 import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
 import { TerminalScreen } from './src/ui/TerminalScreen';
+import { PluginsScreen } from './src/ui/PluginsScreen';
 import { ScreenFade } from './src/ui/components/ScreenFade';
 import { store, useStore } from './src/ui/useStore';
 import { ThemeProvider, useTheme, useThemedStyles, type Theme } from './src/ui/theme';
@@ -125,6 +126,11 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
         store.closeTerminal();
         return true;
       }
+      // 1g. 插件兼容页：返回首页
+      if (state.view === 'plugins') {
+        store.closePlugins();
+        return true;
+      }
       // 2. 如果打开了连接面板，关闭连接面板返回首页
       if (state.connectModalOpen) {
         store.closeConnectModal();
@@ -144,7 +150,9 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
   }, [state.view, state.connectModalOpen, state.detail]);
 
   const screen =
-    state.view === 'terminal' ? (
+    state.view === 'plugins' ? (
+      <PluginsScreen />
+    ) : state.view === 'terminal' ? (
       <TerminalScreen />
     ) : state.view === 'workspace' ? (
       <WorkspaceScreen />
