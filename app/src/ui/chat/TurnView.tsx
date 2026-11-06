@@ -25,6 +25,14 @@ const ThinkingRow = React.memo(function ThinkingRow({
   const shown = shownRaw.length > MAX_OPEN ? shownRaw.slice(-MAX_OPEN) : shownRaw;
   const truncated = text.length > MAX_OPEN;
   const preview = text.trim().split('\n')[0]?.replace(/\*\*/g, '').slice(0, 120) ?? '';
+  // 实时思考收成 3 行窗：只跟最后几行，不再每 token 重排前面已读的内容
+  const livePreview = text
+    .trim()
+    .split('\n')
+    .slice(-3)
+    .join('\n')
+    .replace(/\*\*/g, '')
+    .slice(-240);
 
   // dsh-go 的做法：一轮结束就把展开的全文收回去，过程收进一行摘要。
   React.useEffect(() => {
@@ -48,8 +56,8 @@ const ThinkingRow = React.memo(function ThinkingRow({
         {live ? '思考中' : '思考'}
       </Text>
       {!open ? (
-        <Text style={styles.rowText} numberOfLines={1}>
-          {preview}
+        <Text style={[styles.rowText, live && styles.rowTextLive]} numberOfLines={live ? 3 : 1}>
+          {live ? livePreview : preview}
         </Text>
       ) : (
         <View style={{ flex: 1 }} />
@@ -130,11 +138,72 @@ const ToolRow = React.memo(function ToolRow({
   );
 });
 
+type ToolBlock = Extract<Block, { kind: 'tool' }>;
+
+/**
+ * 连续工具行合并：完整过程展开后，相邻的多个 tool 先收成一行
+ * 「N 个工具 · a · b」，点开再看每条详情，避免一次读十个文件时刷屏。
+ */
+const ToolGroupRow = React.memo(function ToolGroupRow({
+  tools,
+}: {
+  tools: ToolBlock[];
+}): React.ReactElement {
+  const [open, setOpen] = React.useState(false);
+  const names = Array.from(new Set(tools.map((tool) => tool.name)));
+  const errors = tools.filter((tool) => tool.state === 'error').length;
+  return (
+    <View>
+      <Pressable
+        onPress={() => setOpen((v) => !v)}
+        accessibilityRole="button"
+        accessibilityLabel={open ? '收起工具组' : '展开工具组'}
+        style={styles.row}
+      >
+        <Text style={styles.rowGlyph}>▤</Text>
+        <Text style={styles.toolGroupTitle}>{tools.length} 个工具</Text>
+        <Text style={styles.rowText} numberOfLines={1}>
+          {names.join(' · ')}
+        </Text>
+        {errors > 0 ? <Text style={[styles.rowState, { color: colors.danger }]}>×{errors}</Text> : null}
+        <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+      </Pressable>
+      {open ? tools.map((tool) => <ToolRow key={tool.id} block={tool} />) : null}
+    </View>
+  );
+});
+
+type ProcessEntry =
+  | { kind: 'block'; block: Block; key: string }
+  | { kind: 'tools'; tools: ToolBlock[]; key: string };
+
+/** 相邻 tool 长度 >=2 才合并；单独的 tool 保持原样 */
+function groupProcessBlocks(blocks: Block[]): ProcessEntry[] {
+  const entries: ProcessEntry[] = [];
+  let run: ToolBlock[] = [];
+  const flush = (): void => {
+    if (run.length >= 2) entries.push({ kind: 'tools', tools: run, key: `tools-${run[0]?.id ?? ''}` });
+    else if (run.length === 1 && run[0]) entries.push({ kind: 'block', block: run[0], key: run[0].id });
+    run = [];
+  };
+  for (const block of blocks) {
+    if (block.kind === 'tool') {
+      run.push(block);
+      continue;
+    }
+    flush();
+    entries.push({ kind: 'block', block, key: block.id });
+  }
+  flush();
+  return entries;
+}
+
 function renderBlock(
   block: Block,
   approvals: Record<string, Approval>,
   onToggleThinking?: () => void,
-  live?: boolean
+  live?: boolean,
+  fontScale = 1
 ): React.ReactElement | null {
   switch (block.kind) {
     case 'thinking':
@@ -144,7 +213,7 @@ function renderBlock(
     case 'tool':
       return <ToolRow key={block.id} block={block} />;
     case 'text':
-      return <MarkdownView key={block.id} text={block.text} streaming={live} />;
+      return <MarkdownView key={block.id} text={block.text} streaming={live} fontScale={fontScale} />;
     case 'approval': {
       const approval = approvals[block.approvalId];
       return approval ? <ApprovalCard key={block.id} approval={approval} /> : null;
@@ -217,13 +286,19 @@ const AssistantTurn = React.memo(function AssistantTurn({
   approvals,
   onToggleThinking,
   fallbackDurationMs,
+  expandProcess,
+  fontScale = 1,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
   onToggleThinking?: () => void;
   fallbackDurationMs?: number;
+  /** 外观设置「完成后收起过程」关掉时，完成的回合默认展开思考/工具 */
+  expandProcess?: boolean;
+  /** U7 对话字号倍率 */
+  fontScale?: number;
 }): React.ReactElement {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(expandProcess === true);
   const completed = turn.status !== 'streaming';
   const visibleBlocks = React.useMemo(
     () => turn.blocks.filter((b) => !(b.kind === 'thinking' && !b.text.trim())),
@@ -233,6 +308,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
     () => visibleBlocks.filter((b) => b.kind === 'thinking' || b.kind === 'tool'),
     [visibleBlocks],
   );
+  const processEntries = React.useMemo(() => groupProcessBlocks(processBlocks), [processBlocks]);
   const answerBlocks = React.useMemo(
     () => turn.blocks.filter((b): b is Extract<Block, { kind: 'text' }> => b.kind === 'text'),
     [turn.blocks],
@@ -272,22 +348,26 @@ const AssistantTurn = React.memo(function AssistantTurn({
       ) : null}
 
       {completed && open &&
-        processBlocks.map((b, i) => (
-          <React.Fragment key={`${b.id}-${i}`}>
-            {renderBlock(b, approvals, onToggleThinking, false)}
-          </React.Fragment>
-        ))}
+        processEntries.map((entry) =>
+          entry.kind === 'tools' ? (
+            <ToolGroupRow key={entry.key} tools={entry.tools} />
+          ) : (
+            <React.Fragment key={entry.key}>
+              {renderBlock(entry.block, approvals, onToggleThinking, false, fontScale)}
+            </React.Fragment>
+          ),
+        )}
 
       {completed
         ? [
             ...noticeBlocks.map((b, i) => (
               <React.Fragment key={`notice-${b.id}-${i}`}>
-                {renderBlock(b, approvals, onToggleThinking)}
+                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale)}
               </React.Fragment>
             )),
             ...answerBlocks.map((b, i) => (
               <React.Fragment key={`${b.id}-${i}`}>
-                {renderBlock(b, approvals, onToggleThinking)}
+                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale)}
               </React.Fragment>
             )),
           ]
@@ -297,7 +377,8 @@ const AssistantTurn = React.memo(function AssistantTurn({
                 b,
                 approvals,
                 onToggleThinking,
-                turn.status === 'streaming' && i === visibleBlocks.length - 1
+                turn.status === 'streaming' && i === visibleBlocks.length - 1,
+                fontScale
               )}
             </React.Fragment>
           ))}
@@ -312,11 +393,15 @@ function TurnViewImpl({
   approvals,
   onToggleThinking,
   fallbackDurationMs,
+  expandProcess,
+  fontScale = 1,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
   onToggleThinking?: () => void;
   fallbackDurationMs?: number;
+  expandProcess?: boolean;
+  fontScale?: number;
 }): React.ReactElement {
   if (turn.role === 'user') {
     const text = turn.blocks
@@ -326,7 +411,14 @@ function TurnViewImpl({
     return (
       <View style={styles.userRow}>
         <View style={styles.userBubble}>
-          <Text style={styles.userText}>{text}</Text>
+          <Text
+            style={[
+              styles.userText,
+              fontScale !== 1 && { fontSize: 14 * fontScale, lineHeight: 22 * fontScale },
+            ]}
+          >
+            {text}
+          </Text>
         </View>
       </View>
     );
@@ -338,6 +430,8 @@ function TurnViewImpl({
       approvals={approvals}
       onToggleThinking={onToggleThinking}
       fallbackDurationMs={fallbackDurationMs}
+      expandProcess={expandProcess}
+      fontScale={fontScale}
     />
   );
 }
@@ -373,6 +467,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
   rowGlyph: { color: colors.textFaint, fontSize: 11 },
   rowText: { color: colors.textDim, fontSize: 13, flex: 1 },
+  rowTextLive: { fontSize: 12, lineHeight: 17 },
+  toolGroupTitle: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
   thinkingLabel: { color: colors.textFaint, fontSize: 13 },
   toolName: { color: colors.textFaint, fontSize: 11, fontFamily: font.mono },
   rowState: { fontSize: 11 },

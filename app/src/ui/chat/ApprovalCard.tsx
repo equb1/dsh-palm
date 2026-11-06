@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Approval } from '../../protocol';
 import { store } from '../useStore';
 import { Btn } from '../parts';
-import { colors, font, radius, riskTone, space } from '../theme';
+import { colors, font, radius, riskTone } from '../theme';
+import { ChatCard, ChatCardCodeBox, type ChatCardTone } from './ChatCard';
 
 /**
  * 提问卡片：官方卡片的样子——推荐选项竖排（带说明）、可以自己输入、也可以跳过。
@@ -72,33 +73,62 @@ function QuestionActions({ approval }: { approval: Approval }): React.ReactEleme
   );
 }
 
+/** 卡片描边只提示风险；低风险/提问保持中性，避免聊天流里出现大色块 */
+function cardTone(approval: Approval): ChatCardTone {
+  if (approval.kind === 'question') return 'neutral';
+  if (approval.risk === 'high') return 'danger';
+  if (approval.risk === 'medium') return 'warn';
+  return 'neutral';
+}
+
+function badgeTone(approval: Approval): ChatCardTone {
+  if (approval.kind === 'question') return 'neutral';
+  if (approval.risk === 'high') return 'danger';
+  if (approval.risk === 'medium') return 'warn';
+  return 'success';
+}
+
 export function ApprovalCard({ approval }: { approval: Approval }): React.ReactElement {
-  const tone = riskTone(approval.risk);
   const isQuestion = approval.kind === 'question';
+  const risk = riskTone(approval.risk);
   return (
-    <View style={styles.approval}>
-      <View style={styles.approvalHead}>
-        <Text style={styles.approvalTitle}>{approval.title}</Text>
-        <View style={[styles.chip, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.chipText, { color: tone.color }]}>{isQuestion ? '等你选' : tone.label}</Text>
-        </View>
-      </View>
+    <ChatCard
+      title={approval.title}
+      tone={cardTone(approval)}
+      badge={
+        isQuestion
+          ? { label: '等你选', tone: badgeTone(approval) }
+          : { label: risk.label, tone: badgeTone(approval) }
+      }
+      actions={
+        isQuestion ? undefined : (
+          <>
+            <Btn
+              label="拒绝"
+              kind="ghost"
+              onPress={() => void store.resolveApproval(approval.id, 'reject')}
+              style={{ flex: 1 }}
+            />
+            <Btn
+              label="批准"
+              onPress={() => void store.resolveApproval(approval.id, 'approve')}
+              style={{ flex: 1.2 }}
+            />
+          </>
+        )
+      }
+    >
+      {approval.command ? <ChatCardCodeBox>{approval.command}</ChatCardCodeBox> : null}
 
-      {approval.command ? (
-        <View style={styles.codeBox}>
-          <Text style={styles.codeText}>{approval.command}</Text>
-        </View>
-      ) : null}
-
-      <Text style={styles.approvalSummary}>{approval.summary}</Text>
+      <Text style={styles.summary}>{approval.summary}</Text>
 
       {approval.diff ? (
-        <View style={styles.codeBox}>
+        <ChatCardCodeBox>
           {approval.diff.split('\n').map((line, i) => (
             <Text
               key={i}
               style={[
-                styles.codeText,
+                styles.diffLine,
                 line.startsWith('+') && { color: colors.ok },
                 line.startsWith('-') && { color: colors.danger },
               ]}
@@ -106,54 +136,17 @@ export function ApprovalCard({ approval }: { approval: Approval }): React.ReactE
               {line}
             </Text>
           ))}
-        </View>
+        </ChatCardCodeBox>
       ) : null}
 
-      {isQuestion ? (
-        <QuestionActions approval={approval} />
-      ) : (
-        <View style={styles.approvalActions}>
-          <Btn
-            label="拒绝"
-            kind="ghost"
-            onPress={() => void store.resolveApproval(approval.id, 'reject')}
-            style={{ flex: 1 }}
-          />
-          <Btn
-            label="批准"
-            onPress={() => void store.resolveApproval(approval.id, 'approve')}
-            style={{ flex: 1.2 }}
-          />
-        </View>
-      )}
-    </View>
+      {isQuestion ? <QuestionActions approval={approval} /> : null}
+    </ChatCard>
   );
 }
 
 const styles = StyleSheet.create({
-  approval: {
-    backgroundColor: colors.glass,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderStrong,
-    padding: 14,
-    gap: 10,
-  },
-  approvalHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  approvalTitle: { color: colors.text, fontSize: 14.5, fontWeight: '600', flex: 1 },
-  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
-  chipText: { fontSize: 10.5, fontWeight: '600' },
-  approvalSummary: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
-  codeBox: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    padding: 9,
-    gap: 1,
-  },
-  codeText: { fontFamily: font.mono, fontSize: 11.5, color: colors.textDim, lineHeight: 17 },
-  approvalActions: { flexDirection: 'row', gap: space.sm, marginTop: 2 },
+  summary: { color: colors.textDim, fontSize: 12.5, lineHeight: 19 },
+  diffLine: { fontFamily: font.mono, fontSize: 11.5, color: colors.textDim, lineHeight: 17 },
 
   qWrap: { gap: 8, marginTop: 4 },
   qOption: {

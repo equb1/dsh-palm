@@ -854,6 +854,67 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     });
   };
 
+  type RoutableCatalog = {
+    routableProviders?: string[];
+    groups?: Array<{
+      id?: string;
+      models?: Array<{ id?: string; reasoning?: { defaultEffort?: string } }>;
+    }>;
+  };
+
+  /** dsh 的 default 可能指向不可路由的 provider（deepseek-official 需要 API Key），
+   *  但账号登录后真正可路由的是 deepseek-account；这里选 catalog 里第一个可路由模型。 */
+  async function pickRoutableModel(): Promise<{
+    provider: string;
+    model: string;
+    reasoningEffort?: string;
+  } | null> {
+    try {
+      const catalog = await client.rpc<RoutableCatalog>('session/modelCatalog', {});
+      const routable = new Set(catalog.routableProviders ?? []);
+      for (const group of catalog.groups ?? []) {
+        if (typeof group.id !== 'string' || !routable.has(group.id)) continue;
+        const item = group.models?.[0];
+        if (!item || typeof item.id !== 'string') continue;
+        return {
+          provider: group.id,
+          model: item.id,
+          ...(typeof item.reasoning?.defaultEffort === 'string'
+            ? { reasoningEffort: item.reasoning.defaultEffort }
+            : {}),
+        };
+      }
+    } catch {
+      // 目录拿不到就不改模型，让 dsh 自己报原错误
+    }
+    return null;
+  }
+
+  /** 老会话可能已经存了 deepseek-official；发消息前纠正一次，否则会报 MISSING_CREDENTIAL。 */
+  async function ensureRoutableModel(sessionId: string): Promise<void> {
+    try {
+      const catalog = await client.rpc<RoutableCatalog>('session/modelCatalog', {});
+      const routable = new Set(catalog.routableProviders ?? []);
+      const { items } = await client.listSessions();
+      const item = items.find((s) => s.sessionId === sessionId);
+      const current = (item as { projections?: { values?: { modelSelection?: { next?: { provider?: string } } } } } | undefined)
+        ?.projections?.values?.modelSelection?.next;
+      if (current?.provider && routable.has(current.provider)) return;
+      const selection = await pickRoutableModel();
+      if (!selection) return;
+      await client.rpc('session/selectModel', {
+        request: {
+          sessionId,
+          provider: selection.provider,
+          model: selection.model,
+          ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {}),
+        },
+      });
+    } catch {
+      // 尽力而为；失败时保留原始报错
+    }
+  }
+
   const handlers: { [M in Method]: Handler<M> } = {
     'capabilities.get': async () => capabilities(),
 
@@ -948,6 +1009,21 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       await client.rpc('session/create', {
         request: { workspaceId: ws.workspace.workspaceId, sessionId, agentPreset: presetId },
       });
+      const selection = await pickRoutableModel();
+      if (selection) {
+        await client
+          .rpc('session/selectModel', {
+            request: {
+              sessionId,
+              provider: selection.provider,
+              model: selection.model,
+              ...(selection.reasoningEffort
+                ? { reasoningEffort: selection.reasoningEffort }
+                : {}),
+            },
+          })
+          .catch(() => undefined);
+      }
       const session: SessionSummary = {
         id: sessionId,
         title: title ?? '新会话',
@@ -963,9 +1039,14 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { session };
     },
 
+    'sessions.import': async () => {
+      throw new Error('sessions.import 只在轻引擎可用');
+    },
+
     // 真引擎的发消息：session/prompt。mode=queue 排队，steer 立刻插入当前回合。
     'sessions.send': async ({ sessionId, text, attachments, files }) => {
       startFollow(sessionId);
+      await ensureRoutableModel(sessionId);
       const cleanText = text.trim();
       const attList = attachments ?? [];
       const fileList = files ?? [];
@@ -1054,6 +1135,10 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       });
       return { ok: true as const };
     },
+
+    'sessions.delete': async () => unsupported('sessions.delete'),
+    'sessions.search': async () => unsupported('sessions.search'),
+    'shell.run': async () => unsupported('shell.run'),
 
     'workspaces.list': async () => {
       // workspace/follow 的第一帧是 baseline，里面就是工作区清单
@@ -1185,10 +1270,19 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         }
       }
       const fallback = catalog.default;
+      const fallbackRoutable =
+        Boolean(fallback?.provider) && models.some((m) => m.provider === fallback?.provider);
+      const first = models[0];
       const defaultChoice =
-        fallback?.provider && fallback.model
+        fallback?.provider && fallback.model && fallbackRoutable
           ? { provider: fallback.provider, model: fallback.model, reasoningEffort: fallback.reasoningEffort }
-          : undefined;
+          : first
+            ? {
+                provider: first.provider,
+                model: first.id,
+                ...(first.defaultEffort ? { reasoningEffort: first.defaultEffort } : {}),
+              }
+            : undefined;
       return { models, default: defaultChoice };
     },
 
@@ -1421,6 +1515,10 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       });
       return { providers: await providerRows() };
     },
+
+    'fs.list': async () => unsupported('fs.list'),
+    'fs.rename': async () => unsupported('fs.rename'),
+    'fs.delete': async () => unsupported('fs.delete'),
 
     'account.signOut': async () => {
       const account = asAccountState(await accountRpc('account/signOut', { client: accountClient() }));

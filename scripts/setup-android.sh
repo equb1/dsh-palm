@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
-# 补齐安卓构建需要、但**不进 git** 的三样东西。
+# 补齐安卓构建需要、但**不进 git** 的东西。
 #
 #   1. debug 签名证书   app/android/app/debug.keystore      （*.keystore 被忽略）
 #   2. proot 二进制     app/android/app/src/main/jniLibs/…  （*.so 被忽略）
 #   3. 运行时镜像       app/android/app/src/main/assets/rootfs.bin / payload.bin
+#   4. Python/Office 层 app/android/app/src/main/assets/python.bin（约 36.8MB）
 #
 # 已经存在的会跳过（镜像按 sha256 校验）；可以反复跑。
 #
@@ -58,7 +59,7 @@ fi
 
 # ---------------------------------------------------------------- 3. 镜像
 
-say "3/3 运行时镜像（约 188MB）"
+say "3/3 运行时镜像（约 225MB）"
 BASE="https://cnb.cool/debaox3.0/test-new-technology/dsh-palm/-/releases/download/runtime-v1"
 # 与 docs/18 保持一致；换镜像时两边一起改
 fetch() {
@@ -84,6 +85,8 @@ fetch() {
 
 fetch rootfs.bin  a91d5a93010193712d346d761372b7c9db6dfcf093893161c64ca107f05914f2
 fetch payload.bin 39447c6fd0dfb287c61d852a13e2417409d3b8589159274e8e589256888e35b1
+# P0 1.1 Python/Office 层；rootfs 重建时不用重打 payload，但必须一起校验
+fetch python.bin  2cc882ce91212fc997c67befbef34dc7ad24d218e856e24f206b6788d13c40c5
 
 say "就绪"
 echo "  ANDROID_HOME=$ANDROID_HOME"

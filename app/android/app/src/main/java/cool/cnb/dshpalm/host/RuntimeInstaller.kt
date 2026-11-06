@@ -435,11 +435,10 @@ object RuntimeInstaller {
             bin.mkdirs()
             val target = File(bin, "xdg-user-dir")
             val bytes = context.assets.open("patch/xdg-user-dir.sh").use { it.readBytes() }
-            val same = target.exists() && target.readBytes().contentEquals(bytes)
-            if (!same) {
-                target.writeBytes(bytes)
-                log("[runtime] shim 就位: xdg-user-dir（${bytes.size} 字节）")
-            }
+            // 每次宿主启动都重写：Windows 构建可能把 CRLF 带进旧 rootfs，只靠“内容相同就跳过”
+            // 会永远修不掉已经部署坏的那份。
+            target.writeBytes(bytes)
+            log("[runtime] shim 就位: xdg-user-dir（${bytes.size} 字节）")
             if (!target.canExecute()) target.setExecutable(true, false)
             target.canExecute()
         }.getOrElse {

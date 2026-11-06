@@ -14,25 +14,10 @@ import {
   isOffline,
   lightTimeoutMessage,
 } from '../../lib/errors';
+import { SSE_IDLE_TIMEOUT_MS, type SseHttpResult, type SseRequest } from './transport.shared';
 
-export const SSE_IDLE_TIMEOUT_MS = 45_000;
-
-export interface SseRequest {
-  url: string;
-  headers: Record<string, string>;
-  body: string;
-  signal?: AbortSignal;
-  /** 空闲超时；默认 45s（测试可调小） */
-  idleTimeoutMs?: number;
-  onData(chunk: string): void;
-}
-
-export interface SseHttpResult {
-  status: number;
-  statusText: string;
-  /** 非 2xx 时的响应体，用来给用户解释（401 / 404 / 429…） */
-  errorText?: string;
-}
+export { SSE_IDLE_TIMEOUT_MS } from './transport.shared';
+export type { SseHttpResult, SseRequest } from './transport.shared';
 
 export class StreamAbortedError extends LightRequestError {
   constructor(message = LIGHT_ERROR_HINTS.canceled) {

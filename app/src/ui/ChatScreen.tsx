@@ -16,7 +16,7 @@ import { store, useStore } from './useStore';
 import { IconButton, Pill } from './parts';
 import { EngineBadge } from './EngineBadge';
 import { badgeFor, canSwitch } from '../state/engineManager';
-import { isConversationReadOnly } from '../lib/handoff';
+import { isConversationReadOnly, stripEngineNoticeTurns } from '../lib/handoff';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { ModelSheet } from './ModelSheet';
@@ -24,7 +24,7 @@ import { GeneratedFilesSheet } from './GeneratedFilesSheet';
 import { collectGeneratedFiles } from '../lib/generatedFiles';
 import { TurnView, JumpButton } from './chat';
 import type { AttachmentKind } from '../lib/attachments/types';
-import { colors, space, topInset } from './theme';
+import { colors, radius, space, topInset } from './theme';
 
 /* ------------------------------------------------------------------ *
  * 会话页
@@ -39,6 +39,9 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const [draft, setDraft] = React.useState('');
   const [showJump, setShowJump] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
+  // 浮动顶栏：先量高度给正文留位，列表滚起来再加底色/描边（玻璃感用半透明近似，不引原生 blur）
+  const [headerH, setHeaderH] = React.useState(0);
+  const [scrolled, setScrolled] = React.useState(false);
   const listRef = React.useRef<FlatList<Turn>>(null);
   const following = React.useRef(true);
   const scrollScheduled = React.useRef(false);
@@ -53,6 +56,11 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const running = session.status === 'running' || session.status === 'waiting_approval';
   const engineBadge = badgeFor(state.engine);
   const engineSwitch = canSwitch(state.engine);
+  // M2.7：轻引擎 401（账号 token 过期）时给一条可行动的恢复路径
+  const needsAuthRecovery =
+    state.engineKind === 'light' &&
+    Boolean(state.error) &&
+    /(401|登录|API Key|凭据|token)/i.test(state.error ?? '');
   // 逻辑会话按 activeSide 判断只读：完整侧链路断了就只读，绝不在轻引擎里重放
   const link = state.links.find(
     (item) =>
@@ -63,9 +71,28 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const readOnly = link ? isConversationReadOnly(link, state.engine.mode) : !state.currentId;
   const readOnlyText =
     link?.activeSide === 'full' && state.engine.mode !== 'full'
-      ? '完整引擎已停止，这个会话只读；点这里回首页，需要继续时在顶栏重新切到完整模式 ›'
-      : '已切换引擎，这个会话只读；点这里回首页新建会话继续 ›';
-  const turns = session.turns;
+      ? '完整引擎已停止，这个会话只读；点这里切到完整模式继续 ›'
+      : '已切换引擎，这个会话只读；点这里切回原引擎继续 ›';
+  // M2.6：只读横幅一键回到会话所在的引擎并重开（完整侧会先起 proot）
+  const resumeOnActiveSide = React.useCallback((): void => {
+    if (!link) {
+      store.closeSession();
+      return;
+    }
+    const target = link.activeSide === 'full' ? 'full' : 'light';
+    if (target === state.engine.mode) {
+      void store.openSession(link.id);
+      return;
+    }
+    void store.switchEngine(target).then((ok) => {
+      if (ok) void store.openSession(link.id);
+    });
+  }, [link, state.engine.mode]);
+  // 完整引擎在切 approval policy 时会写一条 user 角色提示，原生完整会话也不显示（I9）
+  const turns = React.useMemo(
+    () => (state.engineKind === 'remote' ? stripEngineNoticeTurns(session.turns) : session.turns),
+    [session.turns, state.engineKind],
+  );
   // 生成文件面板：只解析当前会话的工具结果，不额外请求宿主
   const generatedFiles = React.useMemo(() => collectGeneratedFiles(session.turns), [session.turns]);
   let lastAssistantIndex = -1;
@@ -146,6 +173,8 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       if (userDragging.current && distance > 24) following.current = false;
       const nextJump = distance > 220;
       setShowJump((current) => (current === nextJump ? current : nextJump));
+      const nextScrolled = contentOffset.y > 8;
+      setScrolled((current) => (current === nextScrolled ? current : nextScrolled));
     },
     [],
   );
@@ -205,6 +234,8 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         turn={item}
         approvals={state.approvals}
         onToggleThinking={handleToggleThinking}
+        expandProcess={!state.collapseProcess}
+        fontScale={state.chatFontScale}
         fallbackDurationMs={
           index === lastAssistantIndex && item.status !== 'streaming' && session.updatedAt > item.createdAt
             ? session.updatedAt - item.createdAt
@@ -212,7 +243,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         }
       />
     ),
-    [handleToggleThinking, lastAssistantIndex, session.updatedAt, state.approvals],
+    [handleToggleThinking, lastAssistantIndex, session.updatedAt, state.approvals, state.collapseProcess],
   );
 
   const renderEmpty = React.useCallback(
@@ -227,7 +258,13 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
+      <View
+        style={[styles.header, scrolled && styles.headerScrolled]}
+        onLayout={(event) => {
+          const next = Math.round(event.nativeEvent.layout.height);
+          setHeaderH((current) => (current === next ? current : next));
+        }}
+      >
         <IconButton glyph="‹" label="返回会话列表" onPress={() => store.closeSession()} />
         <Pill style={styles.titlePill}>
           <Text style={styles.titleText} numberOfLines={1}>
@@ -255,20 +292,19 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         <View style={{ flex: 1 }} />
       </View>
 
-      {readOnly ? (
-        <Pressable onPress={() => store.closeSession()}>
-          <Text style={styles.readOnly}>{readOnlyText}</Text>
-        </Pressable>
-      ) : null}
-
-      <SmoothKeyboardAvoid style={styles.bodyWrap}>
+      <SmoothKeyboardAvoid style={[styles.bodyWrap, { marginTop: headerH }]}>
+        {readOnly ? (
+          <Pressable onPress={resumeOnActiveSide}>
+            <Text style={styles.readOnly}>{readOnlyText}</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.listWrap}>
           <FlatList
             ref={listRef}
             style={styles.list}
             data={turns}
             renderItem={renderTurn}
-            keyExtractor={(turn) => turn.runId ?? turn.id}
+            keyExtractor={(turn, index) => `${turn.id ?? turn.runId ?? 'turn'}#${index}`}
             extraData={state.approvals}
             ItemSeparatorComponent={TurnSeparator}
             ListEmptyComponent={renderEmpty}
@@ -309,9 +345,33 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         </View>
 
         {Boolean(state.error) ? (
-          <Pressable onPress={() => store.clearError()}>
-            <Text style={styles.error}>{state.error}</Text>
-          </Pressable>
+          <View style={styles.errorCard}>
+            <View style={styles.errorGlyphWrap}>
+              <Text style={styles.errorGlyph}>!</Text>
+            </View>
+            <Text style={styles.errorText} numberOfLines={3}>
+              {state.error}
+            </Text>
+            {needsAuthRecovery ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="重新登录"
+                onPress={() => void store.recoverLightAuth()}
+                style={({ pressed }) => [styles.errorAction, pressed && { opacity: 0.6 }]}
+              >
+                <Text style={styles.errorActionText}>重新登录</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="关闭错误提示"
+              onPress={() => store.clearError()}
+              hitSlop={8}
+              style={({ pressed }) => [styles.errorClose, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.errorCloseText}>×</Text>
+            </Pressable>
+          </View>
         ) : null}
 
         <ModelSheet />
@@ -361,11 +421,29 @@ const styles = StyleSheet.create({
   bodyWrap: { flex: 1 },
 
   header: {
+    position: 'absolute',
+    // 绝对定位以 padding box 为基准，root 的 paddingTop 不会自动生效，这里显式加安全区
+    top: topInset,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
+    // 玻璃感近似：半透明白；列表滚到下面时再加深并补描边/投影
+    backgroundColor: 'rgba(255,255,255,0.86)',
+  },
+  headerScrolled: {
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   titlePill: { flexShrink: 1, paddingVertical: 3 },
   titleText: { color: colors.text, fontSize: 14, fontWeight: '600' },
@@ -389,5 +467,36 @@ const styles = StyleSheet.create({
   emptyChatTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   emptyChatText: { color: colors.textFaint, fontSize: 12.5 },
 
-  error: { color: colors.danger, fontSize: 12, paddingHorizontal: space.lg, paddingBottom: 6 },
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: space.lg,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(236,19,19,0.18)',
+    backgroundColor: colors.dangerSoft,
+  },
+  errorGlyphWrap: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorGlyph: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', lineHeight: 13 },
+  errorText: { flex: 1, color: colors.danger, fontSize: 12, lineHeight: 17 },
+  errorAction: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: '#FFFFFF',
+  },
+  errorActionText: { color: colors.danger, fontSize: 12, fontWeight: '600' },
+  errorClose: { paddingHorizontal: 2, paddingVertical: 2 },
+  errorCloseText: { color: colors.danger, fontSize: 16, lineHeight: 18 },
 });

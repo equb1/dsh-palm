@@ -1,7 +1,8 @@
 import React from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { SessionSummary } from '../protocol';
+import type { SessionRow } from '../state/sessionList';
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
 import { EmptyState } from './components';
@@ -10,6 +11,16 @@ import type { ConversationLink } from '../lib/handoff';
 import { colors, motion, radius, semantic, space, topInset } from './theme';
 
 const PANEL_WIDTH = 302;
+
+/** U6：抽屉筛选胶囊（文件夹/整页搜索还没做） */
+type SessionFilter = 'all' | 'running' | 'waiting' | 'unread';
+
+const FILTERS: Array<{ id: SessionFilter; label: string }> = [
+  { id: 'all', label: '全部' },
+  { id: 'running', label: '运行中' },
+  { id: 'waiting', label: '待确认' },
+  { id: 'unread', label: '未读' },
+];
 
 function relTime(ts: number): string {
   const min = Math.round((Date.now() - ts) / 60_000);
@@ -48,6 +59,18 @@ function SideTag({ link }: { link?: ConversationLink }): React.ReactElement | nu
         { backgroundColor: full ? colors.blueSoft : colors.glassStrong },
       ]}
     >
+      <Text style={[styles.tagText, { color: full ? colors.blue : colors.textFaint }]}>
+        {full ? '完整' : '轻'}
+      </Text>
+    </View>
+  );
+}
+
+/** 另一个引擎的会话：行上标「轻/完整」，点了先切引擎再打开 */
+function EngineTag({ engine }: { engine: SessionRow['engine'] }): React.ReactElement {
+  const full = engine === 'full';
+  return (
+    <View style={[styles.tag, { backgroundColor: full ? colors.blueSoft : colors.glassStrong }]}>
       <Text style={[styles.tagText, { color: full ? colors.blue : colors.textFaint }]}>
         {full ? '完整' : '轻'}
       </Text>
@@ -99,6 +122,11 @@ export function SessionDrawer({
     : 'DeepSeek 账号';
   const [mounted, setMounted] = React.useState(visible);
   const [q, setQ] = React.useState('');
+  const [filter, setFilter] = React.useState<SessionFilter>('all');
+  /** U6 文件夹：筛选 + 给会话改名/移动 */
+  const [folderFilter, setFolderFilter] = React.useState<string | null>(null);
+  const [folderPromptFor, setFolderPromptFor] = React.useState<string | null>(null);
+  const [folderText, setFolderText] = React.useState('');
   const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
@@ -124,27 +152,41 @@ export function SessionDrawer({
   if (!mounted) return null;
 
   const presets = state.caps?.presets ?? [];
-  const sessions = state.sessions;
+  const currentEngine = state.engineKind === 'light' ? 'light' : 'full';
+  const sessions = store.sessionRows();
   const keyword = q.trim().toLowerCase();
-  const filtered = keyword
+  const matched = keyword
     ? sessions.filter((s) => `${s.title}${s.preview}`.toLowerCase().includes(keyword))
     : sessions;
+  const folderNames = Array.from(new Set(Object.values(state.sessionFolders))).sort();
+  const filtered = matched.filter((s) => {
+    if (folderFilter && state.sessionFolders[s.id] !== folderFilter) return false;
+    if (filter === 'running') return s.status === 'running' || s.status === 'waiting_approval';
+    if (filter === 'waiting') return s.status === 'waiting_approval';
+    if (filter === 'unread') return s.unread > 0;
+    return true;
+  });
 
   const running = filtered.filter((s) => s.status === 'running' || s.status === 'waiting_approval');
+  const pinned = filtered.filter((s) => s.pinned === true && !running.includes(s));
   const today = filtered.filter(
-    (s) => !running.includes(s) && s.updatedAt >= startOfToday(),
+    (s) => !running.includes(s) && !pinned.includes(s) && s.updatedAt >= startOfToday(),
   );
-  const older = filtered.filter((s) => !running.includes(s) && s.updatedAt < startOfToday());
+  const older = filtered.filter(
+    (s) => !running.includes(s) && !pinned.includes(s) && s.updatedAt < startOfToday(),
+  );
 
-  const groups: Array<{ title: string; items: SessionSummary[] }> = [
+  const groups: Array<{ title: string; items: SessionRow[] }> = [
+    { title: '置顶', items: pinned },
     { title: '运行中', items: running },
     { title: '今天', items: today },
     { title: '更早', items: older },
   ].filter((g) => g.items.length > 0);
 
-  const renderRow = (s: SessionSummary): React.ReactElement => {
+  const renderRow = (s: SessionRow): React.ReactElement => {
     const preset = presets.find((p) => p.id === s.presetId);
     const link = state.links.find((item) => item.id === s.id);
+    const otherEngine = s.engine !== currentEngine;
     return (
       <React.Fragment key={s.id}>
       <Pressable
@@ -153,12 +195,16 @@ export function SessionDrawer({
         accessibilityLabel={`会话：${s.title}`}
         onPress={() => {
           onClose();
-          void store.openSession(s.id);
+          void store.openSessionRow(s.id, s.engine);
         }}
-        onLongPress={() => {
-          setMenuFor(menuFor === s.id ? null : s.id);
-          setRenameText(s.title);
-        }}
+        onLongPress={
+          otherEngine
+            ? undefined
+            : () => {
+                setMenuFor(menuFor === s.id ? null : s.id);
+                setRenameText(s.title);
+              }
+        }
         style={({ pressed }) => [styles.row, s.id === state.currentId && styles.rowActive, pressed && styles.rowPressed]}
       >
         <View style={{ flex: 1, gap: 2 }}>
@@ -172,14 +218,40 @@ export function SessionDrawer({
             <Text style={styles.rowPreview} numberOfLines={1}>
               {s.preview || preset?.name || ''}
             </Text>
+            {otherEngine ? <EngineTag engine={s.engine} /> : null}
             <SideTag link={link} />
             <StatusTag s={s} />
+            {state.sessionFolders[s.id] ? (
+              <View style={styles.folderTag}>
+                <Text style={styles.folderTagText}>{state.sessionFolders[s.id]}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </Pressable>
 
       {menuFor === s.id ? (
         <View style={styles.menu}>
+          {currentEngine === 'full' ? (
+            <Pressable
+              onPress={() => {
+                setMenuFor(null);
+                onClose();
+                void store.continueFullInLight(s.id);
+              }}
+            >
+              <Text style={styles.menuItem}>在轻引擎继续（摘要交接）</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => {
+              setFolderPromptFor(s.id);
+              setFolderText(state.sessionFolders[s.id] ?? '');
+              setMenuFor(null);
+            }}
+          >
+            <Text style={styles.menuItem}>移到文件夹…</Text>
+          </Pressable>
           <Pressable onPress={() => { void store.setSessionPinned(s.id, true); setMenuFor(null); }}>
             <Text style={styles.menuItem}>置顶</Text>
           </Pressable>
@@ -188,6 +260,21 @@ export function SessionDrawer({
           </Pressable>
           <Pressable onPress={() => { void store.archiveSession(s.id, true); setMenuFor(null); }}>
             <Text style={[styles.menuItem, { color: colors.danger }]}>归档</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setMenuFor(null);
+              Alert.alert('删除会话', `删除「${s.title}」？只删会话记录，不影响工作区文件。`, [
+                { text: '取消', style: 'cancel' },
+                {
+                  text: '删除',
+                  style: 'destructive',
+                  onPress: () => void store.deleteSession(s.id),
+                },
+              ]);
+            }}
+          >
+            <Text style={[styles.menuItem, { color: colors.danger }]}>删除</Text>
           </Pressable>
           <View style={styles.renameRow}>
             <TextInput
@@ -231,7 +318,18 @@ export function SessionDrawer({
       >
         <View style={styles.panelHeader}>
           <Text style={styles.panelTitle}>会话</Text>
-          <IconButton glyph="✕" label="关闭" onPress={onClose} size={32} />
+          <View style={styles.panelHeaderActions}>
+            <IconButton
+              glyph="⊞"
+              label="全部功能"
+              size={32}
+              onPress={() => {
+                onClose();
+                store.openFeatures();
+              }}
+            />
+            <IconButton glyph="✕" label="关闭" onPress={onClose} size={32} />
+          </View>
         </View>
 
         <View style={[styles.searchWrap, searchFocused && styles.searchWrapFocused]}>
@@ -246,7 +344,125 @@ export function SessionDrawer({
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
           />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="搜索全部会话正文"
+            hitSlop={6}
+            onPress={() => {
+              onClose();
+              store.openSearch();
+            }}
+          >
+            <Text style={styles.searchAll}>全文</Text>
+          </Pressable>
         </View>
+
+        <View style={styles.filters}>
+          {FILTERS.map((item) => {
+            const active = filter === item.id;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityLabel={`筛选：${item.label}`}
+                accessibilityState={{ selected: active }}
+                onPress={() => setFilter(item.id)}
+                style={[styles.filterPill, active && styles.filterPillActive]}
+              >
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {folderNames.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.folderScroll}
+            contentContainerStyle={styles.folderRow}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="全部文件夹"
+              onPress={() => setFolderFilter(null)}
+              style={[styles.filterPill, folderFilter === null && styles.filterPillActive]}
+            >
+              <Text style={[styles.filterText, folderFilter === null && styles.filterTextActive]}>
+                全部文件夹
+              </Text>
+            </Pressable>
+            {folderNames.map((name) => {
+              const active = folderFilter === name;
+              return (
+                <Pressable
+                  key={name}
+                  accessibilityRole="button"
+                  accessibilityLabel={`文件夹 ${name}`}
+                  onPress={() => setFolderFilter(active ? null : name)}
+                  style={[styles.filterPill, active && styles.filterPillActive]}
+                >
+                  <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                    {name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {folderPromptFor ? (
+          <View style={styles.folderEditorTop}>
+            <Text style={styles.folderLabel} numberOfLines={1}>
+              移到文件夹：{sessions.find((s) => s.id === folderPromptFor)?.title ?? '会话'}
+            </Text>
+            <View style={styles.renameRow}>
+              <TextInput
+                style={styles.renameInput}
+                value={folderText}
+                onChangeText={setFolderText}
+                placeholder="留空则移出文件夹"
+                placeholderTextColor={colors.textFaint}
+                autoFocus
+                accessibilityLabel="文件夹名"
+                onSubmitEditing={() => {
+                  store.setSessionFolder(folderPromptFor, folderText);
+                  setFolderPromptFor(null);
+                }}
+              />
+              <Pressable
+                hitSlop={10}
+                onPress={() => {
+                  store.setSessionFolder(folderPromptFor, folderText);
+                  setFolderPromptFor(null);
+                }}
+              >
+                <Text style={styles.menuItem}>保存</Text>
+              </Pressable>
+              <Pressable hitSlop={10} onPress={() => setFolderPromptFor(null)}>
+                <Text style={styles.menuItem}>取消</Text>
+              </Pressable>
+            </View>
+            {folderNames.length > 0 ? (
+              <View style={styles.folderQuick}>
+                {folderNames.map((name) => (
+                  <Pressable
+                    key={name}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      store.setSessionFolder(folderPromptFor, name);
+                      setFolderPromptFor(null);
+                    }}
+                  >
+                    <Text style={styles.folderQuickText}>{name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         <View style={styles.workspaceBlock}>
           <Text style={styles.workspaceLabel}>工作区</Text>
@@ -292,8 +508,20 @@ export function SessionDrawer({
           {groups.length === 0 ? (
             <EmptyState
               glyph="🗂"
-              title={keyword ? '没有匹配的会话' : '还没有会话'}
-              description={keyword ? '换个关键词试试。' : '发第一条消息，或从锦囊里选一个开始。'}
+              title={
+                keyword
+                  ? '没有匹配的会话'
+                  : filter !== 'all'
+                    ? '没有符合条件的会话'
+                    : '还没有会话'
+              }
+              description={
+                keyword
+                  ? '换个关键词试试。'
+                  : filter !== 'all'
+                    ? '换个筛选，或点「全部」看所有会话。'
+                    : '发第一条消息，或从锦囊里选一个开始。'
+              }
               style={styles.emptyState}
             />
           ) : (
@@ -363,6 +591,7 @@ const styles = StyleSheet.create({
     paddingBottom: space.sm,
   },
   panelTitle: { color: colors.text, fontSize: 16, lineHeight: 28, fontWeight: '500', letterSpacing: 0.2 },
+  panelHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -381,6 +610,69 @@ const styles = StyleSheet.create({
   },
   searchIcon: { color: colors.textFaint, fontSize: 13 },
   search: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 20, paddingVertical: 0 },
+  searchAll: { color: colors.blue, fontSize: 11.5, fontWeight: '600' },
+  filters: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+  },
+  filterPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  filterPillActive: { backgroundColor: colors.blueSoft, borderColor: colors.blue },
+  filterText: { color: colors.textDim, fontSize: 11.5 },
+  filterTextActive: { color: colors.blue, fontWeight: '600' },
+  folderScroll: { flexGrow: 0, flexShrink: 0, height: 42 },
+  folderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: space.md,
+    paddingVertical: 3,
+  },
+  folderEditorTop: {
+    marginHorizontal: space.md,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    gap: 6,
+  },
+  folderEditor: {
+    marginLeft: 46,
+    marginBottom: 6,
+    padding: 8,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    gap: 6,
+  },
+  folderLabel: { color: colors.textFaint, fontSize: 11 },
+  folderQuick: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  folderQuickText: {
+    color: colors.blue,
+    fontSize: 11.5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.blueSoft,
+  },
+  folderTag: {
+    backgroundColor: colors.glassStrong,
+    borderRadius: radius.xs,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  folderTagText: { color: colors.textDim, fontSize: 10 },
   listScroll: { flex: 1 },
   list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
   workspaceBlock: {

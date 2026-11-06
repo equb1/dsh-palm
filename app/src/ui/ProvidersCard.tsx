@@ -59,6 +59,7 @@ export function ProvidersCard(): React.ReactElement {
 
   const catalog = state.providerCatalog;
   const selected = draft ? catalog.find((c) => c.id === draft.id) : undefined;
+  const light = state.engineKind === 'light';
 
   const openNew = (mode: Tab): void => {
     setError(null);
@@ -106,8 +107,18 @@ export function ProvidersCard(): React.ReactElement {
         api: draft.api,
         ...(draft.apiKey.trim().length > 0 ? { apiKey: draft.apiKey.trim() } : {}),
       });
-      patch({ models, picked: Object.fromEntries(models.map((m) => [m.id, true])) });
-      if (models.length === 0) setError('服务商没有返回模型，可以检查 Base URL 或换个协议');
+      // 服务商目录可能不再列出当前模型（账号目录现在只有 flash/pro），
+      // 同域名下把它留在候选里并勾上，避免用户只是点了「获取模型」再保存就被换模型。
+      const row = state.providers.find((item) => item.id === draft.id);
+      const sameBase =
+        row !== undefined &&
+        row.baseURL.trim().replace(/\/+$/, '') === draft.baseURL.trim().replace(/\/+$/, '');
+      const current = sameBase ? row.models[0] : undefined;
+      const merged = current && !models.some((model) => model.id === current.id)
+        ? [current, ...models]
+        : models;
+      patch({ models: merged, picked: Object.fromEntries(merged.map((m) => [m.id, true])) });
+      if (merged.length === 0) setError('服务商没有返回模型，可以检查 Base URL 或换个协议');
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -117,6 +128,9 @@ export function ProvidersCard(): React.ReactElement {
 
   const save = async (): Promise<void> => {
     if (!draft) return;
+    if (light && draft.mode === 'catalog') {
+      return setError('轻引擎只有一条自定义模型渠道；第三方目录请切完整引擎配置');
+    }
     if (draft.id.trim().length === 0) return setError(draft.mode === 'catalog' ? '先选一个提供商' : '先填一个渠道 ID，例如 openrouter');
     if (!draft.editing && draft.apiKey.trim().length === 0) return setError('先填 API Key');
 
@@ -177,7 +191,9 @@ export function ProvidersCard(): React.ReactElement {
         </Pill>
       </View>
       <Text style={styles.hint}>
-        除 DeepSeek 外的模型都从这里加：第三方提供商选目录，自定义 API 自己填协议和地址。
+        {light
+          ? '轻引擎只有一条模型渠道：点「编辑」改 Base URL / Key，账号模式会自动复用登录 token；「获取模型」走 OpenAI 兼容的 /models。'
+          : '除 DeepSeek 外的模型都从这里加：第三方提供商选目录，自定义 API 自己填协议和地址。'}
       </Text>
 
       {state.providers.map((p) => (
@@ -197,15 +213,18 @@ export function ProvidersCard(): React.ReactElement {
             <Pressable accessibilityRole="button" onPress={() => openEdit(p)}>
               <Text style={styles.rowAction}>编辑</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => void remove(p)} disabled={busy !== null}>
-              <Text style={[styles.rowAction, styles.danger]}>删除</Text>
-            </Pressable>
+            {light ? null : (
+              <Pressable accessibilityRole="button" onPress={() => void remove(p)} disabled={busy !== null}>
+                <Text style={[styles.rowAction, styles.danger]}>删除</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       ))}
 
       {draft ? (
         <View style={styles.form}>
+          {light ? null : (
           <View style={styles.tabs}>
             <Pressable
               style={[styles.tab, draft.mode === 'catalog' && styles.tabActive]}
@@ -226,6 +245,7 @@ export function ProvidersCard(): React.ReactElement {
               </Text>
             </Pressable>
           </View>
+          )}
 
           {draft.mode === 'catalog' ? (
             <>
@@ -408,7 +428,7 @@ export function ProvidersCard(): React.ReactElement {
             disabled={busy !== null}
           />
         </View>
-      ) : (
+      ) : light ? null : (
         <View style={styles.actions}>
           <Btn label="添加模型提供商" onPress={() => openNew('catalog')} style={{ flex: 1 }} />
         </View>

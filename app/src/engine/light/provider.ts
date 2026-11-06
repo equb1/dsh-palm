@@ -57,8 +57,34 @@ export function toolSchemas(tools: AgentTool[]): Array<{
   }));
 }
 
+/** 从错误响应里取一句人话：优先 JSON 的 error.message / message，非 JSON 原样截断 */
+function errorBodyDetail(body?: string): string {
+  const raw = (body ?? '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { message?: unknown } | string;
+      message?: unknown;
+    };
+    const nested =
+      parsed.error && typeof parsed.error === 'object' ? parsed.error.message : undefined;
+    const message =
+      typeof nested === 'string'
+        ? nested
+        : typeof parsed.message === 'string'
+          ? parsed.message
+          : typeof parsed.error === 'string'
+            ? parsed.error
+            : '';
+    if (message.trim()) return message.trim().replace(/\s+/g, ' ').slice(0, 300);
+  } catch {
+    // 不是 JSON：按纯文本处理
+  }
+  return raw.replace(/\s+/g, ' ').slice(0, 300);
+}
+
 export function describeHttpError(status: number, statusText: string, body?: string): string {
-  const detail = (body ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const detail = errorBodyDetail(body);
   const suffix = detail ? `：${detail}` : '';
   switch (status) {
     case 401:

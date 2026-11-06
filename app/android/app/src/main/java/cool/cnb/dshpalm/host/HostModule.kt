@@ -5,6 +5,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -521,6 +522,43 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     @ReactMethod
     fun logs(promise: Promise) {
         promise.resolve(Arguments.createArray().apply { HostRuntime.logs().forEach { pushString(it) } })
+    }
+
+    /**
+     * 分享一个工作区文件（P0 1.5 补齐）。
+     *
+     * `contentUri` 由 expo-file-system 的 `File.contentUri` 生成
+     * （authority `${applicationId}.FileSystemFileProvider`，覆盖 filesDir/workspace），
+     * 这里只负责发 ACTION_SEND；必须带 ClipData + FLAG_GRANT_READ_URI_PERMISSION，
+     * 否则接收方拿不到读权限。
+     */
+    @ReactMethod
+    fun shareFile(contentUri: String?, mime: String?, title: String?, promise: Promise) {
+        try {
+            val raw = contentUri?.trim().orEmpty()
+            if (raw.isEmpty()) {
+                promise.reject("share_failed", "文件路径为空")
+                return
+            }
+            val uri = Uri.parse(raw)
+            val type = mime?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
+            val label = title?.takeIf { it.isNotBlank() } ?: "文件"
+            val send = Intent(Intent.ACTION_SEND).apply {
+                this.type = type
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_TITLE, label)
+                clipData = ClipData.newUri(ctx.contentResolver, label, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(send, "分享「$label」").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val activity = ctx.currentActivity
+            if (activity != null) activity.startActivity(chooser) else ctx.startActivity(chooser)
+            promise.resolve(true)
+        } catch (t: Throwable) {
+            promise.reject("share_failed", t.message ?: "分享失败", t)
+        }
     }
 
     companion object {

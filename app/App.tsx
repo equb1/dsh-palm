@@ -6,6 +6,12 @@ import { ConnectScreen } from './src/ui/ConnectScreen';
 import { HomeScreen } from './src/ui/HomeScreen';
 import { LaunchOverlay } from './src/ui/LaunchOverlay';
 import { SettingsScreen } from './src/ui/SettingsScreen';
+import { FeaturesScreen } from './src/ui/FeaturesScreen';
+import { FilesScreen } from './src/ui/FilesScreen';
+import { SearchScreen } from './src/ui/SearchScreen';
+import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
+import { TerminalScreen } from './src/ui/TerminalScreen';
+import { ScreenFade } from './src/ui/components/ScreenFade';
 import { store, useStore } from './src/ui/useStore';
 import { colors } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
@@ -69,6 +75,31 @@ export default function App(): React.ReactElement {
         store.closeSettings();
         return true;
       }
+      // 1b. 全部功能页：返回首页
+      if (state.view === 'features') {
+        store.closeFeatures();
+        return true;
+      }
+      // 1c. 文件页：返回首页
+      if (state.view === 'files') {
+        store.closeFiles();
+        return true;
+      }
+      // 1d. 搜索页：返回首页
+      if (state.view === 'search') {
+        store.closeSearch();
+        return true;
+      }
+      // 1e. 工作区页：返回首页
+      if (state.view === 'workspace') {
+        store.closeWorkspace();
+        return true;
+      }
+      // 1f. 终端页：返回首页
+      if (state.view === 'terminal') {
+        store.closeTerminal();
+        return true;
+      }
       // 2. 如果打开了连接面板，关闭连接面板返回首页
       if (state.connectModalOpen) {
         store.closeConnectModal();
@@ -88,7 +119,17 @@ export default function App(): React.ReactElement {
   }, [state.view, state.connectModalOpen, state.detail]);
 
   const screen =
-    state.view === 'settings' ? (
+    state.view === 'terminal' ? (
+      <TerminalScreen />
+    ) : state.view === 'workspace' ? (
+      <WorkspaceScreen />
+    ) : state.view === 'search' ? (
+      <SearchScreen />
+    ) : state.view === 'files' ? (
+      <FilesScreen />
+    ) : state.view === 'features' ? (
+      <FeaturesScreen />
+    ) : state.view === 'settings' ? (
       <SettingsScreen />
     ) : state.connectModalOpen || (!hostAvailable && !state.caps) ? (
       <ConnectScreen />
@@ -99,12 +140,15 @@ export default function App(): React.ReactElement {
     );
 
   // web 上收成一列手机宽度，两边留黑，看起来才像手机
+  const screenKey = `${state.view}:${state.detail?.id ?? ''}:${state.connectModalOpen ? 'connect' : ''}`;
+  const shown = <ScreenFade trigger={screenKey}>{screen}</ScreenFade>;
+
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webOuter}>
         <StatusBar barStyle="dark-content" />
         <View style={styles.webFrame}>
-          {screen}
+          {shown}
           {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
         </View>
       </View>
@@ -114,7 +158,7 @@ export default function App(): React.ReactElement {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" />
-      {screen}
+      {shown}
       {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
     </View>
   );

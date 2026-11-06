@@ -9,6 +9,7 @@
  * 真正的副作用（启 proot、建会话、发 seed、回滚）在 store.ts。
  */
 import type {
+  Block,
   FileRef,
   HandoffBlockedCall,
   HandoffCompletedStep,
@@ -351,6 +352,37 @@ export function buildHandoff(input: BuildHandoffInput): HandoffV1 {
   };
 }
 
+/** 完整引擎会话 → Handoff 历史消息（工具 block 当 tool 结果，供摘要/最近轮次用） */
+export function turnDetailToHistory(turns: Turn[]): HandoffHistoryMessage[] {
+  const out: HandoffHistoryMessage[] = [];
+  for (const turn of turns) {
+    if (turn.role === 'user') {
+      const text = turn.blocks
+        .map((block) => (block.kind === 'text' ? block.text : ''))
+        .join('')
+        .trim();
+      if (text) out.push({ role: 'user', content: text });
+      continue;
+    }
+    const text = turn.blocks
+      .filter((block): block is Extract<Block, { kind: 'text' }> => block.kind === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim();
+    if (text) out.push({ role: 'assistant', content: text });
+    for (const block of turn.blocks) {
+      if (block.kind !== 'tool') continue;
+      out.push({
+        role: 'tool',
+        tool_call_id: `t_${block.id}`,
+        name: block.name,
+        content: block.detail?.trim() || block.summary || block.state,
+      });
+    }
+  }
+  return out;
+}
+
 /** 交给完整引擎的第一条消息；只给"不要重做"的指令和上下文，不重放工具。 */
 export function buildSeedText(handoff: HandoffV1): string {
   const lines: string[] = [];
@@ -420,6 +452,14 @@ export function buildSeedText(handoff: HandoffV1): string {
   return lines.join('\n');
 }
 
+/** 完整 → 轻的 seed：结构与正向一致，只换交接方向说明（M2.6 继续版）。 */
+export function buildReverseSeedText(handoff: HandoffV1): string {
+  return buildSeedText(handoff).replace(
+    '这是一次从手机轻引擎到完整引擎的交接。不要重做已完成步骤，只继续未执行的步骤。',
+    '这是从完整引擎回到手机轻引擎的继续会话。不要重做已完成步骤；需要跑 Python/Office/长任务时再切回完整引擎。',
+  );
+}
+
 /* ------------------------------------------------------------------ *
  * 逻辑会话 ⇄ 物理会话
  * ------------------------------------------------------------------ */
@@ -469,6 +509,33 @@ export function stripSeedTurns(turns: Turn[], seedMarker: string, seedTurnId?: s
 }
 
 /**
+ * 完整引擎在切 approval policy 时会往历史里写一条 user 角色提示
+ * （"The approval policy changed from … to …"），它不是用户发的，别显示成用户气泡。
+ * 只按这句固定文案过滤，避免误吞真实用户消息（见 PITFALLS I9）。
+ */
+const ENGINE_NOTICE_PATTERN = /^The approval policy changed\b/i;
+
+function isEngineNoticeTurn(turn: Turn): boolean {
+  if (turn.role !== 'user') return false;
+  const text = turn.blocks
+    .map((block) => (block.kind === 'text' ? block.text : ''))
+    .join('')
+    .trim();
+  return ENGINE_NOTICE_PATTERN.test(text);
+}
+
+/** 完整引擎侧回合：去 seed + 去引擎自动提示 */
+function fullSideTurns(turns: Turn[], seedMarker: string, seedTurnId?: string): Turn[] {
+  return stripSeedTurns(turns, seedMarker, seedTurnId).filter((turn) => !isEngineNoticeTurn(turn));
+}
+
+/** 原生完整会话展示层也过滤引擎提示（不进 ConversationLink 的会话同样适用） */
+export function stripEngineNoticeTurns(turns: Turn[]): Turn[] {
+  return turns.filter((turn) => !isEngineNoticeTurn(turn));
+}
+
+
+/**
  * 逻辑会话详情 = 轻引擎缓存回合 + 完整引擎回合（去掉 seed 用户消息）。
  * 任一侧缺失时退回另一侧，UI 永远只看到一条会话。
  */
@@ -489,10 +556,10 @@ export function mergeDetail(
       id: link.id,
       title: link.title || target.title,
       presetId: link.presetId || target.presetId,
-      turns: stripSeedTurns(target.turns, link.seedMarker, link.seedTurnId),
+      turns: fullSideTurns(target.turns, link.seedMarker, link.seedTurnId),
     };
   }
-  const turns = [...base.turns, ...stripSeedTurns(target.turns, link.seedMarker, link.seedTurnId)];
+  const turns = [...base.turns, ...fullSideTurns(target.turns, link.seedMarker, link.seedTurnId)];
   return {
     ...target,
     id: link.id,

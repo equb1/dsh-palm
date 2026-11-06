@@ -465,6 +465,10 @@ const handlers: { [M in Method]: Handler<M> } = {
     return { session: state.summary };
   },
 
+  'sessions.import': () => {
+    throw new Error('sessions.import 只在轻引擎可用');
+  },
+
   'sessions.send': ({ sessionId, text }) => {
     const s = requireSession(sessionId);
     const userTurn: Turn = {
@@ -733,10 +737,35 @@ const handlers: { [M in Method]: Handler<M> } = {
     return { ok: true as const };
   },
 
+  'sessions.delete': ({ sessionId }) => {
+    sessions.delete(sessionId);
+    return { ok: true as const };
+  },
+
+  'sessions.search': () => {
+    throw Object.assign(new Error('mock 宿主没有正文搜索'), { code: 'unsupported' });
+  },
+
+  'shell.run': () => {
+    throw Object.assign(new Error('mock 宿主没有终端'), { code: 'unsupported' });
+  },
+
   'providers.remove': ({ id }) => {
     const i = mockProviders.findIndex((p) => p.id === id);
     if (i >= 0) mockProviders.splice(i, 1);
     return { providers: mockProviders.map((p) => ({ ...p })) };
+  },
+
+  'fs.list': () => {
+    throw Object.assign(new Error('mock 宿主没有工作区文件'), { code: 'unsupported' });
+  },
+
+  'fs.rename': () => {
+    throw Object.assign(new Error('mock 宿主没有工作区文件'), { code: 'unsupported' });
+  },
+
+  'fs.delete': () => {
+    throw Object.assign(new Error('mock 宿主没有工作区文件'), { code: 'unsupported' });
   },
 };
 

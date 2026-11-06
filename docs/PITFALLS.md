@@ -526,8 +526,10 @@
 - 处理：
   1. **不要直接卸载**（会丢会话/登录）；优先用 Metro 加载 JS 改动：`adb reverse tcp:8081 tcp:8081` + 起 Metro + 重启 App；
   2. 需要整包更新时：`run-as` 备份 `files` 与 `shared_prefs` → 卸载 → 装新包 → 还原数据；
-  3. 长期：固定一台机器/一个 keystore 构建，或把 keystore 纳入发布流程（勿进 git）。
+  3. 长期：固定一台机器/一个 keystore 构建；release 已接专属 keystore（`scripts/gen-release-keystore.ps1`，
+     产物 `keystore/release.jks` + `keystore.properties`，都 gitignore），见 TECHNICAL §9.3。
 - 验证：`dumpsys package` 的 `lastUpdateTime` 更新；App 数据仍在。
+- 注意：debug 包与 release 包仍是两套签名；release 覆盖 debug 包会失败，需按上面 2 或统一签名。
 
 ### I3. 中断后继续问，400 `tool_calls must be followed by tool messages`
 
@@ -548,3 +550,113 @@
 - 处理：`PATH="/opt/homebrew/bin:$PATH" npm run verify`（Node 26），或 `nvm use 22`；
   长期在 `package.json` 加 `engines.node >=22`。
 - 验证：e2e 的 before 成功，`npm run verify` 全绿。
+
+### I5. `adb shell input text` 被中文输入法改写（2026-11-05）
+
+- 现象：`input text 'create docx file docs/x.docx'` 落进输入框变成
+  `Create啊small docx file at docs／verify－share。docx`（空格变“啊”、`/` 和 `.` 变全角）。
+- 原因：注入的按键先经过当前中文 IME（Gboard/Sogou），被当作拼音/中文标点处理；`%s` 也会被转换。
+- 处理：验证 UI 前临时禁用 IME：
+  `adb shell ime disable com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME`，
+  输入框仍能收硬件键事件，ASCII 原样落进去；验完 `ime enable` 恢复。
+  更稳的做法是用 mock 模型/深链/直接调 native，不依赖 UI 输入。
+- 验证：`uiautomator dump` 里出现原样的 `create docx file docs/verify-share.docx`。
+
+### I6. release keystore.properties 的 UTF-8 BOM 让 Gradle 报 `Value is null`（2026-11-05）
+
+- 现象：`assembleRelease` 在 `storeFile rootProject.file(keystoreProperties["storeFile"])` 报
+  `A problem occurred evaluating project ':app'. > Value is null`，但 properties 里明明有 `storeFile=`。
+- 原因：Windows PowerShell 5.1 的 `Set-Content -Encoding utf8` 写 BOM；Java `Properties.load`
+  把 BOM 当成第一个 key 的一部分（`\uFEFFstoreFile`），所以取不到值。
+- 处理：用无 BOM 的方式写（`[IO.File]::WriteAllText(..., New-Object Text.UTF8Encoding($false))`）；
+  `scripts/gen-release-keystore.ps1` 已改，旧文件可手工去 BOM。
+- 验证：`assembleRelease` 通过；`apksigner verify --print-certs` 显示 `CN=DSH Palm`。
+
+### I7. 轻引擎账号模式 401（2026-11-05）
+
+- 现象：轻引擎发消息 1 秒内失败，日志
+  `[light] error kind=unauthorized status=401 … Authentication Fails (governor)`；
+  ChatScreen 横幅显示「登录或 API Key 无效/已过期（401）」。
+- 原因（2026-11-05 已定位并修复）：旧版本保存的轻引擎账号配置可能只有 `baseURL/model`，没有
+  `authMode/authToken`；`resolveLightSetup` 只对 `authMode==='account'` 注入 token，结果轻引擎带着
+  **auth=none** 去请求，必然 401。日志证据：`[light] auth=none base=https://api.deepseek.com/v1`。
+  同一 token 在完整引擎和 PC curl（`x-dsh-auth-token` + `/v1/chat/completions`）都正常，所以不是 token 过期。
+- 处理：`resolveLightSetup` 在“没有 apiKey 也没有 authToken”时自动 `loadAccountToken()` 补齐；
+  并加脱敏日志 `[light] auth=account(n)/apiKey/none base=…`。恢复入口（401 横幅「重新登录」）保留，
+  但它不是根因修复。
+- 验证：修复后真机日志 `[light] auth=account(64) base=https://api.deepseek.com/v1`，ready=19ms；
+  typecheck + verify 209 pass。
+
+### I8. 审批未决时再发消息，出现重复 React key（2026-11-05）
+
+- 现象：`create_docx` 审批卡未处理时又发一条消息，日志刷
+  `Encountered two children with the same key, '.$r_mw3jn4bs_lhyo'`；界面上同一个 run 出现两个
+  create_docx 行/两张审批卡，点“批准”很容易点错/失效。
+- 原因：先生成的 assistant 回合和随后补发的回合共用同一个 runId（`r_…`），FlatList/TurnView 的 key
+  用了 runId；`turnIdsFor`/`cleanTurns` 没有为“同 run 的后续回合”生成唯一 key。
+- 处理（2026-11-05 已修）：`ChatScreen` 的 FlatList `keyExtractor` 改为
+  `` `${turn.id ?? turn.runId ?? 'turn'}#${index}` ``，同 run 的多个回合不再撞 key；
+  提交 `8ef85fa`，typecheck + verify 209 pass。
+- 验证（2026-11-05 真机已完成）：重启 Metro/App 后复现「create docx → 不批准 → 再发 wait」，
+  再点「拒绝」让同一 run 产出第二个回合；`adb logcat -s ReactNativeJS` 全程无 duplicate key，
+  审批卡只保留一张。截图 `scratch/shots/10-rejected.png`。
+
+### I9. 完整引擎切换 approval policy 的提示被当成用户消息（2026-11-05）
+
+- 现象：能力门交接后完整引擎执行完，会话里多出一条用户气泡
+  `The approval policy changed from "ask" to "never" (changed by the user).`；
+  这不是用户输入，用户会以为是自己发的。
+- 原因（初步）：交接把完整引擎 turns 原样并入逻辑会话；DSH 在切 `danger-full-access` 时
+  会往会话历史写一条 user 角色提示，`ConversationLink` 只剥 handoff seed 回合，没过滤这类系统提示。
+- 处理（2026-11-05 已修）：`handoff.ts` 增加 `fullSideTurns`，合并完整引擎回合时过滤掉以
+  `The approval policy changed` 开头的 user 回合；只匹配这句固定文案，真实用户消息不删。
+  原生完整会话（不经 ConversationLink）也在 `ChatScreen` 用 `stripEngineNoticeTurns` 过滤展示。
+  单测 `handoff.test.ts` 两条：合并不误删真实用户消息、展示层只去 policy 提示。
+- 验证：`npm run verify` 217 pass / 0 fail。真机 2026-11-05 23:59 重启 Metro/App 后打开原会话
+  「检查 python 文档库版本」，policy 气泡已消失（截图 `scratch/shots/102-i9-filtered.png`）；
+  原生完整会话与 handoff 合并两条路径都过滤。
+
+### I10. 长会话 soak 内存（2026-11-05，观察）
+
+- 20 分钟：light 会话 33 个回合 / 41 次流式调用后 PSS 623 MB（RSS 804 MB）；中途采样
+  485 MB（12 回合）→ 531 MB（21 回合）→ 623 MB（33 回合）。Native 282→312 MB，Java 48→54 MB。
+- 40 分钟复核（2026-11-05 22:08–22:48，新会话、deepseek-chat、chat-only 提示，49 轮）：
+  PSS 461 MB 起步，稳定在 **430–501 MB**（37 分钟时 431 MB），RSS 600–683 MB，无 OOM/崩溃。
+- 42.5 分钟复核（2026-11-05 22:58–23:40，用户要用手机主动停；52 轮、43 次采样）：
+  PSS 391 MB 起步 → 30 分钟 524 MB → 峰值 546 MB（23:38）→ 结束 465 MB；RSS 566→722→638 MB；
+  无 OOM/崩溃。两次 40 分钟级运行都是“涨一段再回落”，没有单调线性上涨。
+- 说明 20 分钟那次的 623 MB 更像峰值/GC 抖动，不是线性泄漏。
+- **90 分钟完成**（2026-11-06 00:11–01:42，109 轮、90 次采样）：PSS 349 MB 起步 → 14 分钟 465 →
+  30–59 分钟 433–449 平台 → 74 分钟 556 → 结束 601–615 MB（峰值 644）；RSS 454→734（峰值 763）。
+  无 OOM/崩溃，结束时会话仍可滚动/输入。形态是“随上下文增长的分段上涨”，不是每轮线性泄漏；
+  单会话 90 分钟 soak 已跑通，后续只需在更长上下文（如 >200 轮）或图片/附件场景再观察。
+- 附带：`VirtualizedList: You have a large list that is slow to update` 在 20 分钟那次出现 1 次
+  （dt 1109ms，prevDt 24543ms）；duplicate key 全程 0。
+- 推测：长回答（20 分钟那次最后一次 in:37155 tokens）留在 JS 状态与 Markdown 视图里，
+  `ChatScreen` 的 FlatList 是 `removeClippedSubviews={false}` + `windowSize=9`；
+  回合越多驻留的 native view/文本越高，但 40 分钟数据没有持续上涨。
+- 下一步：90 分钟 soak 看是否线性上涨（40 分钟那次为回归 UI 主动停止，不算完成 90 分钟）；
+  用 `dumpsys meminfo`/heap profile 区分「列表驻留」与「RN 泄漏」；必要时改
+  `removeClippedSubviews`/窗口大小或给长会话做回合降采样。
+
+### I11. 脚本点真机按钮点空（2026-11-06）
+
+- 现象：`adb shell input tap x y` 看着点在发送/选项/批准上，界面没反应；键盘弹出后更容易点空。
+- 原因：聊天截图预览按比例缩放（1272×2800 → 871×1918），按预览像素估坐标会偏 100+ px；
+  键盘/输入框弹出后布局整体上移，旧坐标直接失效。
+- 处理：先 `adb shell uiautomator dump /sdcard/window.xml` 拉回 XML，按目标节点 `bounds`
+  算中心点再 tap；点击后截图确认状态，不连点。输入用 `adb shell input text`（空格写 `%s`）。
+- 验证：2026-11-06 用 bounds 点发送/选项/批准，提问/审批/能力门三类卡片一次走通。
+
+### I12. `verify` 偶发 ENOTEMPTY 清理失败（2026-11-06，观察）
+
+- 现象：`npm run verify` 偶发 `ENOTEMPTY: directory not empty, rmdir …/dsh-palm-light-*/sessions`，
+  单跑重试即过；首次 240 pass，第二次 240 pass / 1 fail，第三次又全绿。
+- 原因：`test/light-engine.test.ts` 的 `after` 用 `rm(recursive)` 清临时目录时，测试内仍有
+  异步落盘收尾，属于测试清理竞争，不是产品代码失败。
+- 处理：偶发时重跑确认；频繁出现再给 `after` 的 `rm` 加退避重试或等宿主句柄关闭。
+- 验证：连续重跑 `npm run verify` 全绿（数量以命令输出为准）。
+
+
+
+

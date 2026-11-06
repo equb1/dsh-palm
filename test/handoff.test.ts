@@ -6,13 +6,16 @@ import { describe, it } from 'node:test';
 
 import {
   buildHandoff,
+  buildReverseSeedText,
   buildSeedText,
   detailHasSeedMarker,
   logicalIdFor,
   mergeDetail,
   physicalIdFor,
   seedMarkerFor,
+  stripEngineNoticeTurns,
   truncateTurns,
+  turnDetailToHistory,
   type ConversationLink,
   type HandoffHistoryMessage,
 } from '../app/src/lib/handoff';
@@ -228,6 +231,131 @@ describe('Handoff · 纯函数', () => {
     assert.equal(merged?.turns.some((turn) => turn.id === 'seed'), false);
     assert.match(JSON.stringify(merged?.turns), /完整引擎继续/);
     assert.equal(detailHasSeedMarker(full, marker), true);
+  });
+
+  it('mergeDetail：过滤完整引擎的 approval policy 提示，不误删真实用户消息', () => {
+    const light = baseDetail(CONVERSATION, [
+      {
+        id: 'u1',
+        role: 'user',
+        createdAt: 1,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b1', text: '运行 python3' }],
+      },
+    ]);
+    const marker = '[dsh-handoff:h_test]';
+    const full = baseDetail('s_full_1', [
+      {
+        id: 'seed',
+        role: 'user',
+        createdAt: 2,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b2', text: `${marker}\n交接说明` }],
+      },
+      {
+        id: 'notice',
+        role: 'user',
+        createdAt: 3,
+        status: 'done',
+        blocks: [
+          {
+            kind: 'text',
+            id: 'b3',
+            text: 'The approval policy changed from "ask" to "never" (changed by the user).',
+          },
+        ],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: 4,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b4', text: '完整引擎输出 42' }],
+      },
+      {
+        id: 'u2',
+        role: 'user',
+        createdAt: 5,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b5', text: '再加一页' }],
+      },
+    ]);
+    const merged = mergeDetail(link(), light, full);
+    assert.ok(merged);
+    const texts = merged!.turns.map((turn) =>
+      turn.blocks.map((block) => (block.kind === 'text' ? block.text : '')).join(''),
+    );
+    assert.equal(texts.some((text) => text.includes('approval policy changed')), false);
+    assert.equal(texts.some((text) => text.includes('再加一页')), true);
+    assert.equal(texts.some((text) => text.includes('完整引擎输出 42')), true);
+  });
+
+  it('stripEngineNoticeTurns：完整引擎的 policy 提示不显示，真实用户消息保留', () => {
+    const user = (id: string, text: string): Turn => ({
+      id,
+      role: 'user',
+      createdAt: 1,
+      status: 'done',
+      blocks: [{ kind: 'text', id: `${id}-b`, text }],
+    });
+    const turns: Turn[] = [
+      user('u1', 'hi'),
+      user('notice', 'The approval policy changed from "ask" to "never" (changed by the user).'),
+      user('u2', 'please continue'),
+      { id: 'a1', role: 'assistant', createdAt: 2, status: 'done', blocks: [] },
+    ];
+    const out = stripEngineNoticeTurns(turns);
+    assert.deepEqual(out.map((turn) => turn.id), ['u1', 'u2', 'a1']);
+  });
+
+  it('turnDetailToHistory + buildHandoff：完整会话的工具结果进摘要/最近轮次', () => {
+    const turns: Turn[] = [
+      {
+        id: 'u1',
+        role: 'user',
+        createdAt: 1,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b1', text: '整理报告' }],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: 2,
+        status: 'done',
+        blocks: [
+          { kind: 'text', id: 'b2', text: '我来读文件' },
+          {
+            kind: 'tool',
+            id: 'tool1',
+            name: 'read_file',
+            summary: '读取 docs/a.docx',
+            state: 'done',
+            detail: '正文内容',
+          },
+        ],
+      },
+      {
+        id: 'u2',
+        role: 'user',
+        createdAt: 3,
+        status: 'done',
+        blocks: [{ kind: 'text', id: 'b3', text: '再导出' }],
+      },
+    ];
+    const history = turnDetailToHistory(turns);
+    assert.deepEqual(history.map((message) => message.role), ['user', 'assistant', 'tool', 'user']);
+    const handoff = buildHandoff({
+      conversationId: 's_full',
+      reason: 'continue_in_light',
+      from: { engine: 'full', sessionId: 's_full' },
+      presetId: 'standard',
+      history,
+      turns,
+    });
+    assert.equal(handoff.completedSteps.length, 1);
+    assert.equal(handoff.completedSteps[0]?.name, 'read_file');
+    assert.match(buildReverseSeedText(handoff), /回到手机轻引擎/);
+    assert.equal(buildReverseSeedText(handoff).includes(handoff.seedMarker), true);
   });
 
   it('logical / physical 映射：两个物理 id 都归到一条逻辑会话', () => {

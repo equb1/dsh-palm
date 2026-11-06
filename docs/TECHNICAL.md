@@ -178,6 +178,16 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
   content-type+魔数校验，b64 支持 data:/URL-safe，按 MIME 定扩展名。
 - 会话：本地 JSON 存储；支持流式、审批、提问；附件已改原生收件（§6.4）。
 - 文件名：`lib/filenames.ts` 统一清洗（中文/空格/`#`/`%` 等），生成工具与审批卡共用。
+- 文件浏览（U8）：协议 `fs.list` / `fs.rename` / `fs.delete` 由轻宿主用工作区 `SandboxFs` 实现
+  （`/` 根、name/kind/size/mtime，500 条上限；根目录不可重命名/删除）；完整引擎（proot）未实现，
+  文件页会提示不支持。
+- 只读终端（U8）：`shell.run` 由轻宿主用独立只读挂载（Workspace SandboxFs `readOnly` + MountableFs）
+  跑 ShellRunner，写操作返回 EACCES；15s 超时、20k 输出；完整引擎 unsupported。
+- 会话运行（E2）：同一会话同时最多一个 run；运行中再 `sessions.send` 会写历史并进
+  `session.queued`（返回 `queued:true`），当前 run 结束后自动开下一条；UI 仍以插话/停止为主。
+- 会话管理（E3）：轻宿主实现 `sessions.delete`（运行中拒绝）和 `sessions.search`（标题/历史/思考
+  正文，返回片段与命中数）；`sessions.pin` 的状态进 `SessionSummary.pinned`，抽屉据此分「置顶」组；
+  完整引擎对 delete/search 显式 unsupported。
 - 限制：单次读 10MB；软链 EPERM；chmod/utimes 只内存；bash 无 python/js/网络。
 
 ### 5.2 模型调用
@@ -185,9 +195,16 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
 OpenAI 兼容 `/chat/completions`，SSE 流；45s 空闲超时（每分片重置）；
 成功每次调用打一行 `[light] ttft=<ms> stream=<ms> model=… step=… first=content|tool tools=… usage=… run=…`，
 失败打 `[light] error kind=timeout|offline|unauthorized|rate_limited|… status=… run=…`；
+错误消息优先取服务端 JSON 的 `error.message`/`message`（`describeHttpError`），不把整段 JSON 塞进横幅；
 错误经 `lib/errors.ts` 人话化后写回当前会话（ChatScreen 横幅）。
 渠道配置存 SecureStore（baseURL/apiKey/model/image），支持 `dshpalm://light?...` 深链覆盖。
+账号模式的模型目录（M2.5）：`engine/light/catalog.ts` 用 `x-dsh-auth-token` GET `{baseURL}/models`，
+解析 `data[].id/name`、去重、6s 超时、失败回退；`LightHost.models.list` 返回目录并缓存 5 分钟，
+模型面板因此可选 `deepseek-chat / DeepSeek-V4.1-Flash / DeepSeek-V4-Pro`；选中后写会话级
+`sessions.setModel`，下一轮请求用该 model id。
 性能基准：`npm run bench:light -- --n 20`（本地 SSE mock；`--url/--key/--model` 可打真端点）。
+平台差异：`transport.ts`（fetch）与 `transport.native.ts`（XHR）共用 `transport.shared.ts`
+的常量/类型；native 不能从 `'./transport'` 取共享项，否则 Metro 会解析回自身形成 self require cycle。
 
 ## 6. 引擎路由与加载
 
@@ -286,6 +303,24 @@ C5 摘要+8 轮迁移；C6 原生收件 + 路径引用；C7 Office 三件套；
 C8 render/recalc/旧格式/PDF 暂不做；C9 light 不补 pptx；C10 后台必须 proot；
 C11 模型一致；C12 本文档；C13 PDF 附件只存；C14 PDF 生成延期；
 C15 Python 走 APK 独立层（`python.bin`），不做首次下载（离线可靠、可裁剪）。
+C16 账号模型目录只做 `models.list` 展示与会话级 `setModel`，不引入 providers.list/save；
+C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开”，跨引擎 Handoff 继续另做。
+
+### 6.7 统一会话列表（M2.6 第一步）
+
+- 每个引擎最近 60 条会话存在 `store.sessionCache: { light, full }`，随 `refreshSessions`
+  更新并写 UI cache（重启恢复）；当前引擎列表以 `sessions.list` 为准。
+- `state/sessionList.ts` 的 `mergeSessionRows()` 合并当前列表 + 另一个引擎缓存：
+  当前引擎优先、按 id 去重、`updatedAt` 倒序，行上带 `engine: 'light'|'full'`。
+- 抽屉用 `store.sessionRows()`；另一个引擎的行标「轻/完整」，长按菜单只对当前引擎行开放。
+- 点击 `store.openSessionRow(id, engine)`：engine 不同先 `switchEngine`（完整会起 proot），
+  成功后按原 id `openSession`；失败时回落到 `switchEngine` 的错误提示。
+- 只读横幅同样一键继续：`ChatScreen.resumeOnActiveSide` 按 `ConversationLink.activeSide`
+  切引擎后 `openSession(link.id)`，不用再回首页手动切。
+- 反向继续（完整 → 轻）：完整会话长按「在轻引擎继续（摘要交接）」→ `turnDetailToHistory`
+  + `buildHandoff` 生成摘要/最近 8 轮/工具结果 → 切轻引擎 → 轻宿主 `sessions.import`
+  创建带 seed 的会话（不触发模型）→ `ConversationLink(activeSide='light')`；seed 由合并层 strip。
+- 仍需：跨引擎 Handoff 继续（在另一引擎续聊、原会话只读）、按引擎过滤搜索、缓存失效/归档同步。
 
 ## 7. 登录与配对
 
@@ -302,11 +337,22 @@ C15 Python 走 APK 独立层（`python.bin`），不做首次下载（离线可�
 - App 打开返回的 `authorizeUrl`；用户在浏览器完成授权；引擎收到回调后换 token。
 - App 监听 `account.updated`；token 无 refresh，过期需重登。
 - 授权页由 App 在 `pendingSignIn` 时自动打开；也提供「重新打开授权页」。
+- 轻引擎账号模式每次连接都重读 `files/home/.dsh/.credentials.yaml` 的 token
+  （`withFreshAccountToken`），缓存里的旧 token 只在新 token 读不到时回退；浏览器 OAuth
+  重登后切回轻引擎即用新 token，不用重启 App。
 
 ### 7.3 模型提供商
 
-目录 43 条 + 自定义。UI：设置 → 模型提供商 → 两个 tab。保存后刷新 `models.list`，
+完整引擎：目录 43 条 + 自定义。UI：设置 → 模型提供商 → 两个 tab。保存后刷新 `models.list`，
 会话模型胶囊里可见。Key 落 dsh credentials；`credentials.describe` 只回 configured，不回明文。
+
+轻引擎（2026-11-06，M2.5）：只有一条 OpenAI 兼容渠道，复用同一张 ProvidersCard。
+`providers.list` 回当前渠道；`providers.discover` 由轻宿主实现，账号模式走
+`x-dsh-auth-token`、普通渠道走 `Authorization: Bearer` 拉 `/models`（解析 id/name/contextWindow，
+失败给人话）；`providers.save` 在 App 侧接管：`applyProviderSave` 校验协议/地址/模型，
+优先保留当前模型、账号模式保留 `authMode/authToken`、换 Base URL 必须重填 Key，
+然后 `connectLight` 重连并写 SecureStore（失败不覆盖旧配置）。轻引擎下卡片隐藏目录/新增/删除，
+`discover` 会把同域名的当前模型并入候选（账号目录已不列 `deepseek-chat`）。
 
 ## 8. UI 基线
 
@@ -339,9 +385,17 @@ C15 Python 走 APK 独立层（`python.bin`），不做首次下载（离线可�
 |---|---|
 | 启动层 `LaunchOverlay` | 品牌 + 进度，覆盖首屏，就绪后淡出 |
 | 首页 `HomeScreen` | 品牌、时段问候、最近会话、Composer（权限/锦囊在输入框上方） |
-| 抽屉 `SessionDrawer` | 工作区、搜索、运行中/今天/更早、行内状态、长按菜单、底部账号/设置 |
-| 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区 |
-| 设置 `SettingsScreen` | 账号 → API Key（折叠）→ 提供商 → 本机引擎 → 宿主/实验室 |
+| 抽屉 `SessionDrawer` | 工作区、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
+| 全部功能 `FeaturesScreen` | 卡片网格：对话/设置/引擎/实验室 + 文件/工作区/终端（可用）+ 插件/社区（未接入标灰） |
+| 文件 `FilesScreen` | `fs.list` 列 `/workspace`、面包屑、文件名过滤、目录/文件行、`fs.rename`/`fs.delete`、分享（轻引擎） |
+| 搜索 `SearchScreen` | `sessions.search` 全文搜索（标题/历史/思考），命中片段，点开进会话 |
+| 工作区 `WorkspaceScreen` | 宿主工作区概览（root/会话数/运行中/锦囊数）+ 文件入口（轻引擎单工作区） |
+| 终端 `TerminalScreen` | `shell.run` 只读终端：pwd/ls/cat/grep，写操作被沙箱拒绝，15s/20k |
+| 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区；字号档 `chatFontScale` |
+| 动效 `ScreenFade` | 页面切换淡入（motion.duration.base/standard）；设置行按压 0.98（fast） |
+| 设置 `SettingsScreen` | 6 组首页（搜索 / SettingsTile / 右侧当前值），只做导航 |
+| 设置二级页 | `AccountScreen` / `CredentialsScreen` / `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen` |
+| 引擎 `EngineScreen` | 状态环、启停/重启、失败卡、保活、日志、高级启动命令 |
 | 模型 `ModelSheet` | 模型列表 + 推理等级；权限/工作区不在这里 |
 | 提供商 `ProvidersCard` | 目录/自定义两个 tab、发现模型、增删 |
 
@@ -349,15 +403,18 @@ C15 Python 走 APK 独立层（`python.bin`），不做首次下载（离线可�
 （`Card` / `Chip` / `IconButton` / `Skeleton` / `EmptyState` / `SectionHeader`）与 `SmoothKeyboardAvoid.tsx`；
 Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向滚动）、表格、链接（http/https/mailto/dshpalm）、图片、流式光标（`streaming` 属性，待接线）。
 代码高亮在 `syntax.ts`（js/ts、py、sh、json、html；未知语言回退纯文本）。
-聊天渲染在 `app/src/ui/chat/*`（`TurnView` / `ApprovalCard` / `CapabilityCard`），`ChatScreen.tsx` 只负责顶栏、滚动和 Composer 组装。
+聊天渲染在 `app/src/ui/chat/*`（`TurnView` / `ApprovalCard` / `CapabilityCard` / `ChatCard`），`ChatScreen.tsx` 只负责顶栏、滚动和 Composer 组装。
 生成文件面板在 `GeneratedFilesSheet.tsx`（`lib/generatedFiles.ts` 解析工具结果 + `fileActions.native.ts`
 用 expo File 的 `canPreview/preview` 打开；分享暂未做）。
 
 ### 8.3 聊天页：现状与目标
 
-**现状**：回合按 `role` 分气泡/全宽；思考与工具是行；审批/提问是卡片；
+**现状**：回合按 `role` 分气泡/全宽；思考与工具是行；审批/提问/能力门共用
+`ui/chat/ChatCard.tsx`（20 圆角、16 内边距、tonal hairline；主色只给主按钮）；
 输入区已按 dsh-go 几何：单行 56 / 28 圆角、左右 40 圆键，权限与锦囊在输入框上方，
 模型在顶栏；完成回合有复制/分享，回到底部键在生成中做脉冲描边。
+顶栏已浮动（`position:absolute` + `top:topInset`，0.86/0.97 半透明白 + 滚动后描边/投影），
+正文按 `headerH` 留位；错误横幅是 dangerSoft 圆角卡片；完整过程里相邻 ≥2 个工具合并成一行。
 
 流式链路：
 
@@ -372,8 +429,8 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 - `ChatScreen` 使用 `FlatList` + 稳定 key + footer blankSpace；追底是显式 follow 状态机：
   用户真实拖拽离底后冻结，回到底部/点击按钮才恢复。跳到底部按钮位于列表容器内，键盘弹出时不被盖住。
 
-**目标（未做）**：浮动玻璃顶栏、工具行连续合并、整轮折叠、ChatCard、朗读（需要原生 TTS）；
-20 分钟真机 soak 与 VirtualizedList 慢更新警告继续观察。
+**目标（未做）**：朗读（需要原生 TTS）；90 分钟 soak 与
+VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 完整调研见 [archive/19-ui-research.md](archive/19-ui-research.md)，本次修复记录见 [STREAMING-FIX](STREAMING-FIX.md)。
 
 ### 8.4 输入与键盘
@@ -387,9 +444,17 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 
 ### 8.5 设置与抽屉
 
-- 设置卡片顺序：**DeepSeek 账号 → API Key（备选，折叠）→ 模型提供商 → 本机引擎 → 宿主**；
+- 设置首页（2026-11-06，U4）：6 组 IA（AI / 能力 / 外观 / 通用 / 主机 / 帮助与关于）
+  + 顶部搜索；行在 `ui/settings/SettingsTile.tsx`（32 圆盘图标、52 行高、2px 缝、右侧当前值、
+  chevron）。首页只做导航，点 tile 进二级页：`AccountScreen` / `CredentialsScreen` /
+  `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen`（轻引擎渠道直进 LightEngineScreen）。
+  二级页 header 的 ‹ 和安卓返回键都先回设置首页。
 - 每行右侧显示当前值（已登录/未配置/运行中/受限制），异常值用警告色；
-- 抽屉分组：运行中 / 今天 / 更早；行尾最多一个状态标记；长按出「置顶/取消置顶/归档/改名」；
+- 外观/通用部分只读（主题浅色、字号标准、通知系统管理），点按提示未接后端（深色/字号在 U7）；
+- 「完成后收起过程」是可用开关（`collapseProcess`，UI cache 持久化）：关掉后完成回合默认展开过程。
+- 抽屉分组：置顶 / 运行中 / 今天 / 更早；筛选胶囊「全部 / 运行中 / 待确认 / 未读」；文件夹胶囊
+  「全部文件夹 + 自定义文件夹」（长按「移到文件夹…」，UI cache 的 `sessionFolders`）；行尾最多一个状态标记；
+  长按出「置顶/取消置顶/归档/改名/删除」；搜索框右侧「全文」进 SearchScreen；标题右侧 ⊞ 进「全部功能」；
 - 底部主机条：本机 dsh + 引擎版本 + 模型与凭据 + 断开/设置。
 
 ### 8.6 无障碍与文案
@@ -400,9 +465,12 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 
 ### 8.7 未做
 
-浅色主题、字号档、动效 token、全部功能页、独立引擎页、文件面板、终端、工作区、
+浅色主题、字号档、动效 token、全部功能页、**U8 的全功能文件面板/终端/工作区**、
 小组件/悬浮球、通知直达会话。对应任务见 [AI-TASKS](AI-TASKS.md) 的 UI 工作流；其中**不冲突、可立即并行**的 UI 项单独列在
 「可并行 UI 项」，附文件禁区与组件契约。
+
+> 注：1.5 的「生成文件」弹层（`GeneratedFilesSheet`，只列本会话工具生成的文件、可打开）已落地，
+> 不等于这里的 U8 全功能文件面板（全工作区浏览/上传管理/重命名/搜索/分享）。
 
 ## 9. 构建与验证
 
@@ -428,16 +496,26 @@ cd app/android && sh gradlew :app:assembleDebug
 
 ### 9.3 打包要点
 
-- `rootfs.bin` / `payload.bin` 走 release（`scripts/setup-android.sh` 校验 sha256）；
+- `rootfs.bin` / `payload.bin` / `python.bin` 走 release（`scripts/setup-android.sh` 校验 sha256）；
+  三个都在 `runtime-v1` release，`python.bin` sha256 `2cc882ce91212fc997c67befbef34dc7ad24d218e856e24f206b6788d13c40c5`；
 - `python.bin` 也是制品（gitignore；36.8MB）；改 `scripts/build-python-layer.sh` 后重打，`RuntimeInstaller.PYTHON_LAYER_VERSION` 同步 +1；
 - `jniLibs/arm64-v8a/{libproot.so,libprootloader.so}` 来自 Termux（`scripts/fetch-proot.sh`）；
 - `debug.keystore` 需生成一次（gitignore）；
+- **release 签名**：`scripts/gen-release-keystore.ps1` 生成 `app/android/keystore/release.jks` 与
+  `app/android/keystore.properties`（都 gitignore）；`app/build.gradle` 检测到 properties 就用 release key，
+  否则退回 debug key（只能本地试装）。`assembleRelease` 后可用
+  `$ANDROID_HOME/build-tools/37.0.0/apksigner.bat verify --print-certs app-release.apk` 核对；
+  版本号可用 `DSH_PALM_VERSION_CODE` / `DSH_PALM_VERSION_NAME` 覆盖。
+  **keystore + 密码必须备份**，丢失后不能覆盖升级。
+- 发布 runbook 见 [RELEASE.md](RELEASE.md)：`npm run release:preflight` 只读检查 APK/签名/设备/备份；
+  release 非 debuggable，debug→release 证书不同时不能 `install -r`，这台设备切换会丢 App 数据。
 - 桥/补丁打进 APK assets，运行时同步进 rootfs（`ensurePatch`），改桥不用重打 payload。
 
 ### 9.4 真机
 
 - 无线 adb（mDNS 或 `adb connect phone:port`）；`adb forward` 断了要重建。
 - 自检/验收脚本：`scripts/device-m1-check.ts`、`scripts/device-real-check.ts`、
+  `scripts/device-regression.ts`（`npm run device:regression`，E5 关键路径）、
   `scripts/mock-model-server.ts`。
 - 首装约 15–25s（解压+引擎），之后秒开；通知权限已接（完成/审批/提问）。
 

@@ -119,12 +119,15 @@ class HostService : Service() {
                     applicationContext,
                     { line -> HostRuntime.note(line) },
                     { label, pct -> HostRuntime.progress(label, pct) },
-                ) &&
-                    RuntimeInstaller.ensureExecutable(applicationContext) &&
-                    RuntimeInstaller.ensureLayout(applicationContext) { line -> HostRuntime.note(line) } &&
-                    RuntimeInstaller.ensurePatch(applicationContext) { line -> HostRuntime.note(line) } &&
-                    RuntimeInstaller.ensureShims(applicationContext) { line -> HostRuntime.note(line) } &&
-                    RuntimeInstaller.ensurePython(applicationContext) { line -> HostRuntime.note(line) }
+                )
+                // 不要用 && 串起来：前一步返回 false 会把后面的 shim/补丁一起跳过，
+                // 导致修了 xdg-user-dir 也同步不进去（release 踩过）。
+                RuntimeInstaller.ensureExecutable(applicationContext)
+                RuntimeInstaller.ensureLayout(applicationContext) { line -> HostRuntime.note(line) }
+                RuntimeInstaller.ensurePatch(applicationContext) { line -> HostRuntime.note(line) }
+                RuntimeInstaller.ensureShims(applicationContext) { line -> HostRuntime.note(line) }
+                RuntimeInstaller.ensurePython(applicationContext) { line -> HostRuntime.note(line) }
+                true
             },
             env = mapOf(
                 "PROOT_LOADER" to runtimePaths.loader,

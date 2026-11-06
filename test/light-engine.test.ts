@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -416,10 +416,198 @@ describe('LocalEngineClient', () => {
     await assert.rejects(harness.client.request('sessions.list', {}), /还没连上/);
   });
 
+  it('providers.list 显示单渠道；discover 用当前 Key 拉 /models（M2.5）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    const { providers } = await harness.client.request('providers.list', {});
+    assert.equal(providers.length, 1);
+    assert.equal(providers[0]?.baseURL, MODEL.baseURL);
+    assert.equal(providers[0]?.configured, true);
+    assert.equal(providers[0]?.models[0]?.id, MODEL.model);
+
+    const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), headers: (init?.headers ?? {}) as Record<string, string> });
+      return new Response(
+        JSON.stringify({ data: [{ id: 'fake-model', context_window: 65536 }, { id: 'fake-model-2' }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+    try {
+      const { models } = await harness.client.request('providers.discover', {
+        baseURL: MODEL.baseURL,
+        api: 'openai-completions',
+      });
+      assert.deepEqual(models.map((model) => model.id), ['fake-model', 'fake-model-2']);
+      assert.equal(calls[0]?.url, `${MODEL.baseURL}/models`);
+      // 没填新 Key、Base URL 没变：沿用当前渠道的 Key
+      assert.equal(calls[0]?.headers.Authorization, 'Bearer test-key');
+    } finally {
+      globalThis.fetch = original;
+    }
+
+    await assert.rejects(
+      harness.client.request('providers.discover', { baseURL: MODEL.baseURL, api: 'anthropic-messages' }),
+      (error: unknown) => (error as { code?: string }).code === 'unsupported',
+    );
+  });
+
   it('未实现的方法返回 unsupported 而不是假装成功', async () => {
     const harness = await makeHost([{ text: 'ok' }]);
-    await assert.rejects(harness.client.request('providers.discover', { baseURL: 'https://x', api: 'openai-completions' }), (error: unknown) => {
+    await assert.rejects(harness.client.request('providers.save', { mode: 'custom', id: 'x', baseURL: 'https://x', api: 'openai-completions', models: [] }), (error: unknown) => {
       return (error as { code?: string }).code === 'unsupported';
     });
+  });
+
+  it('fs.list 列出工作区目录和文件大小，越界路径报错（U8）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    await mkdir(join(harness.workspaceRoot, 'docs'), { recursive: true });
+    await writeFile(join(harness.workspaceRoot, 'docs', 'a.txt'), 'hello');
+
+    const root = await harness.client.request('fs.list', { path: '/' });
+    assert.equal(root.path, '/');
+    const docs = root.entries.find((entry) => entry.name === 'docs');
+    assert.equal(docs?.kind, 'dir');
+
+    const inner = await harness.client.request('fs.list', { path: '/docs' });
+    const file = inner.entries.find((entry) => entry.name === 'a.txt');
+    assert.equal(file?.kind, 'file');
+    assert.equal(file?.size, 5);
+
+    await assert.rejects(
+      harness.client.request('fs.list', { path: '/nope' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+  });
+
+  it('fs.rename / fs.delete 改工作区文件，根目录拒绝（U8）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    await mkdir(join(harness.workspaceRoot, 'docs'), { recursive: true });
+    await writeFile(join(harness.workspaceRoot, 'docs', 'a.txt'), 'hello');
+
+    await harness.client.request('fs.rename', { path: '/docs/a.txt', to: '/docs/b.txt' });
+    const renamed = await harness.client.request('fs.list', { path: '/docs' });
+    assert.equal(renamed.entries.some((entry) => entry.name === 'a.txt'), false);
+    assert.equal(renamed.entries.find((entry) => entry.name === 'b.txt')?.size, 5);
+
+    await harness.client.request('fs.delete', { path: '/docs/b.txt' });
+    const after = await harness.client.request('fs.list', { path: '/docs' });
+    assert.equal(after.entries.some((entry) => entry.name === 'b.txt'), false);
+
+    await assert.rejects(
+      harness.client.request('fs.delete', { path: '/' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+    await assert.rejects(
+      harness.client.request('fs.rename', { path: '/docs', to: '/' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+  });
+
+  it('shell.run 只读终端：pwd/echo 可跑，写操作被拒（U8）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    const pwd = await harness.client.request('shell.run', { command: 'pwd' });
+    assert.equal(pwd.exitCode, 0);
+    assert.equal(pwd.stdout.trim(), '/workspace');
+
+    const echo = await harness.client.request('shell.run', { command: 'echo hello' });
+    assert.equal(echo.exitCode, 0);
+    assert.equal(echo.stdout.trim(), 'hello');
+
+    const ls = await harness.client.request('shell.run', { command: 'ls' });
+    assert.equal(ls.exitCode, 0);
+
+    const write = await harness.client.request('shell.run', {
+      command: 'echo x > /workspace/terminal-write.txt',
+    });
+    assert.notEqual(write.exitCode, 0);
+    assert.match(write.stderr, /read-only|EACCES/i);
+
+    const listing = await harness.client.request('fs.list', { path: '/' });
+    assert.equal(listing.entries.some((entry) => entry.name === 'terminal-write.txt'), false);
+
+    await assert.rejects(
+      harness.client.request('shell.run', { command: '   ' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+  });
+
+  it('运行中再发消息排队，当前 run 结束后自动开始下一轮（E2）', async () => {
+    const harness = await makeHost([{ waitForAbort: true }, { text: '排队回复' }]);
+    const sessionId = await createSession(harness);
+    await harness.client.request('sessions.send', { sessionId, text: '第一轮' });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    const queued = await harness.client.request('sessions.send', { sessionId, text: '第二轮' });
+    assert.equal(queued.queued, true);
+
+    const finished: string[] = [];
+    const off = harness.host.onEvent((event) => {
+      if (event.event === 'run.finished') finished.push(event.event);
+    });
+    await harness.client.request('sessions.stop', { sessionId });
+    const deadline = Date.now() + 10_000;
+    while (finished.length < 2 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    off();
+    assert.equal(finished.length, 2, '排队消息没有自动开始下一轮');
+
+    const detail = await harness.client.request('sessions.get', { sessionId });
+    const replied = detail.session.turns.some((turn) =>
+      turn.blocks.some((block) => block.kind === 'text' && block.text.includes('排队回复')),
+    );
+    assert.equal(replied, true, '第二轮没有生成回复');
+  });
+
+  it('sessions.pin 后 summary 带 pinned（U6 置顶分组）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    const sessionId = await createSession(harness);
+    await harness.client.request('sessions.pin', { sessionId, pinned: true });
+    const pinnedList = await harness.client.request('sessions.list', {});
+    assert.equal(pinnedList.sessions.find((session) => session.id === sessionId)?.pinned, true);
+
+    await harness.client.request('sessions.pin', { sessionId, pinned: false });
+    const normalList = await harness.client.request('sessions.list', {});
+    assert.equal(normalList.sessions.find((session) => session.id === sessionId)?.pinned, false);
+  });
+
+  it('sessions.search 搜会话正文并返回片段（E3）', async () => {
+    const harness = await makeHost([{ text: '你好，这是关于 python 的回复。' }]);
+    const sessionId = await createSession(harness);
+    const finished = nextEvent(harness, 'run.finished');
+    await harness.client.request('sessions.send', { sessionId, text: '聊聊 python' });
+    await finished;
+
+    const { results } = await harness.client.request('sessions.search', { query: 'python' });
+    assert.equal(results.length, 1);
+    assert.equal(results[0]?.sessionId, sessionId);
+    assert.match(results[0]?.snippet ?? '', /python/i);
+    assert.ok((results[0]?.matches ?? 0) >= 1);
+
+    await assert.rejects(
+      harness.client.request('sessions.search', { query: '   ' }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+  });
+
+  it('sessions.delete 删除会话，运行中的会话拒绝删除（E3）', async () => {
+    const harness = await makeHost([{ text: 'ok' }]);
+    const a = await createSession(harness);
+    const b = await createSession(harness);
+    await harness.client.request('sessions.delete', { sessionId: a });
+    const list = await harness.client.request('sessions.list', {});
+    assert.equal(list.sessions.some((session) => session.id === a), false);
+    assert.equal(list.sessions.some((session) => session.id === b), true);
+
+    const busy = await makeHost([{ waitForAbort: true }]);
+    const running = await createSession(busy);
+    await busy.client.request('sessions.send', { sessionId: running, text: '慢慢跑' });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await assert.rejects(
+      busy.client.request('sessions.delete', { sessionId: running }),
+      (error: unknown) => (error as { code?: string }).code === 'bad_request',
+    );
+    await busy.client.request('sessions.stop', { sessionId: running });
   });
 });

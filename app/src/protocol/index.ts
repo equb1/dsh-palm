@@ -105,6 +105,18 @@ export interface SessionSummary {
   preview: string;
   /** 运行中时的开始时间，用于顶部计时 */
   runningSince?: number;
+  /** 是否置顶（轻引擎；抽屉里单独一组） */
+  pinned?: boolean;
+}
+
+/** 会话正文搜索命中（E3 / 整页搜索） */
+export interface SessionSearchHit {
+  sessionId: string;
+  title: string;
+  /** 第一处命中附近的短片段，已去掉换行 */
+  snippet: string;
+  updatedAt: number;
+  matches: number;
 }
 
 export type ToolState = 'running' | 'done' | 'error';
@@ -411,6 +423,15 @@ export interface FileRef {
   hash?: string;
 }
 
+/** 工作区文件浏览（U8）：一个目录项 */
+export interface WorkspaceEntry {
+  name: string;
+  kind: 'file' | 'dir';
+  size: number;
+  /** 毫秒时间戳 */
+  mtime: number;
+}
+
 /* ------------------------------------------------------------------ *
  * Handoff v1（轻引擎 → 完整引擎）
  *
@@ -484,6 +505,11 @@ export interface RequestParams {
   'sessions.list': { cursor?: string; limit?: number };
   'sessions.get': { sessionId: string };
   'sessions.create': { presetId: string; workspaceId?: string; title?: string };
+  /**
+   * 轻引擎专用：直接建一个带 seed 用户消息的会话（不触发模型），
+   * 供完整引擎 → 轻引擎的 Handoff 继续使用（M2.6）。
+   */
+  'sessions.import': { presetId?: string; title?: string; text: string; workspaceId?: string };
   'sessions.send': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
   'sessions.steer': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
   /**
@@ -573,10 +599,21 @@ export interface RequestParams {
       };
   'providers.remove': { id: string };
 
+  /** 工作区文件浏览（U8，轻引擎实现；完整引擎未接） */
+  'fs.list': { path?: string };
+  'fs.rename': { path: string; to: string };
+  'fs.delete': { path: string };
+
   /** 会话管理：改名、置顶、归档（真宿主接口） */
   'sessions.rename': { sessionId: string; title: string };
   'sessions.pin': { sessionId: string; pinned: boolean };
   'sessions.archive': { sessionId: string; archived: boolean };
+  /** 删除会话（E3，轻引擎实现；完整引擎暂不支持） */
+  'sessions.delete': { sessionId: string };
+  /** 正文搜索（E3，轻引擎实现；完整引擎暂不支持） */
+  'sessions.search': { query: string; limit?: number };
+  /** 只读终端（U8，轻引擎实现；写操作会被沙箱拒绝） */
+  'shell.run': { command: string };
 }
 
 export interface RequestResults {
@@ -584,7 +621,8 @@ export interface RequestResults {
   'sessions.list': { sessions: SessionSummary[]; nextCursor?: string };
   'sessions.get': { session: SessionDetail };
   'sessions.create': { session: SessionSummary };
-  'sessions.send': { accepted: true; runId: string };
+  'sessions.import': { session: SessionSummary };
+  'sessions.send': { accepted: true; runId: string; queued?: boolean };
   'sessions.steer': { accepted: true };
   'sessions.handoff': HandoffV1;
   'sessions.stop': { accepted: true };
@@ -612,9 +650,22 @@ export interface RequestResults {
   'providers.discover': { models: ProviderModel[] };
   'providers.save': { providers: ProviderRow[] };
   'providers.remove': { providers: ProviderRow[] };
+  'fs.list': { path: string; entries: WorkspaceEntry[] };
+  'fs.rename': { ok: true };
+  'fs.delete': { ok: true };
   'sessions.rename': { session: SessionDetail };
   'sessions.pin': { ok: true };
   'sessions.archive': { ok: true };
+  'sessions.delete': { ok: true };
+  'sessions.search': { results: SessionSearchHit[] };
+  'shell.run': {
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+    ms: number;
+    timedOut: boolean;
+    truncated: boolean;
+  };
 }
 
 export type Method = keyof RequestParams;

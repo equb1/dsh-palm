@@ -11,6 +11,7 @@
  */
 import { EngineProtocolError } from '../../lib/client';
 import { AttachmentPathError, promptWithFiles } from '../../lib/attachments/prompt';
+import { listProviderModels } from './catalog';
 import {
   PROTOCOL_VERSION,
   type Approval,
@@ -23,6 +24,7 @@ import {
   type FileRef,
   type HandoffBlockedCall,
   type Method,
+  type ModelOption,
   type PermissionOption,
   type Preset,
   type RequestParams,
@@ -50,7 +52,9 @@ import type {
 import { streamChat } from './provider';
 import { WORKSPACE_MOUNT } from '../fs/mount';
 import type { SandboxFs } from '../fs/sandbox';
+import { createWorkspaceMount } from '../fs/mount';
 import type { ShellRunner } from '../shell/bash';
+import { ShellRunner as ShellRunnerClass } from '../shell/bash';
 
 export const LIGHT_HOST_ID = 'light-local';
 export const LIGHT_WORKSPACE_ID = 'local';
@@ -140,7 +144,10 @@ export class LightHost {
   private readonly listeners = new Set<Listener>();
   private readonly caps: Capabilities;
   private readonly workspace: Workspace;
+  /** U8 只读终端：与会话 bash 分开，/workspace 挂载为只读，写操作被沙箱拒绝 */
+  private terminalPromise: Promise<ShellRunner> | null = null;
   private readyPromise: Promise<void> | null = null;
+  private catalogCache: { at: number; models: ModelOption[] } | null = null;
   private seq = 0;
   private closed = false;
 
@@ -306,6 +313,38 @@ export class LightHost {
         this.emit('session.created', { session: this.summary(session) });
         return { session: this.summary(session) };
       },
+      'sessions.import': async ({
+        presetId,
+        title,
+        text,
+      }: {
+        presetId?: string;
+        title?: string;
+        text: string;
+        workspaceId?: string;
+      }) => {
+        const body = text.trim();
+        if (!body) throw new EngineProtocolError({ code: 'bad_request', message: '交接 seed 为空' });
+        const preset = PRESETS.find((candidate) => candidate.id === presetId) ?? PRESETS[0]!;
+        const session: StoredSession = {
+          id: newSessionId(),
+          title: title?.trim() || '继续的会话',
+          presetId: preset.id,
+          workspaceId: LIGHT_WORKSPACE_ID,
+          createdAt: this.now(),
+          updatedAt: this.now(),
+          pinned: false,
+          archived: false,
+          permission: preset.id === 'reader' ? 'read-only' : 'workspace-write',
+          model: this.modelChoice(),
+          turns: [],
+          history: [],
+        };
+        this.sessions.set(session.id, session);
+        this.appendUserMessage(session, body);
+        await this.repo.save(session);
+        return { session: this.summary(session) };
+      },
       'sessions.send': async ({
         sessionId,
         text,
@@ -325,15 +364,19 @@ export class LightHost {
             hint: '附件已由 App 收件到 /workspace/uploads，请用 files 传路径引用',
           });
         }
-        if (this.runs.has(sessionId)) {
-          throw new EngineProtocolError({
-            code: 'busy',
-            message: '这个会话正在运行',
-            hint: '想中途补充要求，直接发消息（会走插话）',
-          });
-        }
         const body = this.textWithFiles(text, files);
         if (!body) throw new EngineProtocolError({ code: 'bad_request', message: '消息为空' });
+        if (this.runs.has(sessionId)) {
+          // E2：同一会话同时只跑一个 run，后来的消息排队，当前 run 结束自动开始
+          this.appendUserMessage(session, body);
+          session.queued = [...(session.queued ?? []), body];
+          await this.save(session);
+          return {
+            accepted: true as const,
+            runId: this.runs.get(sessionId)?.runId ?? '',
+            queued: true,
+          };
+        }
         this.appendUserMessage(session, body);
         await this.save(session);
         const runId = this.startRun(session);
@@ -498,18 +541,97 @@ export class LightHost {
         await this.save(session);
         return { ok: true as const };
       },
-      'models.list': async () => ({
-        models: [
-          {
-            provider: this.providerId(),
-            providerName: this.options.model.providerName ?? '轻引擎',
-            id: this.options.model.model,
-            name: this.options.model.model,
-            description: '轻引擎当前使用的模型',
-          },
-        ],
-        default: this.modelChoice(),
-      }),
+      'sessions.delete': async ({ sessionId }: { sessionId: string }) => {
+        const session = this.requireSession(sessionId);
+        if (this.runs.has(session.id)) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: '这个会话正在运行，先停止再删除',
+          });
+        }
+        this.sessions.delete(session.id);
+        this.statuses.delete(session.id);
+        await this.repo.remove(session.id);
+        return { ok: true as const };
+      },
+      'shell.run': async ({ command }: { command: string }) => {
+        if (!command.trim()) {
+          throw new EngineProtocolError({ code: 'bad_request', message: '命令不能为空' });
+        }
+        if (command.length > 2_000) {
+          throw new EngineProtocolError({ code: 'bad_request', message: '命令太长（最多 2000 字）' });
+        }
+        const result = await (await this.terminalRunner()).run(command);
+        return {
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+          ms: result.ms,
+          timedOut: result.timedOut,
+          truncated: result.truncated,
+        };
+      },
+      'sessions.search': async ({ query, limit }: { query: string; limit?: number }) => {
+        const q = query.trim().toLowerCase();
+        if (!q) throw new EngineProtocolError({ code: 'bad_request', message: '搜索词不能为空' });
+        if (q.length > 100) throw new EngineProtocolError({ code: 'bad_request', message: '搜索词太长' });
+        const max = Math.min(Math.max(Math.trunc(limit ?? 20), 1), 50);
+        const results: Array<{
+          sessionId: string;
+          title: string;
+          snippet: string;
+          updatedAt: number;
+          matches: number;
+        }> = [];
+        for (const session of this.sessions.values()) {
+          const parts: string[] = [session.title];
+          for (const message of session.history) {
+            if (typeof message.content === 'string' && message.content) parts.push(message.content);
+          }
+          for (const turn of session.turns) {
+            for (const block of turn.blocks) {
+              if (block.kind === 'text' || block.kind === 'thinking') parts.push(block.text);
+            }
+          }
+          const text = parts.join('\n');
+          const lower = text.toLowerCase();
+          const first = lower.indexOf(q);
+          if (first < 0) continue;
+          let matches = 0;
+          let at = first;
+          while (at >= 0) {
+            matches += 1;
+            at = lower.indexOf(q, at + q.length);
+          }
+          const snippet = text
+            .slice(Math.max(0, first - 50), Math.max(0, first - 50) + 140)
+            .replace(/\s+/g, ' ')
+            .trim();
+          results.push({
+            sessionId: session.id,
+            title: session.title,
+            snippet,
+            updatedAt: session.updatedAt,
+            matches,
+          });
+        }
+        results.sort((a, b) => b.updatedAt - a.updatedAt);
+        return { results: results.slice(0, max) };
+      },
+      'models.list': async () => {
+        const currentModel: ModelOption = {
+          provider: this.providerId(),
+          providerName: this.options.model.providerName ?? '轻引擎',
+          id: this.options.model.model,
+          name: this.options.model.model,
+          description: '轻引擎当前使用的模型',
+        };
+        const catalog = await this.modelCatalog();
+        const models = catalog.length > 0 ? catalog.slice() : [currentModel];
+        // 旧配置的 deepseek-chat 不在账号目录里，仍然让用户能选回当前值
+        if (!models.some((item) => item.id === currentModel.id)) models.unshift(currentModel);
+        return { models, default: this.modelChoice() };
+      },
       'permissions.list': async () => ({ options: PERMISSIONS, default: 'workspace-write' }),
       'presets.list': async () => ({ presets: PRESETS }),
       'workspaces.list': async () => ({ workspaces: [this.workspace] }),
@@ -519,6 +641,80 @@ export class LightHost {
           message: '轻引擎只有一个固定工作区',
           hint: '工作区目录是 App 私有目录里的 <filesDir>/workspace；多工作区在 M2 做',
         });
+      },
+      'fs.list': async ({ path }: { path?: string }) => {
+        const raw = (path ?? '/').trim() || '/';
+        const target = raw.startsWith('/')
+          ? raw.replace(/\/+$/, '') || '/'
+          : `/${raw.replace(/\/+$/, '')}`;
+        try {
+          const stat = await this.options.workspace.stat(target);
+          if (!stat.isDirectory) {
+            throw new EngineProtocolError({ code: 'bad_request', message: '这不是目录' });
+          }
+          const items = await this.options.workspace.readdirWithFileTypes(target);
+          const entries: Array<{ name: string; kind: 'file' | 'dir'; size: number; mtime: number }> = [];
+          for (const item of items.slice(0, 500)) {
+            const child = target === '/' ? `/${item.name}` : `${target}/${item.name}`;
+            let size = 0;
+            let mtime = 0;
+            try {
+              const info = await this.options.workspace.stat(child);
+              size = info.size;
+              mtime = info.mtime.getTime();
+            } catch {
+              // 单个子项 stat 失败（刚删除/没权限）不该让整页失败
+            }
+            entries.push({
+              name: item.name,
+              kind: item.isDirectory ? 'dir' : 'file',
+              size,
+              mtime,
+            });
+          }
+          entries.sort((a, b) =>
+            a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1,
+          );
+          return { path: target, entries };
+        } catch (error) {
+          if (error instanceof EngineProtocolError) throw error;
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: `读不了这个目录：${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      },
+      'fs.rename': async ({ path, to }: { path: string; to: string }) => {
+        const from = path.trim();
+        const dest = to.trim();
+        if (!from || !dest || from === '/' || dest === '/') {
+          throw new EngineProtocolError({ code: 'bad_request', message: '不能重命名工作区根目录' });
+        }
+        try {
+          await this.options.workspace.mv(from, dest);
+          return { ok: true as const };
+        } catch (error) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: `重命名失败：${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      },
+      'fs.delete': async ({ path }: { path: string }) => {
+        const target = path.trim();
+        if (!target || target === '/') {
+          throw new EngineProtocolError({ code: 'bad_request', message: '不能删除工作区根目录' });
+        }
+        try {
+          const stat = await this.options.workspace.stat(target);
+          await this.options.workspace.rm(target, { recursive: stat.isDirectory, force: true });
+          return { ok: true as const };
+        } catch (error) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: `删除失败：${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
       },
       'approvals.list': async ({ sessionId }: { sessionId?: string }) => ({
         approvals: [...this.approvals.values()]
@@ -604,24 +800,63 @@ export class LightHost {
             api: 'openai-completions' as const,
             baseURL: this.options.model.baseURL,
             models: [{ id: this.options.model.model, name: this.options.model.model }],
-            configured: this.options.model.apiKey.length > 0,
+            configured:
+              this.options.model.apiKey.length > 0 || Boolean(this.options.model.authToken),
             source: 'custom' as const,
           },
         ],
       }),
       'providers.catalog': async () => ({ providers: [] }),
-      'providers.discover': async () => {
-        throw new EngineProtocolError({
-          code: 'unsupported',
-          message: '轻引擎不会去拉模型列表',
-          hint: '模型名在「M1 实验室」里手填；完整引擎支持从服务商发现',
+      'providers.discover': async ({
+        baseURL,
+        api,
+        apiKey,
+      }: {
+        baseURL: string;
+        api: string;
+        apiKey?: string;
+      }) => {
+        if (api !== 'openai-completions') {
+          throw new EngineProtocolError({
+            code: 'unsupported',
+            message: '轻引擎只支持 OpenAI 兼容协议',
+            hint: 'Anthropic / OpenAI Responses 渠道请切完整引擎配置',
+          });
+        }
+        const base = baseURL.trim().replace(/\/+$/, '');
+        if (!/^https?:\/\//i.test(base)) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: 'Base URL 要以 http:// 或 https:// 开头',
+          });
+        }
+        const current = this.options.model;
+        const sameBase = base === current.baseURL.trim().replace(/\/+$/, '');
+        const key = apiKey?.trim();
+        const catalog = await listProviderModels({
+          baseURL: base,
+          ...(key
+            ? { apiKey: key }
+            : sameBase && current.apiKey
+              ? { apiKey: current.apiKey }
+              : sameBase && current.authToken
+                ? { authToken: current.authToken }
+                : {}),
         });
+        if (catalog.length === 0) {
+          throw new EngineProtocolError({
+            code: 'bad_request',
+            message: '服务商没有返回模型',
+            hint: '检查 Base URL / API Key 是否有效，或换一个 OpenAI 兼容地址',
+          });
+        }
+        return { models: catalog };
       },
       'providers.save': async () => {
         throw new EngineProtocolError({
           code: 'unsupported',
-          message: '轻引擎的模型配置不经过宿主',
-          hint: '在「设置 → M1 实验室」改 Base URL / 模型 / Key',
+          message: '轻引擎的模型渠道在设置页的「模型提供商」卡片里保存',
+          hint: '宿主侧的 providers.save 不是轻引擎的入口',
         });
       },
       'providers.remove': async () => {
@@ -684,6 +919,13 @@ export class LightHost {
       ...(outcome.usage ? { usage: outcome.usage } : {}),
       ...(outcome.error ? { error: outcome.error } : {}),
     });
+
+    // E2：上一轮结束后自动开始排队的消息
+    if (session.queued && session.queued.length > 0) {
+      session.queued.shift();
+      if (session.queued.length === 0) delete session.queued;
+      this.startRun(session);
+    }
   }
 
   private requestApproval(
@@ -797,6 +1039,26 @@ export class LightHost {
 
   /* --------------------------- 状态映射 --------------------------- */
 
+  /** U8：只读终端用一个独立挂载，避免绕过会话里 bash 的审批 */
+  private terminalRunner(): Promise<ShellRunner> {
+    if (!this.terminalPromise) {
+      this.terminalPromise = createWorkspaceMount({
+        backend: this.options.workspace.backend,
+        readOnly: true,
+      }).then(
+        (mount) =>
+          new ShellRunnerClass({
+            fs: mount.fs,
+            cwd: '/workspace',
+            timeoutMs: 15_000,
+            maxOutputChars: 20_000,
+            beforeRun: () => mount.workspace.refreshIndex(),
+          }),
+      );
+    }
+    return this.terminalPromise;
+  }
+
   private requireSession(id: string): StoredSession {
     const session = this.sessions.get(id);
     if (!session) throw new EngineProtocolError({ code: 'not_found', message: `没有这个会话：${id}` });
@@ -805,6 +1067,30 @@ export class LightHost {
 
   private providerId(): string {
     return (this.options.model.providerName ?? 'light').toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'light';
+  }
+
+  /**
+   * 账号模式拉一次 `/models` 并缓存 5 分钟；普通 API Key 渠道返回空数组，
+   * 调用方回退到当前模型。网络/解析失败也返回空，不阻塞会话。
+   */
+  private async modelCatalog(): Promise<ModelOption[]> {
+    const config = this.options.model;
+    if (!config.authToken) return [];
+    const now = this.now();
+    if (this.catalogCache && now - this.catalogCache.at < 5 * 60_000) return this.catalogCache.models;
+    const catalog = await listProviderModels({
+      baseURL: config.baseURL,
+      authToken: config.authToken,
+    });
+    const models: ModelOption[] = catalog.map((item) => ({
+      provider: this.providerId(),
+      providerName: config.providerName ?? 'DeepSeek 账号',
+      id: item.id,
+      name: item.name ?? item.id,
+      description: 'DeepSeek 账号模型目录',
+    }));
+    this.catalogCache = { at: now, models };
+    return models;
   }
 
   private modelChoice(): { provider: string; model: string } {
@@ -875,6 +1161,7 @@ export class LightHost {
       updatedAt: session.updatedAt,
       unread: 0,
       preview: this.previewOf(session),
+      pinned: session.pinned,
       ...(status === 'running' ? { runningSince: session.updatedAt } : {}),
     };
   }

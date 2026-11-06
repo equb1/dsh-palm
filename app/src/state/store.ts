@@ -42,6 +42,7 @@ import {
 import { routeNeedsFullPermission, routeTurn, type RouteTurnResult } from './router';
 import { LocalEngineClient } from '../engine/light/localClient';
 import type { LightHost } from '../engine/light/host';
+import { applyProviderSave, withFreshAccountToken } from '../engine/light/config';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
 import { isAppActive, openUrl } from '../lib/platform';
 import {
@@ -51,8 +52,11 @@ import {
   pickAttachments,
 } from '../lib/attachments/intake';
 import { classify, hashPrefix } from '../lib/attachments/classify';
+import { mergeSessionRows, type SessionEngine, type SessionRow } from './sessionList';
 import type { AttachmentEngine, AttachmentKind, IntakeSource } from '../lib/attachments/types';
 import {
+  buildHandoff,
+  buildReverseSeedText,
   buildSeedText,
   detailHasSeedMarker,
   findSeedTurnId,
@@ -63,6 +67,7 @@ import {
   mapPresetForTarget,
   mergeDetail,
   physicalIdFor,
+  turnDetailToHistory,
   upsertConversationLink,
   type ConversationLink,
 } from '../lib/handoff';
@@ -86,9 +91,11 @@ import type {
   RequestResults,
   ApprovalDecision,
   SessionDetail,
+  SessionSearchHit,
   SessionSummary,
   Turn,
   Workspace,
+  WorkspaceEntry,
 } from '../protocol';
 import {
   findRunTurnIndex,
@@ -198,6 +205,8 @@ export interface AppState {
   pairCode: string;
   caps: Capabilities | null;
   sessions: SessionSummary[];
+  /** 两个引擎各自的最近会话缓存：统一下拉列表用（M2.6） */
+  sessionCache: Record<SessionEngine, SessionSummary[]>;
   currentId: string | null;
   detail: SessionDetail | null;
   approvals: Record<string, Approval>;
@@ -205,8 +214,8 @@ export interface AppState {
   busy: boolean;
   /** 首页输入框当前选中的锦囊 */
   draftPresetId: string | null;
-  /** 当前页面：主界面 / 设置 */
-  view: 'main' | 'settings';
+  /** 当前页面：主界面 / 设置 / 全部功能 / 文件 / 搜索 / 工作区 / 终端 */
+  view: 'main' | 'settings' | 'features' | 'files' | 'search' | 'workspace' | 'terminal';
   /** 模型凭据状态（ref -> 是否已配置） */
   credentials: Record<string, { configured: boolean; writable: boolean }>;
   /** 宿主可用的模型 */
@@ -259,8 +268,14 @@ export interface AppState {
   links: ConversationLink[];
   /** 会话级引擎 pin：用户点「留在轻引擎」后，这一条会话不再自动切 */
   sessionPins: Record<string, 'light' | 'full'>;
+  /** U6 文件夹：逻辑会话 id → 文件夹名（UI cache，仅本机） */
+  sessionFolders: Record<string, string>;
   /** 全局自动路由（默认 true），持久化在 ui-cache */
   autoRoute: boolean;
+  /** 完成的回合默认收起思考/工具过程（外观设置，持久化在 UI cache） */
+  collapseProcess: boolean;
+  /** U7 对话字号倍率：1 / 1.15 / 1.3（持久化在 UI cache） */
+  chatFontScale: number;
 }
 
 /**
@@ -388,6 +403,7 @@ export class Store {
     pairCode: '',
     caps: hostAvailable ? LOCAL_DEFAULT_CAPS : null,
     sessions: [],
+    sessionCache: { light: [], full: [] },
     currentId: null,
     detail: null,
     approvals: {},
@@ -420,7 +436,10 @@ export class Store {
     lightSetupOpen: false,
     links: [],
     sessionPins: {},
+    sessionFolders: {},
     autoRoute: true,
+    collapseProcess: true,
+    chatFontScale: 1,
   };
 
   private readonly engineDeps: EngineDeps;
@@ -719,6 +738,21 @@ export class Store {
     this.persistUiCache();
   }
 
+  /** 外观：完成的回合是否默认收起过程（默认 true） */
+  setCollapseProcess(enabled: boolean): void {
+    this.patch({ collapseProcess: enabled });
+    this.persistUiCache();
+  }
+
+  /** U7 对话字号：标准 → 大 → 特大 → 标准 */
+  cycleChatFontScale(): void {
+    const steps = [1, 1.15, 1.3];
+    const index = steps.findIndex((step) => Math.abs(step - this.state.chatFontScale) < 0.01);
+    const next = steps[(index + 1) % steps.length] ?? 1;
+    this.patch({ chatFontScale: next });
+    this.persistUiCache();
+  }
+
   /**
    * 会话级 pin：'light' 表示以后不再自动切完整；null 清除。
    * TODO(1.4): 还没做 pin 的 UI 入口（按裁剪顺序最后补；规则与持久化已就绪）。
@@ -729,6 +763,16 @@ export class Store {
     if (side) pins[logicalId] = side;
     else delete pins[logicalId];
     this.patch({ sessionPins: pins });
+    this.persistUiCache();
+  }
+
+  /** U6 文件夹：设置/清除会话的文件夹，仅存本机 UI cache */
+  setSessionFolder(logicalId: string, folder: string): void {
+    const name = folder.trim().slice(0, 24);
+    const folders = { ...this.state.sessionFolders };
+    if (name) folders[logicalId] = name;
+    else delete folders[logicalId];
+    this.patch({ sessionFolders: folders });
     this.persistUiCache();
   }
 
@@ -760,12 +804,19 @@ export class Store {
     try {
       const payload = JSON.stringify({
         sessions: this.state.sessions.slice(0, 60),
+        sessionCache: {
+          light: this.state.sessionCache.light.slice(0, 60),
+          full: this.state.sessionCache.full.slice(0, 60),
+        },
         draftPresetId: this.state.draftPresetId,
         defaultModel: this.state.defaultModel,
         prewarmTier: this.state.prewarmTier,
         links: this.state.links.slice(0, 40),
         sessionPins: this.state.sessionPins,
+        sessionFolders: this.state.sessionFolders,
         autoRoute: this.state.autoRoute,
+        collapseProcess: this.state.collapseProcess,
+        chatFontScale: this.state.chatFontScale,
       });
       void writeHostUiCache(payload);
     } catch {
@@ -782,15 +833,27 @@ export class Store {
       if (rawCache) {
         const parsed = JSON.parse(rawCache) as {
           sessions?: SessionSummary[];
+          sessionCache?: Partial<Record<SessionEngine, SessionSummary[]>>;
           draftPresetId?: string | null;
           defaultModel?: ModelChoice;
           prewarmTier?: PrewarmTier;
           links?: ConversationLink[];
           sessionPins?: Record<string, 'light' | 'full'>;
+          sessionFolders?: Record<string, string>;
           autoRoute?: boolean;
+          collapseProcess?: boolean;
+          chatFontScale?: number;
         };
         if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
           nextPatch.sessions = parsed.sessions;
+        }
+        if (parsed.sessionCache && typeof parsed.sessionCache === 'object') {
+          const light = parsed.sessionCache.light;
+          const full = parsed.sessionCache.full;
+          nextPatch.sessionCache = {
+            light: Array.isArray(light) && this.state.sessionCache.light.length === 0 ? light : this.state.sessionCache.light,
+            full: Array.isArray(full) && this.state.sessionCache.full.length === 0 ? full : this.state.sessionCache.full,
+          };
         }
         if (Array.isArray(parsed.links) && this.state.links.length === 0) {
           nextPatch.links = parsed.links.filter(
@@ -801,8 +864,17 @@ export class Store {
         if (parsed.sessionPins && typeof parsed.sessionPins === 'object') {
           nextPatch.sessionPins = parsed.sessionPins;
         }
+        if (parsed.sessionFolders && typeof parsed.sessionFolders === 'object') {
+          nextPatch.sessionFolders = parsed.sessionFolders;
+        }
         if (typeof parsed.autoRoute === 'boolean') {
           nextPatch.autoRoute = parsed.autoRoute;
+        }
+        if (typeof parsed.collapseProcess === 'boolean') {
+          nextPatch.collapseProcess = parsed.collapseProcess;
+        }
+        if (typeof parsed.chatFontScale === 'number' && parsed.chatFontScale >= 1) {
+          nextPatch.chatFontScale = Math.min(parsed.chatFontScale, 1.3);
         }
         if (parsed.draftPresetId && !this.state.draftPresetId) {
           nextPatch.draftPresetId = parsed.draftPresetId;
@@ -1146,10 +1218,117 @@ export class Store {
           }
         }
       }
-      this.patch({ sessions: visible, ...(detail ? { detail } : {}) });
+      this.patch({
+        sessions: visible,
+        ...(this.sessionEngine()
+          ? { sessionCache: { ...this.state.sessionCache, [this.sessionEngine()!]: visible } }
+          : {}),
+        ...(detail ? { detail } : {}),
+      });
       this.persistUiCache();
     } catch (err) {
       this.fail(err);
+    }
+  }
+
+  private sessionEngine(): SessionEngine | null {
+    if (this.state.engineKind === 'light') return 'light';
+    if (this.state.engineKind === 'remote') return 'full';
+    return null;
+  }
+
+  /** M2.6：当前引擎列表 + 另一个引擎的缓存，合并后给抽屉用 */
+  sessionRows(): SessionRow[] {
+    const current = this.sessionEngine() ?? 'light';
+    const other: SessionEngine = current === 'light' ? 'full' : 'light';
+    return mergeSessionRows(
+      this.state.sessions,
+      current,
+      this.state.sessionCache[other],
+      other,
+    );
+  }
+
+  /** M2.6：点另一个引擎的会话先切引擎（完整会起 proot），再按原 id 打开 */
+  async openSessionRow(id: string, engine: SessionEngine): Promise<void> {
+    if (!this.client) return;
+    const current = this.sessionEngine();
+    if (current !== engine) {
+      const ok = await this.switchEngine(engine);
+      if (!ok) return;
+    }
+    await this.openSession(id);
+  }
+
+  /** M2.6：完整会话 → 轻引擎继续（摘要 + 最近 8 轮 + 工具结果，原完整会话之后只读） */
+  async continueFullInLight(fullSessionId: string): Promise<boolean> {
+    if (this.state.engine.mode !== 'full') {
+      this.setError('请先切到完整引擎，再发起「在轻引擎继续」');
+      return false;
+    }
+    this.noteUserActivity();
+    let fullDetail: SessionDetail;
+    try {
+      const result = await this.requestFull('sessions.get', { sessionId: fullSessionId });
+      fullDetail = result.session;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
+    const userText = lastUserTextFromDetail(fullDetail);
+    const assistantText = lastAssistantTextFromDetail(fullDetail);
+    const handoff = buildHandoff({
+      conversationId: fullSessionId,
+      reason: 'continue_in_light',
+      from: { engine: 'full', sessionId: fullSessionId },
+      presetId: fullDetail.presetId,
+      history: turnDetailToHistory(fullDetail.turns),
+      turns: fullDetail.turns,
+      ...(userText ? { userText } : {}),
+      ...(assistantText ? { assistantText } : {}),
+      limit: 8,
+    });
+    const seed = buildReverseSeedText(handoff);
+
+    const switched = await this.switchToLightForHandoff();
+    if (!switched) {
+      this.setError('轻引擎没连上，反向交接已取消');
+      return false;
+    }
+    try {
+      const { session: imported } = await this.requestLight('sessions.import', {
+        presetId: fullDetail.presetId,
+        title: fullDetail.title,
+        text: seed,
+      });
+      const { session: lightDetail } = await this.requestLight('sessions.get', {
+        sessionId: imported.id,
+      });
+      const seedTurnId = findSeedTurnId(lightDetail, handoff.seedMarker);
+      const link: ConversationLink = {
+        id: imported.id,
+        lightSessionId: imported.id,
+        fullSessionId,
+        title: fullDetail.title,
+        presetId: fullDetail.presetId,
+        activeSide: 'light',
+        status: 'active',
+        handoffId: handoff.handoffId,
+        seedMarker: handoff.seedMarker,
+        ...(seedTurnId ? { seedTurnId } : {}),
+        updatedAt: this.now(),
+      };
+      this.patch({
+        links: upsertConversationLink(this.state.links, link),
+        currentId: link.id,
+        detail: mergeDetail(link, lightDetail, fullDetail),
+        error: null,
+      });
+      await this.refreshSessions();
+      return true;
+    } catch (error) {
+      this.fail(error);
+      return false;
     }
   }
 
@@ -1295,6 +1474,107 @@ export class Store {
     await this.refreshCredentials();
   }
 
+  /** U6：全部功能页（卡片网格） */
+  openFeatures(): void {
+    this.patch({ view: 'features', error: null });
+  }
+
+  closeFeatures(): void {
+    this.patch({ view: 'main' });
+  }
+
+  /** U8 第一步：工作区文件浏览（轻引擎实现，完整引擎暂不支持） */
+  openFiles(): void {
+    this.patch({ view: 'files', error: null });
+  }
+
+  closeFiles(): void {
+    this.patch({ view: 'main' });
+  }
+
+  /** E3 / 整页搜索：全文搜索会话 */
+  openSearch(): void {
+    this.patch({ view: 'search', error: null });
+  }
+
+  closeSearch(): void {
+    this.patch({ view: 'main' });
+  }
+
+  /** U8：工作区页（轻引擎只有单工作区，先做只读概览 + 文件入口） */
+  openWorkspace(): void {
+    this.patch({ view: 'workspace', error: null });
+  }
+
+  closeWorkspace(): void {
+    this.patch({ view: 'main' });
+  }
+
+  /** U8 只读终端 */
+  openTerminal(): void {
+    this.patch({ view: 'terminal', error: null });
+  }
+
+  closeTerminal(): void {
+    this.patch({ view: 'main' });
+  }
+
+  async runShell(command: string): Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+    ms: number;
+    timedOut: boolean;
+    truncated: boolean;
+  }> {
+    if (!this.client) throw new Error('还没连上宿主');
+    return this.client.request('shell.run', { command });
+  }
+
+  async searchSessions(query: string): Promise<SessionSearchHit[]> {
+    if (!this.client) throw new Error('还没连上宿主');
+    const { results } = await this.client.request('sessions.search', { query });
+    return results;
+  }
+
+  async listWorkspace(path = '/'): Promise<{ path: string; entries: WorkspaceEntry[] }> {
+    if (!this.client) throw new Error('还没连上宿主');
+    return this.client.request('fs.list', { path });
+  }
+
+  async renameWorkspace(path: string, to: string): Promise<void> {
+    if (!this.client) throw new Error('还没连上宿主');
+    await this.client.request('fs.rename', { path, to });
+  }
+
+  async deleteWorkspace(path: string): Promise<void> {
+    if (!this.client) throw new Error('还没连上宿主');
+    await this.client.request('fs.delete', { path });
+  }
+
+  /**
+   * 轻引擎账号 401 的恢复路径（M2.7 最小版）：
+   * 切完整引擎 → 打开设置账号卡，让用户重新登录；登录后点「切回轻引擎」会用新 token 重建轻引擎。
+   */
+  async recoverLightAuth(): Promise<void> {
+    this.clearError();
+    if (this.state.engine.mode !== 'full') {
+      const ok = await this.switchEngine('full');
+      if (!ok) {
+        this.setError('完整引擎没起来；也可以在设置里给轻引擎配置独立 API Key。');
+        return;
+      }
+    }
+    await this.openSettings();
+    this.setError('已切到完整模式：在「DeepSeek 账号」卡点「重新登录」，成功后再切回轻引擎。');
+  }
+
+  /** 账号已登录但 token 过期时，先退出再重新走 OAuth（M2.7） */
+  async reloginAccount(): Promise<void> {
+    await this.signOutAccount();
+    await this.startAccountSignIn();
+  }
+
   closeSettings(): void {
     this.patch({ view: 'main' });
   }
@@ -1372,10 +1652,40 @@ export class Store {
   }
 
   async saveProvider(input: RequestParams['providers.save']): Promise<void> {
+    // 轻引擎只有一条模型渠道，配置在 App 侧（SecureStore）；不能交给宿主，否则重启即丢
+    if (this.state.engineKind === 'light') {
+      await this.saveLightProvider(input);
+      return;
+    }
     if (!this.client) return;
     const { providers } = await this.client.request('providers.save', input);
     this.patch({ providers });
     // 新渠道的模型要能马上出现在会话的模型选择里
+    void this.refreshModels();
+  }
+
+  /** M2.5：把 ProvidersCard 的保存落到轻引擎单渠道并重连；失败不覆盖旧配置 */
+  private async saveLightProvider(input: RequestParams['providers.save']): Promise<void> {
+    if (input.mode !== 'custom') {
+      throw new Error('轻引擎只有一条自定义模型渠道；第三方目录请切完整引擎配置');
+    }
+    const setup = this.lightSetup;
+    if (!setup) throw new Error('轻引擎还没配置模型渠道');
+    const next = applyProviderSave(setup, {
+      mode: 'custom',
+      baseURL: input.baseURL,
+      api: input.api,
+      models: input.models,
+      ...(input.displayName ? { displayName: input.displayName } : {}),
+      ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+    });
+    await this.connectLight(next);
+    if (this.state.engineKind !== 'light' || this.state.conn !== 'connected') {
+      // connectLight 只有连上才写 SecureStore，这里恢复内存里的旧 setup 以免下次重连读错
+      this.lightSetup = setup;
+      throw new Error('新渠道没连上，旧配置未覆盖；检查 Base URL / API Key / 模型名');
+    }
+    await this.refreshProviders();
     void this.refreshModels();
   }
 
@@ -2044,6 +2354,33 @@ export class Store {
     }
   }
 
+  /** E3：删除会话（轻引擎实现；完整引擎会报不支持） */
+  async deleteSession(id: string): Promise<void> {
+    if (!this.client) return;
+    const logicalId = this.linkForSession(id)?.id ?? id;
+    const physicalId = this.physicalIdFor(logicalId);
+    try {
+      await this.client.request('sessions.delete', { sessionId: physicalId });
+      if (this.state.currentId === logicalId) this.closeSession();
+      const links = this.state.links.filter(
+        (link) =>
+          link.id !== logicalId &&
+          link.lightSessionId !== physicalId &&
+          link.fullSessionId !== physicalId,
+      );
+      if (links.length !== this.state.links.length) this.patch({ links });
+      if (this.state.sessionFolders[logicalId]) {
+        const folders = { ...this.state.sessionFolders };
+        delete folders[logicalId];
+        this.patch({ sessionFolders: folders });
+      }
+      this.baseDetails.delete(logicalId);
+      await this.refreshSessions();
+    } catch (err) {
+      this.fail(err);
+    }
+  }
+
   async setPreset(presetId: string): Promise<void> {
     const { currentId, caps } = this.state;
     if (!this.client || !currentId) return;
@@ -2544,9 +2881,15 @@ export class Store {
    */
   private async resolveLightSetup(): Promise<LightEngineSetup | null> {
     let setup = this.lightSetup ?? (await this.engineDeps.loadLightConfig());
+    // 旧版本保存的账号配置可能没有 authMode/authToken：只要没有 API Key，就补账号 token，
+    // 否则会连上一个“无鉴权”的轻引擎，发消息必 401（2026-11-05 真机就是 auth=none）。
+    if (setup && !setup.apiKey && !setup.authToken) {
+      const token = await loadAccountToken();
+      if (token) setup = { ...setup, authMode: 'account', authToken: token };
+    }
     if (setup?.authMode === 'account') {
-      const token = setup.authToken ?? (await loadAccountToken());
-      setup = token ? { ...setup, authToken: token } : null;
+      // 每次重连都重读账号 token：浏览器 OAuth 重登后旧 token 已失效（M2.7）
+      setup = withFreshAccountToken(setup, await loadAccountToken());
     }
     if (!setup) {
       const token = await loadAccountToken();
