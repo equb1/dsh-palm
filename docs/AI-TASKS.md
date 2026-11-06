@@ -243,7 +243,7 @@
     设置、主题页、聊天、审批卡、文件页与系统跟随（见 [DARK-THEME](DARK-THEME.md)）。
     真机用并行测试包（`cool.cnb.dshpalm.test`，不动 release 数据）深色 `device:regression`
     10/10 通过（2026-11-06，含引擎启停/文件/全文搜索）；测试包仍在设备上，release 未动。
-- [ ] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
+- [x] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
   - 2026-11-06 第一步：轻宿主加 `fs.list`（列 `/workspace` 目录，返回 name/kind/size/mtime，
     子项 500 条上限、单子项 stat 失败不拖垮整页）；新增 `ui/FilesScreen.tsx` 文件浏览器
     （面包屑、目录/文件行、刷新、空目录/错误提示），文件用系统查看器打开（复用
@@ -269,16 +269,20 @@
     真机：`pwd` → `/workspace`、`ls` → deepseek-harness/docs/uploads；`touch /workspace/t.txt`
     → `EACCES: read-only file system`（`164-terminal.png`、`165-terminal-readonly.png`）；
     单测覆盖 pwd/echo/ls/写拒绝/空命令。
-  - 未做：多工作区创建/置顶/分组（M2）；完整引擎 fs/终端。
-  - 2026-11-06 验收：文件浏览/搜索/重命名/删除/分享、工作区概览、只读终端 ✅；
-    完整引擎 fs/终端未实现（显式 unsupported），整体保持未完成。
+  - 2026-11-06 第六步：完整引擎文件系统——桥新增 `engine/src/real/workspaceFs.ts`，在 proot 内
+    直接读写 `/root/work`，实现 `fs.list/rename/delete`；拒绝 `..`/根目录改名删除，软链不跟随。
+    FilesScreen 复用同一套 UI，错误文案不再说「完整引擎暂不支持」。
+    单测 `test/bridge-workspace.test.ts` 4 条（列表/改名/删除/穿越/软链）；`npm run verify` 244 pass。
+    真机已验证：完整引擎文件页列出 docs/uploads，删除 `docs/u8-test.txt` 后 UI 与宿主目录同步消失；
+    rename 由单测覆盖。
+  - 未做：多工作区创建/置顶/分组（M2）；完整引擎终端/正文搜索（仍显式 unsupported）。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）
 
 #### 可并行 UI 项（2026-11-03，给 agent）
 
-> 历史规划。U1/U4/U5/U6/U7/U9 已完成，U8 部分完成；当前状态以上方任务清单和
+> 历史规划。U1/U4/U5/U6/U7/U8/U9 已完成；当前状态以上方任务清单和
 > `ACCEPTANCE-2026-11-06` 为准，下表的「现在不要做」不再适用。
 
 **背景**：1.2/1.3/1.4 会改 `App.tsx`、`store.ts`、`SettingsScreen.tsx`、

@@ -682,3 +682,13 @@
 - 处理：`scripts/device-ui.ts` 的 `dumpNodes` 已加 3 次重试（250ms）；`device:regression`
   支持 `DSH_PALM_PKG` 覆盖包名、显式用 `cool.cnb.dshpalm.MainActivity` 启动测试包。
 - 验证：深色测试包跑到 9/10，剩余失败为 IME 候选和上述 flake；设备恢复后复跑。
+
+
+### I16. 完整引擎文件接口直接读 /root/work（2026-11-06）
+
+- 现象：dsh 远程 API 没有 `fs.list/rename/delete`，完整引擎文件页一直显式 unsupported。
+- 原因：桥本身跑在 proot 里，工作区 bind 在 `/root/work`，不需要再绕 dsh HTTP。
+- 处理：新增 `engine/src/real/workspaceFs.ts`，桥直接读写 `/root/work`；路径必须是工作区绝对路径，
+  拒绝 `..`、根目录改名/删除，列表跳过软链，500 条上限。UI 复用 FilesScreen。
+- 验证：`test/bridge-workspace.test.ts` 覆盖列表/改名/删除/穿越/软链；桥补丁需
+  `node scripts/build-bridge.mjs` 后重打 APK；真机已验 fs.list/delete，rename 由单测覆盖。

@@ -28,7 +28,8 @@ import type {
 import { PROTOCOL_VERSION } from '../../../app/src/protocol';
 import { DshRealClient, type RealSessionListItem } from './dshClient';
 import { projectRecords, type RealRecord } from './project';
-import { promptWithProotFiles } from './promptParts';
+import { promptWithProotFiles, PROOT_WORKSPACE_ROOT } from './promptParts';
+import { deleteWorkspace, listWorkspace, renameWorkspace } from './workspaceFs';
 import { canonicalRunId, canonicalTurnId, liveBlockId, mergeLiveTurn } from '../../../app/src/protocol/turns';
 import { DeviceStore } from './devices';
 
@@ -42,6 +43,8 @@ export interface RealBridgeOptions {
   pairCode?: string;
   /** 设备密钥文件路径；不给就不发设备密钥，只认配对码 */
   devicesFile?: string;
+  /** 工作区真实路径；默认 proot 的 /root/work，测试可传临时目录 */
+  workspaceRoot?: string;
 }
 
 const HOST_ID = 'host-real-dsh';
@@ -139,6 +142,7 @@ export interface RealBridge {
 }
 
 export async function startRealBridge(options: RealBridgeOptions): Promise<RealBridge> {
+  const workspaceRoot = options.workspaceRoot ?? PROOT_WORKSPACE_ROOT;
   const client = new DshRealClient(options.baseUrl, options.token);
   await client.login();
 
@@ -1516,9 +1520,15 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { providers: await providerRows() };
     },
 
-    'fs.list': async () => unsupported('fs.list'),
-    'fs.rename': async () => unsupported('fs.rename'),
-    'fs.delete': async () => unsupported('fs.delete'),
+    'fs.list': async ({ path }: { path?: string }) => listWorkspace(workspaceRoot, path),
+    'fs.rename': async ({ path, to }: { path: string; to: string }) => {
+      await renameWorkspace(workspaceRoot, path, to);
+      return { ok: true as const };
+    },
+    'fs.delete': async ({ path }: { path: string }) => {
+      await deleteWorkspace(workspaceRoot, path);
+      return { ok: true as const };
+    },
 
     'account.signOut': async () => {
       const account = asAccountState(await accountRpc('account/signOut', { client: accountClient() }));
