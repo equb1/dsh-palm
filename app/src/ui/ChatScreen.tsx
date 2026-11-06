@@ -277,7 +277,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           setHeaderH((current) => (current === next ? current : next));
         }}
       >
-        <IconButton glyph="‹" label="返回会话列表" onPress={() => store.closeSession()} />
+        <IconButton icon="back" label="返回会话列表" onPress={() => store.closeSession()} />
         <Pill style={styles.titlePill}>
           <Text style={styles.titleText} numberOfLines={1}>
             {session.title}
@@ -300,7 +300,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
               : undefined
           }
         />
-        <IconButton glyph="▤" label="生成文件" onPress={() => setFilesOpen(true)} />
+        <IconButton icon="folderOpen" label="生成文件" onPress={() => setFilesOpen(true)} />
         <View style={{ flex: 1 }} />
       </View>
 
@@ -341,19 +341,18 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           />
 
-          {showJump ? (
-            <View style={styles.jumpWrap}>
-              <JumpButton
-                running={running}
-                onPress={() => {
-                  following.current = true;
-                  userDragging.current = false;
-                  setShowJump(false);
-                  scrollToLatest(true, true);
-                }}
-              />
-            </View>
-          ) : null}
+          <View style={styles.jumpWrap} pointerEvents="box-none">
+            <JumpButton
+              visible={showJump}
+              running={running}
+              onPress={() => {
+                following.current = true;
+                userDragging.current = false;
+                setShowJump(false);
+                scrollToLatest(true, true);
+              }}
+            />
+          </View>
         </View>
 
         {Boolean(state.error) ? (

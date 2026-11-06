@@ -213,7 +213,7 @@ function InlineText({
   const tokens = parseInlineTokens(text);
 
   return (
-    <Text style={baseStyle}>
+    <Text style={baseStyle} selectable>
       {tokens.map((token, idx) => {
         switch (token.type) {
           case 'bold':
@@ -585,7 +585,7 @@ function CodeBlockView({ lang, code }: { lang: string; code: string }): React.Re
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.codeScroll}
       >
-        <Text style={styles.codeBlockText}>
+        <Text style={styles.codeBlockText} selectable>
           {tokens.map((token, i) =>
             token.kind === 'plain' ? (
               token.text

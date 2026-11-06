@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { radius, typography, useTheme, useThemedStyles, type Theme } from './theme';
+import { BrandIcon } from './components/BrandIcon';
 
 export type EngineKind = 'light' | 'remote';
 
@@ -27,7 +28,7 @@ export function EngineBadge({ kind, label, onPress }: EngineBadgeProps): React.R
 
   const body = (
     <View style={[styles.badge, { backgroundColor: bg }]}>
-      <View style={[styles.dot, { backgroundColor: fg }]} />
+      <BrandIcon name={kind === 'light' ? 'zap' : 'box'} size={12} color={fg} strokeWidth={1.9} />
       <Text style={[styles.text, { color: fg }]}>{text}</Text>
     </View>
   );

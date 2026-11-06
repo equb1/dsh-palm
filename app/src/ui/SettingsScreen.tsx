@@ -374,7 +374,7 @@ export function SettingsScreen(): React.ReactElement {
   const homeScreen = (
     <View style={styles.root}>
       <View style={styles.header}>
-        <IconButton glyph="‹" label="返回" onPress={() => store.closeSettings()} />
+        <IconButton icon="back" label="返回" onPress={() => store.closeSettings()} />
         <Text style={styles.title}>设置</Text>
         <View style={{ width: 36 }} />
       </View>

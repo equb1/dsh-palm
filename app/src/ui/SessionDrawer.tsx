@@ -417,7 +417,7 @@ export function SessionDrawer({
           <Text style={styles.panelTitle}>会话</Text>
           <View style={styles.panelHeaderActions}>
             <IconButton
-              glyph="⊞"
+              icon="grid"
               label="全部功能"
               size={32}
               onPress={() => {
@@ -425,7 +425,7 @@ export function SessionDrawer({
                 store.openFeatures();
               }}
             />
-            <IconButton glyph="✕" label="关闭" onPress={onClose} size={32} />
+            <IconButton icon="close" label="关闭" onPress={onClose} size={32} />
           </View>
         </View>
 

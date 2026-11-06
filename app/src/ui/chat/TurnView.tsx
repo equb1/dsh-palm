@@ -1,5 +1,15 @@
 import React from 'react';
-import { Clipboard, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Clipboard,
+  Easing,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { Approval, Block, Turn } from '../../protocol';
 import {
@@ -9,9 +19,113 @@ import {
 } from '../../protocol/qa';
 import { MarkdownView } from '../MarkdownView';
 import { font, radius, useTheme, useThemedStyles, type Theme } from '../theme';
+import { BrandIcon, type BrandIconName } from '../components/BrandIcon';
 import { ApprovalCard } from './ApprovalCard';
 import { CapabilityCard } from './CapabilityCard';
 import { ReadonlyQaCard } from './ReadonlyQaCard';
+
+function toolIconName(name: string): BrandIconName {
+  const key = name.toLowerCase();
+  if (/(bash|shell|exec|command|terminal|python|node)/.test(key)) return 'terminal';
+  if (/(read|write|edit|patch|file|doc|office)/.test(key)) return 'fileText';
+  if (/(search|grep|glob|find|web|fetch)/.test(key)) return 'search';
+  if (/(image|vision|photo)/.test(key)) return 'image';
+  return 'wrench';
+}
+
+function ThinkingGlyph({ live }: { live: boolean }): React.ReactElement {
+  const { palette } = useTheme();
+  const spin = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (!live) {
+      spin.stopAnimation();
+      spin.setValue(0);
+      return;
+    }
+    const animation = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 2400,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [live, spin]);
+
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          { rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) },
+        ],
+      }}
+    >
+      <BrandIcon
+        name="sparkles"
+        size={15}
+        color={live ? palette.blue : palette.textFaint}
+        strokeWidth={1.6}
+      />
+    </Animated.View>
+  );
+}
+
+function ThinkingDots(): React.ReactElement {
+  const { palette } = useTheme();
+  const dot1 = React.useRef(new Animated.Value(0)).current;
+  const dot2 = React.useRef(new Animated.Value(0)).current;
+  const dot3 = React.useRef(new Animated.Value(0)).current;
+  const values = [dot1, dot2, dot3];
+
+  React.useEffect(() => {
+    const animations = values.map((value, index) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(index * 140),
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 280,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 280,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.delay((2 - index) * 140),
+        ]),
+      ),
+    );
+    animations.forEach((animation) => animation.start());
+    return () => animations.forEach((animation) => animation.stop());
+  }, [dot1, dot2, dot3]);
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 2 }}>
+      {values.map((value, index) => (
+        <Animated.View
+          key={index}
+          style={{
+            width: 4,
+            height: 4,
+            borderRadius: 2,
+            backgroundColor: palette.blue,
+            transform: [
+              {
+                translateY: value.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }),
+              },
+            ],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
 
 const ThinkingRow = React.memo(function ThinkingRow({
   text,
@@ -22,6 +136,7 @@ const ThinkingRow = React.memo(function ThinkingRow({
   onToggle?: () => void;
   live?: boolean;
 }): React.ReactElement {
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = React.useState(false);
   const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
@@ -58,10 +173,11 @@ const ThinkingRow = React.memo(function ThinkingRow({
       accessibilityLabel={open ? '收起思考' : '展开思考'}
       style={styles.row}
     >
-      <Text style={styles.rowGlyph}>✳</Text>
+      <ThinkingGlyph live={live === true} />
       <Text style={[styles.thinkingLabel, live && styles.thinkingActive]}>
         {live ? '思考中' : '思考'}
       </Text>
+      {live ? <ThinkingDots /> : null}
       {!open ? (
         <Text style={[styles.rowText, live && styles.rowTextLive]} numberOfLines={live ? 3 : 1}>
           {live ? livePreview : preview}
@@ -69,8 +185,14 @@ const ThinkingRow = React.memo(function ThinkingRow({
       ) : (
         <View style={{ flex: 1 }} />
       )}
-      {live && !open ? <Text style={styles.liveDot}>●</Text> : null}
-      <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+      <View
+        style={{
+          transform: [{ rotate: open ? '90deg' : '-90deg' }],
+          marginLeft: 2,
+        }}
+      >
+        <BrandIcon name="back" size={14} color={palette.textFaint} strokeWidth={1.8} />
+      </View>
     </Pressable>
   );
 
@@ -126,12 +248,16 @@ const ToolRow = React.memo(function ToolRow({
         accessibilityLabel={detail ? `${block.name} 详情` : undefined}
         style={styles.row}
       >
-        <Text style={[styles.rowGlyph, { color }]}>▤</Text>
+        <BrandIcon name={toolIconName(block.name)} size={15} color={color} strokeWidth={1.7} />
         <Text style={styles.toolName}>{block.name}</Text>
         <Text style={styles.rowText} numberOfLines={1}>
           {block.summary}
         </Text>
-        {detail ? <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text> : null}
+        {detail ? (
+          <View style={{ transform: [{ rotate: open ? '90deg' : '-90deg' }] }}>
+            <BrandIcon name="back" size={14} color={palette.textFaint} />
+          </View>
+        ) : null}
         <Text style={[styles.rowState, { color }]}>
           {block.state === 'running' ? '·' : block.state === 'error' ? '×' : '✓'}
         </Text>
@@ -171,13 +297,15 @@ const ToolGroupRow = React.memo(function ToolGroupRow({
         accessibilityLabel={open ? '收起工具组' : '展开工具组'}
         style={styles.row}
       >
-        <Text style={styles.rowGlyph}>▤</Text>
+        <BrandIcon name="layers" size={15} color={palette.textFaint} />
         <Text style={styles.toolGroupTitle}>{tools.length} 个工具</Text>
         <Text style={styles.rowText} numberOfLines={1}>
           {names.join(' · ')}
         </Text>
         {errors > 0 ? <Text style={[styles.rowState, { color: palette.danger }]}>×{errors}</Text> : null}
-        <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+        <View style={{ transform: [{ rotate: open ? '90deg' : '-90deg' }] }}>
+          <BrandIcon name="back" size={14} color={palette.textFaint} />
+        </View>
       </Pressable>
       {open ? tools.map((tool) => <ToolRow key={tool.id} block={tool} />) : null}
     </View>
@@ -261,16 +389,31 @@ function AssistantActions({ text }: { text: string }): React.ReactElement | null
 
   return (
     <View style={styles.actions}>
-      <Pressable accessibilityRole="button" accessibilityLabel="复制回答" onPress={copy} hitSlop={8}>
-        <Text style={[styles.actionGlyph, copied && { color: palette.ok }]}>{copied ? '✓' : '⧉'}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="复制回答"
+        onPress={copy}
+        hitSlop={6}
+        style={({ pressed }) => [styles.actionPill, pressed && { opacity: 0.7 }]}
+      >
+        <BrandIcon
+          name={copied ? 'check' : 'copy'}
+          size={13}
+          color={copied ? palette.ok : palette.textDim}
+        />
+        <Text style={[styles.actionLabel, copied && { color: palette.ok }]}>
+          {copied ? '已复制' : '复制'}
+        </Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="分享回答"
         onPress={() => void Share.share({ message: text })}
-        hitSlop={8}
+        hitSlop={6}
+        style={({ pressed }) => [styles.actionPill, pressed && { opacity: 0.7 }]}
       >
-        <Text style={styles.actionGlyph}>↗</Text>
+        <BrandIcon name="share" size={13} color={palette.textDim} />
+        <Text style={styles.actionLabel}>分享</Text>
       </Pressable>
     </View>
   );
@@ -325,6 +468,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
   /** U7 对话字号倍率 */
   fontScale?: number;
 }): React.ReactElement {
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = React.useState(expandProcess === true);
   const completed = turn.status !== 'streaming';
@@ -378,13 +522,20 @@ const AssistantTurn = React.memo(function AssistantTurn({
           style={styles.summary}
         >
           <View style={styles.summaryHead}>
-            <Text style={styles.summaryCheck}>✓</Text>
+            <BrandIcon
+              name={turn.status === 'error' ? 'close' : 'check'}
+              size={14}
+              color={turn.status === 'error' ? palette.danger : palette.ok}
+              strokeWidth={2}
+            />
             <Text style={styles.summaryTitle}>
               {turn.status === 'stopped' ? '已停止' : turn.status === 'error' ? '出错' : '已完成'}
             </Text>
             {duration ? <Text style={styles.summaryDuration}>，用时 {duration}</Text> : null}
             <View style={{ flex: 1 }} />
-            <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+            <View style={{ transform: [{ rotate: open ? '90deg' : '-90deg' }] }}>
+              <BrandIcon name="back" size={14} color={palette.textFaint} />
+            </View>
           </View>
           {summary ? <Text style={styles.summarySub}>{summary}</Text> : null}
         </Pressable>
@@ -456,6 +607,7 @@ function TurnViewImpl({
       <View style={styles.userRow}>
         <View style={styles.userBubble}>
           <Text
+            selectable
             style={[
               styles.userText,
               fontScale !== 1 && { fontSize: 14 * fontScale, lineHeight: 22 * fontScale },
@@ -506,8 +658,19 @@ const createStyles = ({ palette: c }: Theme) =>
   summaryTitle: { color: c.text, fontSize: 13, fontWeight: '600' },
   summaryDuration: { color: c.textDim, fontSize: 12 },
   summarySub: { color: c.textFaint, fontSize: 11.5, lineHeight: 16 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingVertical: 2 },
-  actionGlyph: { color: c.textFaint, fontSize: 15 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  actionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: c.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+  },
+  actionLabel: { color: c.textDim, fontSize: 11.5, fontWeight: '500' },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
   rowGlyph: { color: c.textFaint, fontSize: 11 },

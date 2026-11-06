@@ -267,6 +267,10 @@
   - 2026-11-07 动效重做：`ScreenStack` 页面栈替换 ScreenFade（右滑入/左移视差/返回滑出），
     设置二级页同栈，`BottomSheet` 遮罩淡入+面板滑出，抽屉弹簧+左滑跟手+首页 42px 视差，
     点会话先推空壳详情再并行拉数据。真机抽屉展开 5/5 0 掉帧；详见 [ANIMATION](ANIMATION.md)。
+  - 2026-11-07 品牌视觉：`BrandIcon`/`BrandMark` 替换设置/全部功能/思考/工具/操作栏的汉字与
+    Unicode 符号；首页顶栏改为 BrandMark+模型胶囊+单一运行模式胶囊（点开模式弹层）；
+    首页打字机问候/循环提示；回到底部自绘箭头+弹簧；思考图标旋转+三点跳动；用户/AI 正文
+    `selectable` 长按复制。详见 [BRAND-UI](BRAND-UI.md)。
 - [x] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
   - 2026-11-06 第一步：轻宿主加 `fs.list`（列 `/workspace` 目录，返回 name/kind/size/mtime，
     子项 500 条上限、单子项 stat 失败不拖垮整页）；新增 `ui/FilesScreen.tsx` 文件浏览器
@@ -614,7 +618,7 @@ type AttachmentChipsProps = {
     装 release 再还原」走不通。首装/升级仍等用户确认后执行（路径 A 干净首装 / 路径 B 同签名升级）。
   - 2026-11-06 夜间：versionCode bump 到 `2` / versionName `0.2.0`，重新 `assembleRelease`
     （包含完整引擎平权、深色主题、M2.1–M2.4、LAN 发现、系统入口）；APK 244.2MiB、
-    sha256 `D078796D…`，设备已同签名 `install -r` 升级成功（数据保留）。
+    sha256 `235CB1DA…`，设备已同签名 `install -r` 升级成功（数据保留）。
 
 
 ## 4. 待决事项

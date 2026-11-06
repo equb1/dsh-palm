@@ -10,6 +10,22 @@ import {
 
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
+import { BrandIcon, type BrandIconName } from './components/BrandIcon';
+
+const FEATURE_ICONS: Record<string, BrandIconName> = {
+  new: 'plus',
+  sessions: 'menu',
+  settings: 'settings',
+  engine: 'cpu',
+  light: 'zap',
+  lab: 'flask',
+  files: 'folderOpen',
+  terminal: 'terminal',
+  workspace: 'grid',
+  plugins: 'puzzle',
+  community: 'users',
+  about: 'info',
+};
 import { radius, space, topInset, useTheme, useThemedStyles, type Palette, type Theme } from './theme';
 
 /**
@@ -173,7 +189,7 @@ export function FeaturesScreen(): React.ReactElement {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <IconButton glyph="‹" label="返回" onPress={() => store.closeFeatures()} />
+        <IconButton icon="back" label="返回" onPress={() => store.closeFeatures()} />
         <Text style={styles.title}>全部功能</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -200,7 +216,7 @@ export function FeaturesScreen(): React.ReactElement {
                     ]}
                   >
                     <View style={[styles.icon, { backgroundColor: tone.bg }]}>
-                      <Text style={[styles.iconGlyph, { color: tone.fg }]}>{item.icon}</Text>
+                      <BrandIcon name={FEATURE_ICONS[item.id] ?? 'circleDot'} size={18} color={tone.fg} />
                     </View>
                     <View style={styles.cardTexts}>
                       <Text style={styles.cardTitle}>{item.title}</Text>

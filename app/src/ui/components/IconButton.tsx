@@ -1,10 +1,13 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { useThemedStyles, type Theme } from '../theme';
+import { BrandIcon, type BrandIconName } from './BrandIcon';
+import { useTheme, useThemedStyles, type Theme } from '../theme';
 
 export interface IconButtonProps {
-  glyph: string;
+  /** 兼容旧调用；新调用优先传 icon */
+  glyph?: string;
+  icon?: BrandIconName;
   onPress: () => void;
   label: string;
   size?: number;
@@ -12,16 +15,19 @@ export interface IconButtonProps {
   disabled?: boolean;
 }
 
-/** 圆形图标按钮：头部返回/菜单/新建都用它；glyph 是文字符号，不引图标库 */
+/** 圆形图标按钮：统一走 BrandIcon，不再用系统符号字体 */
 export function IconButton({
   glyph,
+  icon,
   onPress,
   label,
   size = 36,
   tone = 'default',
   disabled = false,
 }: IconButtonProps): React.ReactElement {
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const color = tone === 'accent' ? palette.blue : palette.textDim;
   return (
     <Pressable
       accessibilityRole="button"
@@ -37,7 +43,11 @@ export function IconButton({
         disabled && styles.disabled,
       ]}
     >
-      <Text style={[styles.glyph, tone === 'accent' && styles.glyphAccent]}>{glyph}</Text>
+      {icon ? (
+        <BrandIcon name={icon} size={Math.round(size * 0.5)} color={color} />
+      ) : (
+        <Text style={[styles.glyph, tone === 'accent' && styles.glyphAccent]}>{glyph}</Text>
+      )}
     </Pressable>
   );
 }

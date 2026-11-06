@@ -412,7 +412,7 @@ web `colorScheme` 一起切换。深色对比度按正文 ≥ 4.5:1 选值。
 | 屏 | 内容 |
 |---|---|
 | 启动层 `LaunchOverlay` | 品牌 + 进度，覆盖首屏，就绪后淡出；跟随主题 |
-| 首页 `HomeScreen` | 品牌、时段问候、最近会话、Composer（权限/锦囊在输入框上方） |
+| 首页 `HomeScreen` | BrandMark + 模型胶囊 + 单一运行模式胶囊；打字机问候/循环提示；最近会话、Composer（权限/锦囊在输入框上方）；模式弹层走 BottomSheet |
 | 抽屉 `SessionDrawer` | 工作区、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
 | 全部功能 `FeaturesScreen` | 卡片网格：对话/设置/引擎/实验室 + 文件/工作区/终端（可用）+ 插件/社区（未接入标灰） |
 | 文件 `FilesScreen` | `fs.list` 列 `/workspace`、面包屑、文件名过滤、目录/文件行、`fs.rename`/`fs.delete`、分享（轻引擎） |
@@ -532,6 +532,18 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 - 底部弹层：`BottomSheet` 遮罩淡入 + 面板弹簧滑出；ModelSheet /
   GeneratedFilesSheet 已接入。
 - 详细方案与实测见 [ANIMATION](ANIMATION.md)。
+
+### 8.10 品牌图标与交互细节（2026-11-07）
+
+- `components/BrandIcon.tsx`：`BrandIcon` 统一线性图标，`BrandMark` 原生 SVG 锦囊囊袋；
+  `IconButton` 支持 `icon`，旧 `glyph` 保留兼容。
+- 设置页/全部功能页按 id 映射图标；不再用汉字/Unicode 字符充当图标。
+- 首页顶栏：菜单 + BrandMark/锦囊 + 模型胶囊 + 运行模式胶囊；模式选择进 BottomSheet，
+  不再在顶栏堆连接状态和两个切换入口。
+- `TypewriterText` / `RotatingHint` 驱动首页问候；页面非顶层时暂停定时器。
+- `JumpButton` 自绘下箭头、弹簧显隐、流式中上下浮动；思考行图标旋转 + 三点跳动。
+- 用户气泡、Markdown 正文/代码块 `selectable`；AI 回复操作栏改成带文字的复制/分享胶囊。
+- 详细方案见 [BRAND-UI](BRAND-UI.md)。
 
 ## 9. 构建与验证
 

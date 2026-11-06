@@ -30,17 +30,17 @@ export function WorkspaceScreen(): React.ReactElement {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <IconButton glyph="‹" label="返回" onPress={() => store.closeWorkspace()} />
+        <IconButton icon="back" label="返回" onPress={() => store.closeWorkspace()} />
         <Text style={styles.title}>工作区</Text>
         {state.engineKind !== 'light' ? (
           <IconButton
-            glyph="+"
+            icon="plus"
             label="新建工作区"
             onPress={() => setCreating((value) => !value)}
             size={32}
           />
         ) : null}
-        <IconButton glyph="▤" label="打开文件" onPress={() => store.openFiles()} size={32} />
+        <IconButton icon="folderOpen" label="打开文件" onPress={() => store.openFiles()} size={32} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
