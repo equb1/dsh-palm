@@ -16,6 +16,7 @@ import {
   PROTOCOL_VERSION,
   type Approval,
   type ApprovalDecision,
+  type ApprovalResolution,
   type Capabilities,
   type CapabilityContract,
   type EngineEvent,
@@ -32,9 +33,11 @@ import {
   type SessionDetail,
   type SessionStatus,
   type SessionSummary,
+  type Turn,
   type Workspace,
 } from '../../protocol';
 import { Agent, userTurnFromText, type RunOutcome, type RunSink } from './agent';
+import { withApprovalResolution } from '../../protocol/qa';
 import { SessionRepo, newRunId, newSessionId } from './sessionRepo';
 import { buildHandoff } from '../../lib/handoff';
 import { toolsForPermission } from './tools';
@@ -728,7 +731,12 @@ export class LightHost {
         }
         this.approvals.delete(approvalId);
         if (pending.timer) clearTimeout(pending.timer);
-        this.emit('approval.resolved', { approvalId, decision, by: 'user' });
+        this.resolveApprovalSnapshot(pending.approval.sessionId, approvalId, {
+          decision,
+          by: 'user',
+          at: this.now(),
+        });
+        this.emit('approval.resolved', { approvalId, decision, by: 'user', at: this.now() });
         pending.resolve(decision);
         this.resumeStatus(pending.approval.sessionId);
         return { accepted: true as const };
@@ -749,10 +757,26 @@ export class LightHost {
         this.questions.delete(callId);
         if (pending.timer) clearTimeout(pending.timer);
         const answer = answers[0] ?? { id: pending.approval.questionId ?? '', selected: [] };
-        this.emit('approval.resolved', { approvalId: callId, decision: 'approve', by: 'user' });
+        const selected = Array.isArray(answer.selected) ? answer.selected : [];
+        const resolution = {
+          decision: 'approve' as const,
+          selected,
+          ...(answer.custom ? { custom: answer.custom } : {}),
+          by: 'user',
+          at: this.now(),
+        };
+        this.resolveApprovalSnapshot(sessionId, callId, resolution);
+        this.emit('approval.resolved', {
+          approvalId: callId,
+          decision: 'approve',
+          by: 'user',
+          selected,
+          ...(answer.custom ? { custom: answer.custom } : {}),
+          at: resolution.at,
+        });
         pending.resolve({
           id: answer.id,
-          selected: Array.isArray(answer.selected) ? answer.selected : [],
+          selected,
           ...(answer.custom ? { custom: answer.custom } : {}),
         });
         this.resumeStatus(sessionId);
@@ -889,7 +913,7 @@ export class LightHost {
     const sink: RunSink = {
       emit: (event, data) => this.emit(event, data),
       requestApproval: (input) => this.requestApproval(session, run, input),
-      askUser: (question) => this.askQuestion(session, run, question),
+      askUser: (question, callId) => this.askQuestion(session, run, question, callId),
       setStatus: (status) => {
         this.statuses.set(session.id, status);
         this.emit('session.updated', { session: this.summary(session) });
@@ -928,6 +952,61 @@ export class LightHost {
     }
   }
 
+  /**
+   * 把审批/提问快照落进当前 assistant 回合。
+   * 历史回合不依赖 pending approvals，重进会话也能画出只读卡。
+   */
+  private attachApprovalSnapshot(session: StoredSession, approval: Approval): void {
+    for (let i = session.turns.length - 1; i >= 0; i -= 1) {
+      const turn = session.turns[i]!;
+      if (turn.role !== 'assistant') continue;
+      const existing = turn.blocks.find(
+        (block): block is Extract<Turn['blocks'][number], { kind: 'approval' }> =>
+          block.kind === 'approval' && block.approvalId === approval.id,
+      );
+      if (existing) {
+        existing.snapshot = approval;
+        return;
+      }
+      turn.blocks.push({
+        kind: 'approval',
+        id: `ap-${approval.id}`,
+        approvalId: approval.id,
+        snapshot: approval,
+      });
+      return;
+    }
+  }
+
+  private resolveApprovalSnapshot(
+    sessionId: string,
+    approvalId: string,
+    resolution: ApprovalResolution,
+  ): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    let changed = false;
+    for (const turn of session.turns) {
+      for (let i = 0; i < turn.blocks.length; i += 1) {
+        const block = turn.blocks[i]!;
+        if (block.kind !== 'approval' || block.approvalId !== approvalId) continue;
+        if (!block.snapshot) continue;
+        turn.blocks[i] = {
+          ...block,
+          snapshot: withApprovalResolution(block.snapshot, resolution),
+        };
+        changed = true;
+      }
+    }
+    if (changed) {
+      void this.save(session).catch((error: unknown) => {
+        this.options.onWarn?.(
+          `保存审批结果失败：${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    }
+  }
+
   private requestApproval(
     session: StoredSession,
     _run: LightRun,
@@ -946,12 +1025,23 @@ export class LightHost {
       summary: input.summary,
       actions: ['approve', 'reject'],
     };
+    this.attachApprovalSnapshot(session, approval);
 
     return new Promise<ApprovalDecision>((resolve) => {
       const timeout = this.options.approvalTimeoutMs ?? APPROVAL_TIMEOUT;
       const timer = setTimeout(() => {
         this.approvals.delete(id);
-        this.emit('approval.resolved', { approvalId: id, decision: 'reject', by: 'timeout' });
+        this.resolveApprovalSnapshot(session.id, id, {
+          decision: 'reject',
+          by: 'timeout',
+          at: this.now(),
+        });
+        this.emit('approval.resolved', {
+          approvalId: id,
+          decision: 'reject',
+          by: 'timeout',
+          at: this.now(),
+        });
         resolve('reject');
       }, timeout);
       this.approvals.set(id, {
@@ -972,8 +1062,12 @@ export class LightHost {
     session: StoredSession,
     run: LightRun,
     question: AskQuestion,
+    toolCallId?: string,
   ): Promise<AskAnswer> {
-    const callId = `q_${this.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    // 优先用模型的工具调用 id：和 tool block 的 callId 对齐，界面才能去重。
+    const callId =
+      toolCallId?.trim() ||
+      `q_${this.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
     const questionId = question.id ?? callId;
     const approval: Approval = {
       id: callId,
@@ -990,12 +1084,23 @@ export class LightHost {
       ...(question.multiSelect ? { multiSelect: true } : {}),
       questionId,
     };
+    this.attachApprovalSnapshot(session, approval);
 
     return new Promise<AskAnswer>((resolve) => {
       const timeout = this.options.questionTimeoutMs ?? QUESTION_TIMEOUT;
       const timer = setTimeout(() => {
         this.questions.delete(callId);
-        this.emit('approval.resolved', { approvalId: callId, decision: 'reject', by: 'timeout' });
+        this.resolveApprovalSnapshot(session.id, callId, {
+          decision: 'reject',
+          by: 'timeout',
+          at: this.now(),
+        });
+        this.emit('approval.resolved', {
+          approvalId: callId,
+          decision: 'reject',
+          by: 'timeout',
+          at: this.now(),
+        });
         resolve({ id: questionId, selected: [], custom: '（用户没有回答，已超时）' });
       }, timeout);
       this.questions.set(callId, {
@@ -1017,14 +1122,34 @@ export class LightHost {
       if (pending.approval.sessionId !== sessionId) continue;
       this.approvals.delete(id);
       if (pending.timer) clearTimeout(pending.timer);
-      this.emit('approval.resolved', { approvalId: id, decision: 'reject', by: reason });
+      this.resolveApprovalSnapshot(sessionId, id, {
+        decision: 'reject',
+        by: reason,
+        at: this.now(),
+      });
+      this.emit('approval.resolved', {
+        approvalId: id,
+        decision: 'reject',
+        by: reason,
+        at: this.now(),
+      });
       pending.resolve('reject');
     }
     for (const [id, pending] of [...this.questions]) {
       if (pending.approval.sessionId !== sessionId) continue;
       this.questions.delete(id);
       if (pending.timer) clearTimeout(pending.timer);
-      this.emit('approval.resolved', { approvalId: id, decision: 'reject', by: reason });
+      this.resolveApprovalSnapshot(sessionId, id, {
+        decision: 'reject',
+        by: reason,
+        at: this.now(),
+      });
+      this.emit('approval.resolved', {
+        approvalId: id,
+        decision: 'reject',
+        by: reason,
+        at: this.now(),
+      });
       pending.resolve({ id: pending.approval.questionId ?? '', selected: [], custom: '（已停止）' });
     }
   }

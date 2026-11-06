@@ -4,7 +4,8 @@
  * 依据：docs/10-dsh-api.md 第五节（从会话日志读出来的真实形状）。
  * 真引擎没有"消息列表"，只有事件；这里把事件折成界面能渲染的回合。
  */
-import type { Block, Turn } from '../../../app/src/protocol';
+import type { Approval, Block, Turn } from '../../../app/src/protocol';
+import { parseQuestionAnswer, withApprovalResolution } from '../../../app/src/protocol/qa';
 import { canonicalRunId, canonicalTurnId } from '../../../app/src/protocol/turns';
 
 export interface RealEventData {
@@ -119,6 +120,55 @@ export interface ProjectOptions {
   finalizeUnfinished?: boolean;
 }
 
+/** ask_user_question 的工具参数 → 可持久化的提问快照 */
+function questionSnapshot(
+  callId: string,
+  argsRaw: unknown,
+  runId: string | undefined,
+  createdAt: number,
+): Approval | null {
+  let args: Record<string, unknown> = {};
+  if (typeof argsRaw === 'string') {
+    try {
+      const parsed = JSON.parse(argsRaw) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        args = parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+  } else if (argsRaw && typeof argsRaw === 'object') {
+    args = argsRaw as Record<string, unknown>;
+  }
+  const list = Array.isArray(args.questions) ? (args.questions as Array<Record<string, unknown>>) : [];
+  const q = list[0];
+  if (!q) return null;
+  const question = str(q.question);
+  if (!question) return null;
+  const options = Array.isArray(q.options)
+    ? (q.options as Array<Record<string, unknown>>)
+        .map((option) => ({
+          label: str(option.label),
+          ...(typeof option.description === 'string' ? { description: option.description } : {}),
+        }))
+        .filter((option) => option.label.length > 0)
+    : [];
+  return {
+    id: callId,
+    sessionId: '',
+    runId: runId ?? '',
+    createdAt,
+    kind: 'question',
+    title: str(q.header) || '需要你选一下',
+    summary: question,
+    risk: 'low',
+    actions: [],
+    ...(options.length > 0 ? { options } : {}),
+    ...(q.multi_select === true ? { multiSelect: true } : {}),
+    questionId: str(q.id),
+  };
+}
+
 export function projectRecords(records: RealRecord[], options: ProjectOptions = {}): Projection {
   const turns: Turn[] = [];
   let title: string | null = null;
@@ -213,12 +263,15 @@ export function projectRecords(records: RealRecord[], options: ProjectOptions = 
         const callName = str(d.name) || 'tool';
         const callId = typeof d.callId === 'string' ? d.callId : '';
 
-        // ask_user_question 不是普通工具行，它要渲染成一张"请选择"卡片
+        // ask_user_question 不是普通工具行，它要渲染成一张"请选择"卡片。
+        // 快照直接落进 turn：历史里 approvals 已经清空，也能还原问题与回答。
         if (callName === 'ask_user_question' && callId) {
+          const snapshot = questionSnapshot(callId, d.arguments, current.runId, time);
           const block: Extract<Block, { kind: 'approval' }> = {
             kind: 'approval',
             id: `${current.runId ?? current.id}:ask-${blockSeq}`,
             approvalId: callId,
+            ...(snapshot ? { snapshot } : {}),
           };
           current.blocks.push(block);
           break;
@@ -241,12 +294,34 @@ export function projectRecords(records: RealRecord[], options: ProjectOptions = 
         const msg = (d.message ?? {}) as Record<string, any>;
         const callId = str(msg.toolCallId) || str(d.callId);
         const block = callId ? toolIndex.get(callId) : undefined;
+        const text = contentToBlocks(msg.content, current?.runId ?? 'tool-result')
+          .map((b) => (b.kind === 'text' ? b.text : ''))
+          .join('\n');
         if (block) {
           block.state = msg.isError === true ? 'error' : 'done';
-          const text = contentToBlocks(msg.content, current?.runId ?? 'tool-result')
-            .map((b) => (b.kind === 'text' ? b.text : ''))
-            .join('\n');
           if (text) block.detail = clip(text, 200);
+        }
+        // 提问工具的结果是 {"answers":[...]}：补进对应 approval 快照，
+        // 重开会话时直接按只读问答卡渲染。
+        const answer = callId ? parseQuestionAnswer(text) : null;
+        if (answer) {
+          for (const turn of turns) {
+            for (let i = 0; i < turn.blocks.length; i += 1) {
+              const candidate = turn.blocks[i]!;
+              if (candidate.kind !== 'approval' || candidate.approvalId !== callId) continue;
+              if (!candidate.snapshot) continue;
+              turn.blocks[i] = {
+                ...candidate,
+                snapshot: withApprovalResolution(candidate.snapshot, {
+                  decision: 'approve',
+                  selected: answer.selected,
+                  ...(answer.custom ? { custom: answer.custom } : {}),
+                  by: 'user',
+                  at: time,
+                }),
+              };
+            }
+          }
         }
         break;
       }

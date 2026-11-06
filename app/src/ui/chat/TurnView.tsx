@@ -2,10 +2,16 @@ import React from 'react';
 import { Clipboard, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 import type { Approval, Block, Turn } from '../../protocol';
+import {
+  approvalBlockView,
+  qaViewFromToolBlock,
+  readonlyQaToolBlockIds,
+} from '../../protocol/qa';
 import { MarkdownView } from '../MarkdownView';
 import { font, radius, useTheme, useThemedStyles, type Theme } from '../theme';
 import { ApprovalCard } from './ApprovalCard';
 import { CapabilityCard } from './CapabilityCard';
+import { ReadonlyQaCard } from './ReadonlyQaCard';
 
 const ThinkingRow = React.memo(function ThinkingRow({
   text,
@@ -215,13 +221,24 @@ function renderBlock(
       return (
         <ThinkingRow key={block.id} text={block.text} onToggle={onToggleThinking} live={live} />
       );
-    case 'tool':
-      return <ToolRow key={block.id} block={block} />;
+    case 'tool': {
+      const qa = qaViewFromToolBlock(block);
+      return qa ? (
+        <ReadonlyQaCard key={block.id} qa={qa} />
+      ) : (
+        <ToolRow key={block.id} block={block} />
+      );
+    }
     case 'text':
       return <MarkdownView key={block.id} text={block.text} streaming={live} fontScale={fontScale} />;
     case 'approval': {
-      const approval = approvals[block.approvalId];
-      return approval ? <ApprovalCard key={block.id} approval={approval} /> : null;
+      const view = approvalBlockView(block, approvals);
+      if (!view) return null;
+      return view.mode === 'interactive' ? (
+        <ApprovalCard key={block.id} approval={view.approval} />
+      ) : (
+        <ReadonlyQaCard key={block.id} qa={view.qa} />
+      );
     }
     case 'capability':
       return <CapabilityCard key={block.id} block={block} />;
@@ -272,7 +289,10 @@ function formatDuration(ms?: number): string {
 
 function processSummary(blocks: Block[]): string {
   const tools = blocks
-    .filter((b): b is Extract<Block, { kind: 'tool' }> => b.kind === 'tool')
+    .filter(
+      (b): b is Extract<Block, { kind: 'tool' }> =>
+        b.kind === 'tool' && b.name !== 'ask_user_question',
+    )
     .map((b) => b.name.toLowerCase());
   const has = (names: string[]): boolean => tools.some((t) => names.some((n) => t.includes(n)));
   const parts: string[] = [];
@@ -312,9 +332,18 @@ const AssistantTurn = React.memo(function AssistantTurn({
     () => turn.blocks.filter((b) => !(b.kind === 'thinking' && !b.text.trim())),
     [turn.blocks],
   );
+  const qaToolIds = React.useMemo(
+    () => readonlyQaToolBlockIds(turn.blocks, approvals),
+    [turn.blocks, approvals],
+  );
   const processBlocks = React.useMemo(
-    () => visibleBlocks.filter((b) => b.kind === 'thinking' || b.kind === 'tool'),
-    [visibleBlocks],
+    () =>
+      visibleBlocks.filter(
+        (b) =>
+          (b.kind === 'thinking' || b.kind === 'tool') &&
+          !(b.kind === 'tool' && qaToolIds.has(b.id)),
+      ),
+    [visibleBlocks, qaToolIds],
   );
   const processEntries = React.useMemo(() => groupProcessBlocks(processBlocks), [processBlocks]);
   const answerBlocks = React.useMemo(
@@ -323,8 +352,14 @@ const AssistantTurn = React.memo(function AssistantTurn({
   );
   // 审批/能力卡是"必须看见"的动作卡，不跟着完整过程折叠
   const noticeBlocks = React.useMemo(
-    () => visibleBlocks.filter((b) => b.kind === 'approval' || b.kind === 'capability'),
-    [visibleBlocks],
+    () =>
+      visibleBlocks.filter(
+        (b) =>
+          b.kind === 'approval' ||
+          b.kind === 'capability' ||
+          (b.kind === 'tool' && qaToolIds.has(b.id)),
+      ),
+    [visibleBlocks, qaToolIds],
   );
   const answerText = React.useMemo(
     () => answerBlocks.map((b) => b.text).join('\n'),

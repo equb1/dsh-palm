@@ -431,6 +431,8 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 模型在顶栏；完成回合有复制/分享，回到底部键在生成中做脉冲描边。
 顶栏已浮动（`position:absolute` + `top:topInset`，0.86/0.97 半透明白 + 滚动后描边/投影），
 正文按 `headerH` 留位；错误横幅是 dangerSoft 圆角卡片；完整过程里相邻 ≥2 个工具合并成一行。
+审批/提问的 turn block 带自包含 `snapshot`（问题、选项、`resolution`）；历史里 pending approvals
+已清空时 `protocol/qa.ts` 仍能生成只读问答卡，轻宿主和完整桥分别从持久化 turn / 工具结果补答案。
 
 流式链路：
 

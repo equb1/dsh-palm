@@ -176,6 +176,13 @@
     `122-chatcard-approval-bash.png`）、能力门卡（`123-chatcard-capability.png`）；
     流式时工具行仍逐条外露（跑/等审批必须可见），整轮结束后按上面的规则合并。
     `typecheck` + `npm run verify` 全绿。
+  - 2026-11-06 只读问答卡：已回答的问题 / 已处理的审批在聊天里保留为只读卡（问题、
+    用户选择或自定义回答、已回答/已跳过/已拒绝），不再显示可点选项和输入框；等待中的
+    仍走原交互卡。轻宿主把审批快照和结果落进 turn，完整桥从 ask_user_question 的
+    tool/call + tool/result 还原答案；`app/src/protocol/qa.ts` 纯函数 + `test/readonly-qa.test.ts`、
+    `test/unit.test.ts` 投影用例覆盖。`typecheck`、`npm run verify`、`export:web` 全绿。
+    局限：完整引擎的普通权限审批上游没有可回放的历史事件，重开会话只保留提问卡；
+    当前时间线内已处理审批仍按只读卡展示。
 - [x] **U3 流式性能**：按帧合并 + 活跃 block 局部更新 + stable/tail Markdown + 空 block 修复；
   20 分钟 soak 已过（0 duplicate、1 次 VirtualizedList 警告），40/42.5 分钟复核内存 430–546MB，
   **90 分钟 soak 已完成**（2026-11-06 00:11–01:42，109 轮，PSS 349→615MB，无 OOM，见 I10）
@@ -485,7 +492,6 @@ type AttachmentChipsProps = {
 - bridge 对非流式 `assistant/message` 可能漏转；
 - follow WS 没有 `onclose/onerror` 自动重连（靠进会话重建）；
 - 图片渲染未做系统真机验收；
-- 历史“已回答”问题没有官方那种只读问答卡；
 - TTS/朗读未接（需要原生 TTS）；
 - 轻引擎账号 token 读自明文 YAML，安全模型需在文档里说清；
 - 发布签名/正式包流程（见 E8）。

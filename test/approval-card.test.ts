@@ -97,6 +97,46 @@ test('approval.resolved 之后卡片数据被清掉', () => {
   assert.equal(store.getSnapshot().approvals['ev-4'], undefined);
 });
 
+test('approval.resolved 之后 snapshot 留在回合里，可画只读问答卡', () => {
+  const { store, feed } = makeStore();
+  feed('approval.requested', { approval: question('ev-5') });
+  feed('approval.resolved', {
+    sessionId: 'session-1',
+    approvalId: 'ev-5',
+    decision: 'approve',
+    by: 'user',
+    selected: ['写代码'],
+  });
+  const block = store
+    .getSnapshot()
+    .detail!.turns.flatMap((turn) => turn.blocks)
+    .find((item) => item.kind === 'approval' && item.approvalId === 'ev-5');
+  assert.ok(block && block.kind === 'approval');
+  assert.deepEqual(block.snapshot?.resolution?.selected, ['写代码']);
+  assert.equal(block.snapshot?.resolution?.by, 'user');
+  assert.equal(store.getSnapshot().approvals['ev-5'], undefined);
+});
+
+test('approval.resolved 缺 decision（旧完整桥）时沿用已有结果，不误判为拒绝', () => {
+  const { store, feed } = makeStore();
+  feed('approval.requested', { approval: question('ev-6') });
+  feed('approval.resolved', {
+    sessionId: 'session-1',
+    approvalId: 'ev-6',
+    decision: 'approve',
+    by: 'user',
+    selected: ['瘫着'],
+  });
+  feed('approval.resolved', { sessionId: 'session-1', approvalId: 'ev-6' });
+  const block = store
+    .getSnapshot()
+    .detail!.turns.flatMap((turn) => turn.blocks)
+    .find((item) => item.kind === 'approval' && item.approvalId === 'ev-6');
+  assert.ok(block && block.kind === 'approval');
+  assert.equal(block.snapshot?.resolution?.decision, 'approve');
+  assert.deepEqual(block.snapshot?.resolution?.selected, ['瘫着']);
+});
+
 test('device.paired 会记住设备密钥（下次不用再输配对码）', async () => {
   const { store, feed } = makeStore();
   feed('device.paired', { key: 'deadbeefdeadbeef' });
