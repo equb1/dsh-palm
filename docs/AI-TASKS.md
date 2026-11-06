@@ -375,7 +375,17 @@ type AttachmentChipsProps = {
 ### M2 · 进行中
 
 - [ ] **2.1 WebView 与 RN 会话态联动**（token 暴露、双向跳转、生命周期）
-- [ ] **2.2 会话迁移完整版**（事件回放/结构化交接；P0 的 1.4 只做 v1）
+- [x] **2.2 会话迁移完整版**（事件回放/结构化交接；P0 的 1.4 只做 v1）
+  - 2026-11-06 Handoff v2（向后兼容 v1）：交接包新增 `replay`（turn/text/thinking/tool，
+    含 callId/arguments/state/detail），不再只有摘要/最近 8 条；
+  - 轻宿主 `sessions.import` 按序重建 turns + history（工具调用/结果一一对应），
+    以 `handoffId`（或 seed marker）幂等：重复导入返回同一会话，不重复回合/副作用；
+  - 完整 → 轻的反向交接以重建后的轻侧为唯一正文（`handoffDirection`），不再把完整侧追加一遍；
+  - 完整引擎没有公开的事件导入 API，seed 明确标注「文本降级」，`sessions.import` 返回
+    `unsupported`，不假装原生事件回放；
+  - 单测 `test/handoff.test.ts` / `handoff-import.test.ts` / `handoff-reverse.test.ts` /
+    `handoff-orchestration.test.ts` 覆盖结构化生成/解析、幂等、工具结果顺序、失败回滚、v1 兼容；
+    `npm --prefix app run typecheck` + `npm run verify` 全绿（254 pass）。
 - [ ] **2.3 插件徽章**（矩阵已有，App 入口 + 搜索 + 判定理由）
 - [ ] **2.4 轻引擎附件引用**（图片视觉/路径消费；与 1.3 原生收件不重复）
 - [x] **2.5 轻引擎多提供商 + 账号模型目录**

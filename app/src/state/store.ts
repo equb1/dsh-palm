@@ -1300,6 +1300,9 @@ export class Store {
         presetId: fullDetail.presetId,
         title: fullDetail.title,
         text: seed,
+        handoffId: handoff.handoffId,
+        seedMarker: handoff.seedMarker,
+        ...(handoff.replay ? { replay: handoff.replay } : {}),
       });
       const { session: lightDetail } = await this.requestLight('sessions.get', {
         sessionId: imported.id,
@@ -1315,6 +1318,7 @@ export class Store {
         status: 'active',
         handoffId: handoff.handoffId,
         seedMarker: handoff.seedMarker,
+        handoffDirection: 'full_to_light',
         ...(seedTurnId ? { seedTurnId } : {}),
         updatedAt: this.now(),
       };
@@ -2194,6 +2198,7 @@ export class Store {
         status: 'pending',
         handoffId: handoff.handoffId,
         seedMarker: handoff.seedMarker,
+        handoffDirection: 'light_to_full',
         updatedAt: this.now(),
       };
       // 立刻持久化 fullSessionId：后面失败也能从 ui-cache 找到孤儿会话

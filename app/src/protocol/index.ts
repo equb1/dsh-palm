@@ -460,8 +460,51 @@ export interface HandoffBlockedCall {
   args: Record<string, unknown>;
 }
 
+/** 结构化回放：一个块 = 原文里的 text / thinking / tool 卡片 */
+export type HandoffReplayBlock =
+  | { kind: 'text'; id: string; text: string }
+  | { kind: 'thinking'; id: string; text: string }
+  | {
+      kind: 'tool';
+      id: string;
+      /** 原始工具调用 id；结果按它和 assistant.tool_calls 对齐 */
+      callId: string;
+      name: string;
+      /** 模型输出的原始 JSON 字符串（可能为空对象） */
+      arguments: string;
+      summary: string;
+      state: 'running' | 'done' | 'error';
+      detail?: string;
+    };
+
+export interface HandoffReplayTurn {
+  id: string;
+  role: 'user' | 'assistant';
+  createdAt: number;
+  status: 'streaming' | 'done' | 'stopped' | 'error';
+  blocks: HandoffReplayBlock[];
+}
+
+/**
+ * M2.2：可重建的紧凑事件序列。
+ *
+ * 轻引擎按 turns/history 原生重建；完整引擎没有事件导入 API，
+ * 只能把同一份序列渲染成 seed 文本（明确降级，不假装原生回放）。
+ */
+export interface HandoffReplay {
+  schema: typeof HANDOFF_REPLAY_SCHEMA;
+  source: 'light-turns' | 'history';
+  turns: HandoffReplayTurn[];
+  stats: { turns: number; blocks: number; tools: number; truncated: boolean };
+  /** 明确告诉接收侧哪些块或能力没有原生回放 */
+  unsupported: string[];
+}
+
+export const HANDOFF_REPLAY_SCHEMA = 'dsh-handoff-replay/v1' as const;
+
 export interface HandoffV1 {
-  version: 1;
+  /** v1 = 摘要/最近 8 条；v2 = 额外带 replay 结构化回放 */
+  version: 1 | 2;
   /** 逻辑会话 id（= 轻引擎会话 id） */
   conversationId: string;
   reason: string;
@@ -494,6 +537,8 @@ export interface HandoffV1 {
   handoffId: string;
   seedMarker: string;
   createdAt: number;
+  /** v2：结构化 turn/block/tool 回放；v1 旧包没有这个字段 */
+  replay?: HandoffReplay;
 }
 
 /* ------------------------------------------------------------------ *
@@ -508,8 +553,19 @@ export interface RequestParams {
   /**
    * 轻引擎专用：直接建一个带 seed 用户消息的会话（不触发模型），
    * 供完整引擎 → 轻引擎的 Handoff 继续使用（M2.6）。
+   *
+   * M2.2 起可带 replay：先按结构化事件重建 turns/history，再追加 seed。
+   * handoffId 用于幂等：同一个交接包重复导入返回同一个会话，不重复建回合。
    */
-  'sessions.import': { presetId?: string; title?: string; text: string; workspaceId?: string };
+  'sessions.import': {
+    presetId?: string;
+    title?: string;
+    text: string;
+    workspaceId?: string;
+    handoffId?: string;
+    seedMarker?: string;
+    replay?: HandoffReplay;
+  };
   'sessions.send': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
   'sessions.steer': { sessionId: string; text: string; attachments?: string[]; files?: FileRef[] };
   /**

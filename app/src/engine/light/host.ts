@@ -23,6 +23,7 @@ import {
   type EventPayloads,
   type FileRef,
   type HandoffBlockedCall,
+  type HandoffReplay,
   type Method,
   type ModelOption,
   type PermissionOption,
@@ -36,7 +37,13 @@ import {
 } from '../../protocol';
 import { Agent, userTurnFromText, type RunOutcome, type RunSink } from './agent';
 import { SessionRepo, newRunId, newSessionId } from './sessionRepo';
-import { buildHandoff } from '../../lib/handoff';
+import {
+  buildHandoff,
+  handoffIdFromSeed,
+  parseHandoffReplay,
+  replayToHistory,
+  replayToTurns,
+} from '../../lib/handoff';
 import { toolsForPermission } from './tools';
 import type {
   AskAnswer,
@@ -317,14 +324,40 @@ export class LightHost {
         presetId,
         title,
         text,
+        handoffId,
+        seedMarker,
+        replay,
       }: {
         presetId?: string;
         title?: string;
         text: string;
         workspaceId?: string;
+        handoffId?: string;
+        seedMarker?: string;
+        replay?: unknown;
       }) => {
         const body = text.trim();
         if (!body) throw new EngineProtocolError({ code: 'bad_request', message: '交接 seed 为空' });
+        // M2.2：同一个 handoffId 重复导入必须返回同一个会话（幂等，不产生重复回合）。
+        const effectiveHandoffId =
+          handoffId?.trim() || handoffIdFromSeed(body) || (seedMarker ? handoffIdFromSeed(seedMarker) : undefined);
+        if (effectiveHandoffId) {
+          const existing = [...this.sessions.values()].find(
+            (candidate) => candidate.handoffId === effectiveHandoffId,
+          );
+          if (existing) return { session: this.summary(existing) };
+        }
+        let replayData: HandoffReplay | undefined;
+        if (replay !== undefined) {
+          replayData = parseHandoffReplay(replay) ?? undefined;
+          if (!replayData) {
+            throw new EngineProtocolError({
+              code: 'bad_request',
+              message: '交接回放结构不合法',
+              hint: '缺少 schema 或 turns；旧版 v1 交接包不要传 replay',
+            });
+          }
+        }
         const preset = PRESETS.find((candidate) => candidate.id === presetId) ?? PRESETS[0]!;
         const session: StoredSession = {
           id: newSessionId(),
@@ -337,10 +370,13 @@ export class LightHost {
           archived: false,
           permission: preset.id === 'reader' ? 'read-only' : 'workspace-write',
           model: this.modelChoice(),
-          turns: [],
-          history: [],
+          turns: replayData ? replayToTurns(replayData) : [],
+          history: replayData ? replayToHistory(replayData) : [],
+          ...(effectiveHandoffId ? { handoffId: effectiveHandoffId } : {}),
+          ...(seedMarker ? { handoffSeedMarker: seedMarker } : {}),
         };
         this.sessions.set(session.id, session);
+        // seed 是最后一条 user 消息，App 显示时会按 marker 过滤掉；模型仍能看到它。
         this.appendUserMessage(session, body);
         await this.repo.save(session);
         return { session: this.summary(session) };

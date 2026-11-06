@@ -1040,7 +1040,12 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     },
 
     'sessions.import': async () => {
-      throw new Error('sessions.import 只在轻引擎可用');
+      // M2.2：真 dsh 没有公开的事件导入 API，不能假装原生回放。
+      // App 只能把结构化 replay 渲染进 seed 文本后走 sessions.send。
+      throw Object.assign(new Error('完整引擎不支持原生事件导入'), {
+        code: 'unsupported' satisfies ProtocolError['code'],
+        hint: '交接包已降级为 seed 文本；需要原生回放请等真宿主提供导入接口',
+      });
     },
 
     // 真引擎的发消息：session/prompt。mode=queue 排队，steer 立刻插入当前回合。
