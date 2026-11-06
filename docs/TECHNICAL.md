@@ -87,6 +87,7 @@ UI 侧统一经 `app/src/lib/errors.ts` 翻成人话。
   改名：`session/rename { request: { sessionId, title } }`。
 - 钉/归档在 workspace 控制器：`workspace/pinSession|unpinSession|archiveSession|unarchiveSession`。
 - **没有**会话删除、正文搜索的远程接口。
+- 文件接口 `fs.list/rename/delete` 不经过 dsh：桥在 proot 内直接用 Node fs 读写 `/root/work`（见 §5.1）。
 - 事件投影：`engine/src/real/project.ts` 把 `user/message`、`assistant/message`、工具调用等
   折成 `Turn/Block`；`run.finished` 映射状态。
 
@@ -179,8 +180,9 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
 - 会话：本地 JSON 存储；支持流式、审批、提问；附件已改原生收件（§6.4）。
 - 文件名：`lib/filenames.ts` 统一清洗（中文/空格/`#`/`%` 等），生成工具与审批卡共用。
 - 文件浏览（U8）：协议 `fs.list` / `fs.rename` / `fs.delete` 由轻宿主用工作区 `SandboxFs` 实现
-  （`/` 根、name/kind/size/mtime，500 条上限；根目录不可重命名/删除）；完整引擎（proot）未实现，
-  文件页会提示不支持。
+  （`/` 根、name/kind/size/mtime，500 条上限；根目录不可重命名/删除）。
+  完整引擎由桥的 `engine/src/real/workspaceFs.ts` 直接读写 `/root/work`：同样支持 list/rename/delete，
+  拒绝 `..`/根目录改名删除，软链不跟随；不依赖 dsh 远程接口。
 - 只读终端（U8）：`shell.run` 由轻宿主用独立只读挂载（Workspace SandboxFs `readOnly` + MountableFs）
   跑 ShellRunner，写操作返回 EACCES；15s 超时、20k 输出；完整引擎 unsupported。
 - 会话运行（E2）：同一会话同时最多一个 run；运行中再 `sessions.send` 会写历史并进

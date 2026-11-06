@@ -1502,7 +1502,7 @@ export class Store {
     this.patch({ view: 'main' });
   }
 
-  /** U8 第一步：工作区文件浏览（轻引擎实现，完整引擎暂不支持） */
+  /** U8：工作区文件浏览（轻引擎和完整引擎） */
   openFiles(): void {
     this.patch({ view: 'files', error: null });
   }

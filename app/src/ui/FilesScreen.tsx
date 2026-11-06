@@ -3,7 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 
 import type { WorkspaceEntry } from '../protocol';
 import { openWorkspaceFile, shareWorkspaceFile } from '../lib/fileActions';
-import { store } from './useStore';
+import { store, useStore } from './useStore';
 import { Btn, IconButton } from './parts';
 import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
@@ -20,6 +20,7 @@ function joinPath(base: string, name: string): string {
 }
 
 export function FilesScreen(): React.ReactElement {
+  const state = useStore();
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [path, setPath] = React.useState('/');
@@ -43,7 +44,7 @@ export function FilesScreen(): React.ReactElement {
     } catch (error) {
       setEntries([]);
       setNotice(
-        `列文件失败：${error instanceof Error ? error.message : String(error)}。轻引擎才有工作区；完整引擎暂不支持。`,
+        `列文件失败：${error instanceof Error ? error.message : String(error)}。`,
       );
     } finally {
       setLoading(false);
@@ -278,7 +279,7 @@ export function FilesScreen(): React.ReactElement {
         </View>
 
         <Text style={styles.footnote}>
-          工作区是 `/workspace`；文件用系统查看器打开，PDF 等暂不解析。
+          工作区是 {state.engineKind === 'remote' ? '/root/work' : '/workspace'}；文件用系统查看器打开，PDF 等暂不解析。
         </Text>
       </ScrollView>
     </View>
