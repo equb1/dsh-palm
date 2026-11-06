@@ -3,12 +3,16 @@ package cool.cnb.dshpalm.host
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import cool.cnb.dshpalm.system.DshWidgetProvider
 
 /**
  * 前台服务：把引擎和桥挂在一个常驻通知下面。
@@ -47,10 +51,14 @@ class HostService : Service() {
     private var lastNotification = ""
     /** startForeground 之后才允许 notify()：之前发通知会被系统当成后台通知 */
     private var foregroundStarted = false
+    /** proot 里的桥要发 mDNS；Android 默认会过滤组播包 */
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     /** 进度/状态变化就更新常驻通知：锁屏上也能看到"解压 42%"这种话 */
     private val statusListener: (HostRuntime.Status) -> Unit = { s ->
-        updateNotification(statusText(s))
+        val text = statusText(s)
+        updateNotification(text)
+        runCatching { DshWidgetProvider.refresh(this, text) }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -62,6 +70,7 @@ class HostService : Service() {
     }
 
     override fun onDestroy() {
+        releaseMulticastLock()
         HostRuntime.removeListener(statusListener)
         super.onDestroy()
     }
@@ -72,6 +81,24 @@ class HostService : Service() {
         s.phase.isNotEmpty() ->
             s.phase + if (s.progress in 1..99) " · ${s.progress}%" else ""
         else -> "引擎启动中…"
+    }
+
+    private fun acquireMulticastLock() {
+        if (multicastLock?.isHeld == true) return
+        runCatching {
+            val wifi = applicationContext.getSystemService(WifiManager::class.java) ?: return
+            multicastLock = wifi.createMulticastLock("dsh-palm-mdns").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        }
+    }
+
+    private fun releaseMulticastLock() {
+        runCatching {
+            if (multicastLock?.isHeld == true) multicastLock?.release()
+        }
+        multicastLock = null
     }
 
     private fun updateNotification(text: String) {
@@ -86,6 +113,7 @@ class HostService : Service() {
         android.util.Log.i("dsh-palm", "[service] onStartCommand action=" + (intent?.action ?: "null") + " engine=" + (intent?.getStringExtra(EXTRA_ENGINE_CMD) ?: "null"))
         if (intent?.action == ACTION_STOP) {
             HostRuntime.stop()
+            releaseMulticastLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -107,6 +135,7 @@ class HostService : Service() {
             ?: 8788
 
         startInForeground()
+        acquireMulticastLock()
         applySafeModeIfRequested()
         val runtimePaths = RuntimeInstaller.paths(applicationContext)
         HostRuntime.start(
@@ -140,6 +169,8 @@ class HostService : Service() {
                 "LANG" to "C.UTF-8",
                 // 桥的设备密钥放在 bind 进来的 /bridge 上：换镜像不会把配对状态冲掉
                 "DSH_PALM_DEVICES" to "/bridge/devices.json",
+                // 宿主身份和 mDNS 广播用；桌面桥不设这个变量，默认 desktop
+                "DSH_PALM_HOST_KIND" to "phone",
             ),
         )
         // START_NOT_STICKY：系统回收后不要自己把 proot 拉起来。
@@ -206,11 +237,23 @@ class HostService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
+        val open = Intent(this, cool.cnb.dshpalm.MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = Uri.parse("dshpalm://session?source=engine")
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pending = PendingIntent.getActivity(
+            this,
+            4701,
+            open,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
         return builder
             .setContentTitle("锦囊")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setOngoing(true)
+            .setContentIntent(pending)
             .build()
     }
 

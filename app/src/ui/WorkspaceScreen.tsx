@@ -1,9 +1,9 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { store, useStore } from './useStore';
 import { Btn, IconButton } from './parts';
-import { radius, space, topInset, useThemedStyles, type Theme } from './theme';
+import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 /**
  * U8 工作区页（只读概览 + 文件入口）。
@@ -13,19 +13,55 @@ import { radius, space, topInset, useThemedStyles, type Theme } from './theme';
  */
 export function WorkspaceScreen(): React.ReactElement {
   const styles = useThemedStyles(createStyles);
+  const { palette } = useTheme();
   const state = useStore();
   const rows = store.sessionRows();
   const workspaces = state.workspaces;
+  const [creating, setCreating] = React.useState(false);
+  const [path, setPath] = React.useState('');
+
+  const submit = async (): Promise<void> => {
+    if (await store.createWorkspace(path)) {
+      setPath('');
+      setCreating(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
       <View style={styles.header}>
         <IconButton glyph="‹" label="返回" onPress={() => store.closeWorkspace()} />
         <Text style={styles.title}>工作区</Text>
+        <IconButton
+          glyph="+"
+          label="新建工作区"
+          onPress={() => setCreating((value) => !value)}
+          size={32}
+        />
         <IconButton glyph="▤" label="打开文件" onPress={() => store.openFiles()} size={32} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        {creating ? (
+          <View style={styles.createCard}>
+            <Text style={styles.createTitle}>新建工作区</Text>
+            <TextInput
+              value={path}
+              onChangeText={setPath}
+              placeholder="名称（如 notes）或绝对路径"
+              placeholderTextColor={palette.textFaint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.input}
+              accessibilityLabel="新工作区名称"
+            />
+            <View style={styles.actions}>
+              <Btn label="取消" kind="ghost" onPress={() => setCreating(false)} style={{ flex: 1 }} />
+              <Btn label="创建" onPress={() => void submit()} style={{ flex: 1 }} />
+            </View>
+          </View>
+        ) : null}
+
         {workspaces.length === 0 ? (
           <Text style={styles.hint}>宿主没有报告工作区。</Text>
         ) : (
@@ -91,6 +127,25 @@ const createStyles = ({ palette: c }: Theme) =>
   title: { flex: 1, color: c.text, fontSize: 17, fontWeight: '700' },
   scroll: { padding: space.lg, gap: space.md, paddingBottom: space.xxl },
   hint: { color: c.textFaint, fontSize: 12.5, lineHeight: 18 },
+  createCard: {
+    backgroundColor: c.glass,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    padding: space.md,
+    gap: space.sm,
+  },
+  createTitle: { color: c.text, fontSize: 14, fontWeight: '600' },
+  input: {
+    minHeight: 42,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    backgroundColor: c.glassStrong,
+    color: c.text,
+    paddingHorizontal: space.sm,
+    fontSize: 14,
+  },
   card: {
     backgroundColor: c.glass,
     borderRadius: radius.lg,

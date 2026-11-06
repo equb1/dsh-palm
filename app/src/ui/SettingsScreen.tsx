@@ -5,7 +5,14 @@ import { store, useStore } from './useStore';
 import { IconButton } from './parts';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
 import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
-import { hostAvailable, hostBatteryWhitelisted, hostLogs } from '../lib/host';
+import {
+  hostAvailable,
+  hostBatteryWhitelisted,
+  hostLogs,
+  requestAddTile,
+  requestPinWidget,
+  systemEntryStatus,
+} from '../lib/host';
 import { EngineScreen } from './EngineScreen';
 import { LightEngineScreen } from './LightEngineScreen';
 import { AccountScreen } from './settings/AccountScreen';
@@ -43,6 +50,14 @@ export function SettingsScreen(): React.ReactElement {
   /** U4：设置首页搜索 */
   const [query, setQuery] = React.useState('');
   const [notice, setNotice] = React.useState<string | null>(null);
+  const [entryStatus, setEntryStatus] = React.useState<{
+    widgetCount: number;
+    overlayAllowed: boolean;
+  } | null>(null);
+
+  React.useEffect(() => {
+    void systemEntryStatus().then(setEntryStatus).catch(() => undefined);
+  }, []);
 
   // 本机引擎状态：进设置页就每 2 秒拉一次（首页 tile 的右值要准）
   const host = state.host;
@@ -224,6 +239,39 @@ export function SettingsScreen(): React.ReactElement {
           tone: 'amber',
           warn: batteryOk === false,
           onPress: () => setRoute('engine'),
+        },
+        {
+          id: 'widget',
+          title: '桌面小组件',
+          value: entryStatus?.widgetCount ? '已添加' : '添加',
+          icon: '▦',
+          tone: 'amber',
+          onPress: () => {
+            void requestPinWidget().then((ok) => {
+              flash(ok ? '已请求添加桌面小组件' : '当前桌面不支持快捷添加，请从小部件列表里添加「锦囊」');
+              void systemEntryStatus().then(setEntryStatus).catch(() => undefined);
+            });
+          },
+        },
+        {
+          id: 'tile',
+          title: '快捷设置磁贴',
+          value: '添加',
+          icon: '◈',
+          tone: 'amber',
+          onPress: () => {
+            void requestAddTile().then((ok) => {
+              flash(ok ? '磁贴已添加到快捷设置' : '当前系统不支持自动添加，请在快捷设置编辑里添加「锦囊」');
+            });
+          },
+        },
+        {
+          id: 'overlay',
+          title: '悬浮球',
+          value: entryStatus?.overlayAllowed ? '权限已开' : '暂未接入',
+          icon: '◎',
+          tone: 'slate',
+          onPress: () => flash('悬浮球仍在排期；先用桌面小组件/快捷磁贴/通知直达。'),
         },
       ],
     },

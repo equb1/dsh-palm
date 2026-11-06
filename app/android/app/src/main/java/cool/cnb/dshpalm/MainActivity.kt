@@ -9,6 +9,7 @@ import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
+import cool.cnb.dshpalm.host.HostModule
 import cool.cnb.dshpalm.host.ShareInbox
 import expo.modules.ReactActivityDelegateWrapper
 
@@ -28,6 +29,17 @@ class MainActivity : ReactActivity() {
     setIntent(intent)
     // App 在后台时分享进来也要接住（见 PITFALLS E2）
     ShareInbox.offer(intent)
+  }
+
+  override fun onRequestPermissionsResult(
+      requestCode: Int,
+      permissions: Array<out String>,
+      grantResults: IntArray
+  ) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    if (requestCode == 4713) {
+      HostModule.onLanPermissionResult(grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED)
+    }
   }
 
   /**

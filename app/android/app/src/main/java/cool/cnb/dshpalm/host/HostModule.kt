@@ -5,8 +5,13 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.StatusBarManager
+import android.appwidget.AppWidgetManager
 import android.content.ClipData
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -136,6 +141,123 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         }
     }
 
+    // ---- M3.2 LAN 发现 ----
+
+    @Volatile private var lanDiscovery: LanDiscovery? = null
+
+    /** Android 16 的本地网络访问权限；旧系统直接返回 true。 */
+    @ReactMethod
+    fun requestLanPermission(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT < 36) {
+                promise.resolve(true)
+                return
+            }
+            val permission = "android.permission.ACCESS_LOCAL_NETWORK"
+            if (ctx.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+                promise.resolve(true)
+                return
+            }
+            val activity = ctx.currentActivity
+            if (activity == null) {
+                promise.resolve(false)
+                return
+            }
+            pendingLanPermission = promise
+            activity.requestPermissions(arrayOf(permission), LAN_PERM_REQ)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    /** 扫描 `_dsh-palm._tcp`；4 秒后返回当前发现的列表。 */
+    @ReactMethod
+    fun discoverLanHosts(timeoutMs: Double, promise: Promise) {
+        try {
+            lanDiscovery?.stop(null) // 旧实例先释放
+        } catch (_: Throwable) {
+            // ignore
+        }
+        val discovery = LanDiscovery(ctx)
+        lanDiscovery = discovery
+        discovery.start(if (timeoutMs > 0) timeoutMs.toLong() else 4_000L, promise)
+    }
+
+    @ReactMethod
+    fun stopLanDiscovery(promise: Promise) {
+        try {
+            lanDiscovery?.stop(promise) ?: promise.resolve(true)
+            lanDiscovery = null
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    // ---- M3.3 系统入口 ----
+
+    @ReactMethod
+    fun requestPinWidget(promise: Promise) {
+        try {
+            val activity = ctx.currentActivity
+            if (activity == null || Build.VERSION.SDK_INT < 26) {
+                promise.resolve(false)
+                return
+            }
+            val manager = AppWidgetManager.getInstance(ctx)
+            if (!manager.isRequestPinAppWidgetSupported) {
+                promise.resolve(false)
+                return
+            }
+            val provider = ComponentName(ctx, cool.cnb.dshpalm.system.DshWidgetProvider::class.java)
+            promise.resolve(manager.requestPinAppWidget(provider, null, null))
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun requestAddTile(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT < 33) {
+                promise.resolve(false)
+                return
+            }
+            val manager = ctx.getSystemService(StatusBarManager::class.java)
+            if (manager == null) {
+                promise.resolve(false)
+                return
+            }
+            val component = ComponentName(ctx, cool.cnb.dshpalm.system.DshTileService::class.java)
+            val icon = Icon.createWithResource(ctx, cool.cnb.dshpalm.R.drawable.ic_dsh_tile)
+            manager.requestAddTileService(component, "锦囊", icon, ctx.mainExecutor) { result ->
+                promise.resolve(
+                    result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED
+                        || result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED,
+                )
+            }
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun getSystemEntryStatus(promise: Promise) {
+        try {
+            val manager = AppWidgetManager.getInstance(ctx)
+            val widgetCount =
+                manager.getAppWidgetIds(ComponentName(ctx, cool.cnb.dshpalm.system.DshWidgetProvider::class.java)).size
+            val overlay = android.provider.Settings.canDrawOverlays(ctx)
+            promise.resolve(
+                Arguments.createMap().apply {
+                    putInt("widgetCount", widgetCount)
+                    putBoolean("overlayAllowed", overlay)
+                },
+            )
+        } catch (_: Throwable) {
+            promise.resolve(null)
+        }
+    }
+
     /**
      * 请求通知权限（Android 13+）。
      * 结果是异步的：这次返回当前状态，用户点完「允许」后下次调用才变 true。
@@ -165,6 +287,25 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     /** 发一条本地通知（任务完成 / 待审批 / 提问）。tag 相同会覆盖同一条。 */
     @ReactMethod
     fun notifyEvent(title: String, body: String, tag: String?, promise: Promise) {
+        notifyEventInternal(title, body, tag, null, promise)
+    }
+
+    /**
+     * 带目标路由的通知（M3.3）：点通知直接回到具体会话/审批卡。
+     * 保留 notifyEvent 旧签名，老 JS 仍可工作。
+     */
+    @ReactMethod
+    fun notifyEventEx(title: String, body: String, tag: String?, route: ReadableMap?, promise: Promise) {
+        notifyEventInternal(title, body, tag, route, promise)
+    }
+
+    private fun notifyEventInternal(
+        title: String,
+        body: String,
+        tag: String?,
+        route: ReadableMap?,
+        promise: Promise,
+    ) {
         try {
             // 原生层强校验：如果当前 Activity 正在前台且拥有焦点，绝不弹系统通知（防止刚切回前台瞬间误弹）
             val activity = ctx.currentActivity
@@ -178,15 +319,24 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
                 return
             }
             ensureEventChannel(manager)
-            val sessionId = extractSessionIdFromTag(tag)
+            val tagSessionId = extractSessionIdFromTag(tag)
+            val sessionId = readString(route, "sessionId") ?: tagSessionId
+            val approvalId = readString(route, "approvalId") ?: extractApprovalIdFromTag(tag)
+            val engine = readString(route, "engine")
             val notifyId = (tag ?: title).hashCode()
+            val uri = Uri.parse("dshpalm://session").buildUpon().apply {
+                if (!sessionId.isNullOrBlank()) appendQueryParameter("id", sessionId)
+                if (!engine.isNullOrBlank()) appendQueryParameter("engine", engine)
+                if (!approvalId.isNullOrBlank()) appendQueryParameter("approval", approvalId)
+                appendQueryParameter("source", "notification")
+            }.build()
             val intent = Intent(ctx, cool.cnb.dshpalm.MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                action = Intent.ACTION_MAIN
-                addCategory(Intent.CATEGORY_LAUNCHER)
-                if (!sessionId.isNullOrBlank()) {
-                    putExtra(EXTRA_NOTIFY_SESSION_ID, sessionId)
-                }
+                action = Intent.ACTION_VIEW
+                data = uri
+                if (!sessionId.isNullOrBlank()) putExtra(EXTRA_NOTIFY_SESSION_ID, sessionId)
+                if (!approvalId.isNullOrBlank()) putExtra(EXTRA_NOTIFY_APPROVAL_ID, approvalId)
+                if (!engine.isNullOrBlank()) putExtra(EXTRA_NOTIFY_ENGINE, engine)
             }
             val pending = PendingIntent.getActivity(
                 ctx,
@@ -194,7 +344,13 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
                 intent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            val notification = Notification.Builder(ctx, EVENT_CHANNEL)
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Notification.Builder(ctx, EVENT_CHANNEL)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(ctx)
+            }
+            val notification = builder
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(Notification.BigTextStyle().bigText(body))
@@ -231,6 +387,12 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         // 支持 "run:<sessionId>" 或 "approval:<sessionId>:<approvalId>"
         val parts = tag.split(":")
         return if (parts.size >= 2 && parts[1].startsWith("session-")) parts[1] else null
+    }
+
+    private fun extractApprovalIdFromTag(tag: String?): String? {
+        if (tag.isNullOrBlank()) return null
+        val parts = tag.split(":")
+        return if (parts.size >= 3 && parts[1].startsWith("session-")) parts[2] else null
     }
 
     private fun ensureEventChannel(manager: NotificationManager) {
@@ -467,8 +629,8 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         putString("hash", ref.hash)
     }
 
-    private fun readString(map: ReadableMap, key: String): String? {
-        if (!map.hasKey(key) || map.isNull(key)) return null
+    private fun readString(map: ReadableMap?, key: String): String? {
+        if (map == null || !map.hasKey(key) || map.isNull(key)) return null
         return runCatching { map.getString(key) }.getOrNull()
     }
 
@@ -562,10 +724,22 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     }
 
     companion object {
+        @Volatile private var pendingLanPermission: Promise? = null
+
+        /** MainActivity 转发权限结果；只处理本地网络权限。 */
+        fun onLanPermissionResult(granted: Boolean) {
+            val promise = pendingLanPermission ?: return
+            pendingLanPermission = null
+            promise.resolve(granted)
+        }
+
         private const val TAG = "DshPalmHost"
         private const val EVENT_CHANNEL = "dsh-palm-events"
         private const val EXTRA_NOTIFY_SESSION_ID = "dsh_session_id"
+        private const val EXTRA_NOTIFY_APPROVAL_ID = "dsh_approval_id"
+        private const val EXTRA_NOTIFY_ENGINE = "dsh_engine"
         private const val PICK_FILE_REQ = 4712
+        private const val LAN_PERM_REQ = 4713
         private const val UI_CACHE_FILE = "ui-cache.json"
     }
 

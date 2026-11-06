@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.INTERNET"/>
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+  <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+  <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK"/>
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
@@ -52,5 +55,32 @@
       android:name=".host.HostService"
       android:exported="false"
       android:foregroundServiceType="dataSync" />
+
+    <!-- M3.3：快捷设置磁贴 -->
+    <service
+      android:name=".system.DshTileService"
+      android:exported="true"
+      android:label="@string/app_name"
+      android:icon="@drawable/ic_dsh_tile"
+      android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+      <intent-filter>
+        <action android:name="android.service.quicksettings.action.QS_TILE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.service.quicksettings.ACTIVE_TILE"
+        android:value="true" />
+    </service>
+
+    <!-- M3.3：桌面小组件 -->
+    <receiver
+      android:name=".system.DshWidgetProvider"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/dsh_widget_info" />
+    </receiver>
   </application>
 </manifest>

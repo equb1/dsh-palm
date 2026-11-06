@@ -1,4 +1,6 @@
+import { networkInterfaces } from 'node:os';
 import { startRealBridge } from './server';
+import { loadBridgeIdentity } from './identity';
 
 /**
  * 用法：
@@ -27,10 +29,19 @@ async function main(): Promise<void> {
   const devicesFile = process.env.DSH_PALM_DEVICES ?? '.dsh-palm-devices.json';
 
   const bridge = await startRealBridge({ baseUrl, token, port, pairCode, devicesFile });
+  const identity = loadBridgeIdentity(undefined, process.env.DSH_PALM_HOST_NAME);
+  const lan = Object.values(networkInterfaces())
+    .flatMap((entries) => entries ?? [])
+    .filter((entry) => !entry.internal && entry.family === 'IPv4')
+    .map((entry) => entry.address)
+    .filter((address): address is string => typeof address === 'string');
 
   console.log('');
   console.log('  dsh-palm 真引擎桥');
   console.log(`  WS     ws://localhost:${bridge.port}/ws`);
+  for (const address of lan) console.log(`  LAN    ws://${address}:${bridge.port}/ws`);
+  console.log(`  宿主   ${identity.name} · ${identity.hostId} · ${identity.fingerprint}`);
+  console.log(`  mDNS   _dsh-palm._tcp（局域网可发现）`);
   console.log(`  上游   ${baseUrl}`);
   if (pairCode) {
     console.log(`  配对码  ${pairCode}   首次连要输，之后这台设备免输`);

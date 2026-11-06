@@ -31,6 +31,46 @@ export interface DeviceConditions {
   wifi: boolean;
 }
 
+/** M3.2：局域网里发现的一个宿主（还未配对） */
+export interface DiscoveredHost {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  kind: 'phone' | 'desktop' | 'server' | string;
+  fingerprint?: string;
+  version?: string;
+}
+
+/** Android 16 本地网络权限；旧系统直接 true */
+export async function requestLanPermission(): Promise<boolean> {
+  return true;
+}
+
+/** 扫描局域网宿主；非原生端返回空列表 */
+export async function discoverLanHosts(_timeoutMs?: number): Promise<DiscoveredHost[]> {
+  return [];
+}
+
+export async function stopLanDiscovery(): Promise<boolean> {
+  return true;
+}
+
+export async function requestPinWidget(): Promise<boolean> {
+  return false;
+}
+
+export async function requestAddTile(): Promise<boolean> {
+  return false;
+}
+
+export async function systemEntryStatus(): Promise<{
+  widgetCount: number;
+  overlayAllowed: boolean;
+} | null> {
+  return null;
+}
+
 /**
  * 告诉原生层「当前有没有回合在跑」。
  * onTrimMemory 回收 proot 时，有活跃回合就先不动（老 APK 上没有这个接口，调用会安全降级）。

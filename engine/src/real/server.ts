@@ -5,6 +5,8 @@
  * UI 永远只连这里，dsh 换版本时改的是桥，不是界面。
  */
 import { createServer } from 'node:http';
+import { mkdir, stat } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import type {
@@ -39,6 +41,20 @@ import {
 } from './project';
 import { promptWithProotFiles, PROOT_WORKSPACE_ROOT } from './promptParts';
 import { deleteWorkspace, listWorkspace, renameWorkspace } from './workspaceFs';
+import { readSessionLogBuffer } from './logReader';
+import { buildSessionSearchText, matchSessionText } from './sessionSearch';
+import {
+  deleteSessionDir,
+  findSessionDir,
+  latestSessionLog,
+  projectKey,
+  readSessionLogFile,
+  resolveDshHome,
+  sessionDirFor,
+} from './sessionFs';
+import { makeNodeBackend } from '../../../app/src/engine/fs/nodeBackend';
+import { createWorkspaceMount } from '../../../app/src/engine/fs/mount';
+import { ShellRunner as ShellRunnerClass } from '../../../app/src/engine/shell/bash';
 import { canonicalRunId, canonicalTurnId, liveBlockId, mergeLiveTurn } from '../../../app/src/protocol/turns';
 import {
   buildWebFrontendEndpoint,
@@ -46,6 +62,8 @@ import {
   WebFrontendError,
 } from '../../../app/src/lib/webFrontend';
 import { DeviceStore } from './devices';
+import { loadBridgeIdentity } from './identity';
+import { advertiseBridge, type BridgeAdvertiser } from './discovery';
 
 export interface RealBridgeOptions {
   /** 真 dsh 的根地址，例如 http://127.0.0.1:8899 */
@@ -59,9 +77,28 @@ export interface RealBridgeOptions {
   devicesFile?: string;
   /** 工作区真实路径；默认 proot 的 /root/work，测试可传临时目录 */
   workspaceRoot?: string;
+  /** dsh 数据目录；默认 $DSH_HOME 或 ~/.dsh，测试可传临时目录 */
+  dshHome?: string;
+  /** 宿主身份文件；默认跟设备密钥同目录，测试可传临时文件 */
+  identityFile?: string;
+  /** 覆盖广播名称；默认 os.hostname() */
+  hostName?: string;
+  /** 关掉 mDNS（测试/受限网络） */
+  advertise?: boolean;
+  /** 宿主形态；HostService 会传 phone，桌面默认 desktop */
+  hostKind?: 'phone' | 'desktop';
 }
 
 const HOST_ID = 'host-real-dsh';
+
+interface WorkspaceView {
+  workspaceId?: string;
+  path?: string;
+  title?: string;
+  sessionIds?: string[];
+  createdAt?: number;
+  updatedAt?: number;
+}
 
 let seq = 0;
 const clients = new Set<WebSocket>();
@@ -129,7 +166,12 @@ function summarizeToolArgs(raw: unknown): string {
   return '';
 }
 
-function toSummary(item: RealSessionListItem): SessionSummary {
+function toSummary(
+  item: RealSessionListItem,
+  workspaceId?: string,
+  pinned = false,
+  hostId = HOST_ID,
+): SessionSummary {
   const v = item.projections?.values;
   const title = v?.title?.trim();
   const stats = v?.sessionStats;
@@ -141,12 +183,13 @@ function toSummary(item: RealSessionListItem): SessionSummary {
     id: item.sessionId,
     title: title && title.length > 0 ? title : '(未命名会话)',
     presetId: v?.agentPreset ?? 'standard',
-    workspaceId: basename(v?.workingDirectory ?? item.cwd) || 'workspace',
-    hostId: HOST_ID,
+    workspaceId: workspaceId || basename(v?.workingDirectory ?? item.cwd) || 'workspace',
+    hostId,
     status: item.running ? 'running' : 'idle',
     updatedAt: item.updatedAt,
     unread: 0,
     preview,
+    ...(pinned ? { pinned: true } : {}),
   };
 }
 
@@ -157,8 +200,122 @@ export interface RealBridge {
 
 export async function startRealBridge(options: RealBridgeOptions): Promise<RealBridge> {
   const workspaceRoot = options.workspaceRoot ?? PROOT_WORKSPACE_ROOT;
+  const dshHome = resolveDshHome(options.dshHome);
+  const identity = loadBridgeIdentity(options.identityFile, options.hostName);
+  const hostId = identity.hostId;
+  const hostKind = options.hostKind ?? (process.env.DSH_PALM_HOST_KIND === 'phone' ? 'phone' : 'desktop');
   const client = new DshRealClient(options.baseUrl, options.token);
   await client.login();
+
+  /** 已经删掉、但上游内存里可能还留着的会话：列表/详情/搜索都过滤掉 */
+  const tombstones = new Set<string>();
+  /** workspace/follow 的最新快照；列表和建会话都要用它做 session → workspace 映射 */
+  let workspaceViews: WorkspaceView[] = [];
+  let workspaceList: Workspace[] = [];
+  let pinnedSessions = new Set<string>();
+  let archivedSessions = new Set<string>();
+  /** 默认会话 cwd；文件页/终端用它当根，避免停在 /root/work 这层容器 */
+  let sessionCwd = '';
+  let workspaceFetch: Promise<WorkspaceView[]> | null = null;
+
+  function rebuildWorkspaceIndex(views: WorkspaceView[]): void {
+    workspaceViews = views;
+    const byIdByPath = new Map<string, string>();
+    const bySession = new Map<string, string>();
+    for (const view of views) {
+      const id = String(view.workspaceId ?? '');
+      const path = String(view.path ?? '');
+      if (!id) continue;
+      if (path) byIdByPath.set(path, id);
+      for (const sessionId of view.sessionIds ?? []) {
+        if (typeof sessionId === 'string' && sessionId) bySession.set(sessionId, id);
+      }
+    }
+    workspaceIdByPath = byIdByPath;
+    workspaceIdBySession = bySession;
+  }
+
+  let workspaceIdByPath = new Map<string, string>();
+  let workspaceIdBySession = new Map<string, string>();
+
+  /** 工作区快照的 sessionIds 又会变；映射每次刷新都重建 */
+  async function fetchWorkspaceViews(): Promise<WorkspaceView[]> {
+    if (workspaceFetch) return workspaceFetch;
+    workspaceFetch = new Promise<WorkspaceView[]>((resolve) => {
+      let done = false;
+      let dispose: (() => void) | null = null;
+      const finish = (list: WorkspaceView[]): void => {
+        if (done) return;
+        done = true;
+        if (dispose) dispose();
+        resolve(list);
+      };
+      dispose = client.openStream('workspace/follow', {}, (value) => {
+        const v = value as {
+          type?: string;
+          value?: {
+            items?: WorkspaceView[];
+            archivedSessionIds?: string[];
+            pinnedSessionIds?: string[];
+          };
+        };
+        if (v.type !== 'baseline') return;
+        archivedSessions = new Set((v.value?.archivedSessionIds ?? []).filter((id): id is string => typeof id === 'string'));
+        pinnedSessions = new Set((v.value?.pinnedSessionIds ?? []).filter((id): id is string => typeof id === 'string'));
+        finish(v.value?.items ?? []);
+      });
+      setTimeout(() => {
+        dispose?.();
+        finish([]);
+      }, 4_000);
+    }).finally(() => {
+      workspaceFetch = null;
+    });
+    return workspaceFetch;
+  }
+
+  async function refreshWorkspaces(): Promise<WorkspaceView[]> {
+    const views = await fetchWorkspaceViews().catch(() => [] as WorkspaceView[]);
+    if (views.length > 0) rebuildWorkspaceIndex(views);
+    workspaceList = views
+      .map((view) => ({
+        id: String(view.workspaceId ?? ''),
+        name: String(view.title ?? view.path ?? ''),
+        root: String(view.path ?? ''),
+        presetIds: [],
+      }))
+      .filter((workspace) => workspace.id.length > 0);
+    return views;
+  }
+
+  function sessionWorkingDir(item: RealSessionListItem): string {
+    return item.projections?.values?.workingDirectory ?? item.cwd ?? '';
+  }
+
+  function rememberSessionCwd(item: RealSessionListItem): void {
+    const cwd = sessionWorkingDir(item);
+    if (!sessionCwd && cwd) sessionCwd = cwd;
+  }
+
+  /** 文件页/终端的根：优先会话真实 cwd，而不是 /root/work 这层“项目容器” */
+  function activeWorkspaceRoot(): string {
+    if (sessionCwd) return sessionCwd;
+    const first = workspaceViews.find((view) => typeof view.path === 'string' && view.path.length > 0);
+    return first?.path ?? workspaceRoot;
+  }
+
+  function workspaceIdFor(item: RealSessionListItem): string {
+    const mapped = workspaceIdBySession.get(item.sessionId);
+    if (mapped) return mapped;
+    const cwd = item.projections?.values?.workingDirectory ?? item.cwd;
+    if (cwd) {
+      const byPath = workspaceIdByPath.get(cwd);
+      if (byPath) return byPath;
+    }
+    return basename(cwd) || 'workspace';
+  }
+
+  await refreshWorkspaces().catch(() => undefined);
 
   type PendingEvent = {
     eventId: string;
@@ -390,6 +547,85 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     return `${url.protocol}//${url.hostname}:${url.port || '80'}`;
   }
 
+  /**
+   * 浏览器 OAuth 的本地回调中继。
+   *
+   * 上游 dsh 的 /oauth/callback 只接受 code+state；用户拒绝授权时浏览器会
+   * 带 error=access_denied 回来，上游直接 400 并让 attempt 等到 600s 超时。
+   * 桥起一个自己的 loopback 端口：成功时把 query 原样转给上游，失败时立刻
+   * 调 account/cancelSignIn，让 App 的 1s 轮询马上看到 cancelled。
+   */
+  let signInRelay: { origin: string; close: () => Promise<void> } | null = null;
+
+  async function signInCallbackOrigin(): Promise<string> {
+    const upstreamOrigin = callbackOrigin();
+    if (!upstreamOrigin) {
+      throw Object.assign(new Error('这个宿主不在这台设备上，没法从手机完成登录'), {
+        code: 'unsupported' satisfies ProtocolError['code'],
+        hint: '连电脑时请在那台电脑的 dsh 界面里登录；手机只显示登录状态。',
+      });
+    }
+    if (signInRelay) return signInRelay.origin;
+
+    const relay = createServer((req, res) => {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      if (req.method !== 'GET' || url.pathname !== '/oauth/callback') {
+        res.writeHead(404, { 'cache-control': 'no-store' }).end();
+        return;
+      }
+      const error = url.searchParams.get('error');
+      if (error) {
+        // 不把 error_description 反射进 HTML；只给一个固定的人话页面。
+        void (async () => {
+          try {
+            const state = await accountRpc<{ attempt?: { id?: string } }>('account/getState', {});
+            const attemptId = state?.attempt?.id;
+            if (attemptId) await accountRpc('account/cancelSignIn', { attemptId });
+          } catch {
+            /* 取消失败也让浏览器看到固定页面；App 侧仍会走超时兜底 */
+          }
+        })();
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        res.end(
+          '<!doctype html><meta charset="utf-8"><title>已取消授权</title>'
+            + '<body style="font:16px system-ui;padding:32px">已取消授权，请回到锦囊重新登录。</body>',
+        );
+        return;
+      }
+
+      // 成功：保持 query 原样转发；上游只校验 code/state，不校验 Host。
+      const target = new URL('/oauth/callback', upstreamOrigin);
+      target.search = url.search;
+      void fetch(target, { redirect: 'manual' })
+        .then(async (upstream) => {
+          const body = Buffer.from(await upstream.arrayBuffer());
+          const headers: Record<string, string> = {};
+          upstream.headers.forEach((value, key) => {
+            if (key === 'content-length' || key === 'transfer-encoding') return;
+            headers[key] = value;
+          });
+          res.writeHead(upstream.status, headers);
+          res.end(body);
+        })
+        .catch(() => {
+          if (!res.headersSent) res.writeHead(502, { 'cache-control': 'no-store' });
+          res.end('登录回调转发失败，请回到锦囊重试。');
+        });
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      relay.once('error', reject);
+      relay.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = relay.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    signInRelay = {
+      origin: `http://127.0.0.1:${port}`,
+      close: () => new Promise<void>((resolve) => relay.close(() => resolve())),
+    };
+    return signInRelay.origin;
+  }
+
   /** 账号 RPC 都要带客户端身份（宿主的平台请求头由它派生） */
   const accountClient = () => ({
     version: '0.1.0',
@@ -532,8 +768,10 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     client.listSessions().catch(() => ({ items: [] as RealSessionListItem[] })),
   ]);
 
+  for (const item of sessionList.items) rememberSessionCwd(item);
   console.log(
-    `  已连上真 dsh：${sessionList.items.length} 个会话，${presetList.presets.length} 个宿主预设`,
+    `  已连上真 dsh：${sessionList.items.length} 个会话，${presetList.presets.length} 个宿主预设`
+      + (sessionCwd ? `，工作区 ${sessionCwd}` : ''),
   );
 
   const presets = presetList.presets.map((p) => presetFromId(p.id, p.isDefault));
@@ -544,17 +782,18 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     return {
       protocol: PROTOCOL_VERSION,
       host: {
-        id: HOST_ID,
-        kind: local ? 'phone' : 'desktop',
-        name: local ? '本机 dsh' : '真 dsh（桌面）',
+        id: hostId,
+        kind: hostKind,
+        name: identity.name,
         platform: 'dsh-web',
         engineVersion: '0.2.1-rc.5',
+        fingerprint: identity.fingerprint,
       },
       events: ['engine.status', 'session.created', 'session.updated', 'account.updated'],
       // 桥实际实现了这些动作；switch_preset 不在内（真宿主没有会话内换预设）
       actions: ['approve', 'reject', 'steer', 'stop', 'create_session'],
       presets,
-      workspaces: [],
+      workspaces: workspaceList,
       limits: { maxAttachmentMB: 20, maxFetchFileMB: 50 },
     };
   }
@@ -852,7 +1091,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
             .then(({ items }) => {
               const found = items.find((s) => s.sessionId === sessionId);
               if (found) {
-                const summary = toSummary(found);
+                const summary = toSummary(found, undefined, false, hostId);
                 summary.title = nextTitle;
                 broadcast('session.updated', { session: summary });
               }
@@ -1198,8 +1437,10 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
     'sessions.list': async () => {
       const { items } = await client.listSessions();
+      for (const item of items) rememberSessionCwd(item);
       const sessions = items
-        .map(toSummary)
+        .filter((item) => !tombstones.has(item.sessionId) && !archivedSessions.has(item.sessionId))
+        .map((item) => toSummary(item, workspaceIdFor(item), pinnedSessions.has(item.sessionId), hostId))
         .sort((a, b) => b.updatedAt - a.updatedAt);
       return { sessions };
     },
@@ -1207,7 +1448,9 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     'sessions.get': async ({ sessionId }) => {
       const { items } = await client.listSessions();
       const item = items.find((s) => s.sessionId === sessionId);
-      if (!item) throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
+      if (!item || tombstones.has(sessionId)) {
+        throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
+      }
 
       const snap = await client.snapshot(sessionId);
       const records = (snap?.records ?? []) as RealRecord[];
@@ -1215,7 +1458,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       const live = liveTurns.get(sessionId);
 
       const detail: SessionDetail = {
-        ...toSummary(item),
+        ...toSummary(item, workspaceIdFor(item), pinnedSessions.has(sessionId), hostId),
         turns: live ? mergeLiveTurn(proj.turns, live) : proj.turns,
         contract: { tools: [], net: 'allow' },
       };
@@ -1282,16 +1525,26 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { session: detail };
     },
 
-    // 真引擎建会话：先拿默认工作区，再提交一个客户端生成的 sessionId
-    'sessions.create': async ({ presetId, title }) => {
-      const ws = await client.rpc<{ workspace: { workspaceId: string; title?: string } }>(
-        'workspace/initializeDefault',
-        {},
-      );
+    // 真引擎建会话：工作区由客户端指定；没给才回退到默认工作区
+    'sessions.create': async ({ presetId, title, workspaceId: requestedWorkspaceId }) => {
+      let selectedWorkspaceId = String(requestedWorkspaceId ?? '').trim();
+      let workspaceTitle = '';
+      if (!selectedWorkspaceId) {
+        const ws = await client.rpc<{ workspace: { workspaceId: string; title?: string } }>(
+          'workspace/initializeDefault',
+          {},
+        );
+        selectedWorkspaceId = ws.workspace.workspaceId;
+        workspaceTitle = ws.workspace.title ?? '';
+      } else {
+        const known = workspaceViews.find((view) => view.workspaceId === selectedWorkspaceId);
+        workspaceTitle = known?.title ?? known?.path ?? '';
+      }
       const sessionId = 'session-' + crypto.randomUUID();
       await client.rpc('session/create', {
-        request: { workspaceId: ws.workspace.workspaceId, sessionId, agentPreset: presetId },
+        request: { workspaceId: selectedWorkspaceId, sessionId, agentPreset: presetId },
       });
+      workspaceIdBySession.set(sessionId, selectedWorkspaceId);
       const selection = await pickRoutableModel();
       if (selection) {
         await client
@@ -1311,12 +1564,12 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         id: sessionId,
         title: title ?? '新会话',
         presetId,
-        workspaceId: ws.workspace.title ?? ws.workspace.workspaceId,
-        hostId: HOST_ID,
+        workspaceId: selectedWorkspaceId,
+        hostId,
         status: 'idle',
         updatedAt: Date.now(),
         unread: 0,
-        preview: '',
+        preview: workspaceTitle,
       };
       broadcast('session.created', { session });
       return { session };
@@ -1404,7 +1657,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       const live = liveTurns.get(sessionId);
       return {
         session: {
-          ...toSummary(item),
+          ...toSummary(item, workspaceIdFor(item), pinnedSessions.has(sessionId), hostId),
           turns: live ? mergeLiveTurn(proj.turns, live) : proj.turns,
           contract: { tools: [], net: 'allow' },
         },
@@ -1413,6 +1666,15 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
     'sessions.pin': async ({ sessionId, pinned }) => {
       await client.rpc(pinned ? 'workspace/pinSession' : 'workspace/unpinSession', { sessionId });
+      if (pinned) pinnedSessions.add(sessionId);
+      else pinnedSessions.delete(sessionId);
+      const { items } = await client.listSessions();
+      const item = items.find((s) => s.sessionId === sessionId);
+      if (item) {
+        broadcast('session.updated', {
+          session: toSummary(item, workspaceIdFor(item), pinnedSessions.has(sessionId), hostId),
+        });
+      }
       return { ok: true as const };
     },
 
@@ -1421,55 +1683,176 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         sessionId,
         ...(archived ? { stopActivity: true } : {}),
       });
+      if (archived) archivedSessions.add(sessionId);
+      else archivedSessions.delete(sessionId);
       return { ok: true as const };
     },
 
-    'sessions.delete': async () => unsupported('sessions.delete'),
-    'sessions.search': async () => unsupported('sessions.search'),
-    'shell.run': async () => unsupported('shell.run'),
+    'sessions.delete': async ({ sessionId }) => {
+      const { items } = await client.listSessions();
+      const item = items.find((s) => s.sessionId === sessionId);
+      if (!item) {
+        throw Object.assign(new Error('会话不存在'), { code: 'not_found' satisfies ProtocolError['code'] });
+      }
+      const pending = [...pendingEvents.values()].some((event) => event.sessionId === sessionId)
+        || [...pendingQuestions.values()].some((question) => question.sessionId === sessionId);
+      if (item.running || pending) {
+        throw Object.assign(new Error('这个会话正在运行，先停止再删除'), {
+          code: 'bad_request' satisfies ProtocolError['code'],
+        });
+      }
+
+      const cwd = item.projections?.values?.workingDirectory ?? item.cwd ?? '';
+      const dir = (await sessionDirFor(dshHome, cwd, sessionId)) ?? (await findSessionDir(dshHome, sessionId));
+      if (dir) await deleteSessionDir(dir);
+
+      // 上游没有 delete API：用 tombstone 立刻从列表/详情/搜索里隐藏；
+      // 目录删掉后即使宿主内存里还留着会话，也不会再被写回。
+      tombstones.add(sessionId);
+      workspaceIdBySession.delete(sessionId);
+      pinnedSessions.delete(sessionId);
+      archivedSessions.delete(sessionId);
+      liveTurns.delete(sessionId);
+      finishedRuns.delete(sessionId);
+      if (followSessionId === sessionId) {
+        followDispose?.();
+        followDispose = null;
+        followSessionId = null;
+        liveTurn = null;
+      }
+      for (const [id, event] of pendingEvents) {
+        if (event.sessionId === sessionId) pendingEvents.delete(id);
+      }
+      for (const [id, question] of pendingQuestions) {
+        if (question.sessionId === sessionId) pendingQuestions.delete(id);
+      }
+      return { ok: true as const };
+    },
+
+    'sessions.search': async ({ query, limit }) => {
+      const q = query.trim().toLowerCase();
+      if (!q) {
+        throw Object.assign(new Error('搜索词不能为空'), { code: 'bad_request' satisfies ProtocolError['code'] });
+      }
+      if (q.length > 100) {
+        throw Object.assign(new Error('搜索词太长'), { code: 'bad_request' satisfies ProtocolError['code'] });
+      }
+      const max = Math.min(Math.max(Math.trunc(limit ?? 20), 1), 50);
+      const { items } = await client.listSessions();
+      const results: Array<{
+        sessionId: string;
+        title: string;
+        snippet: string;
+        updatedAt: number;
+        matches: number;
+      }> = [];
+
+      for (const item of items) {
+        if (tombstones.has(item.sessionId)) continue;
+        const cwd = item.projections?.values?.workingDirectory ?? item.cwd ?? '';
+        const dir =
+          (await sessionDirFor(dshHome, cwd, item.sessionId)) ?? (await findSessionDir(dshHome, item.sessionId));
+        if (!dir) continue;
+        const log = await latestSessionLog(dir).catch(() => null);
+        if (!log) continue;
+        let records: RealRecord[];
+        try {
+          records = readSessionLogBuffer(await readSessionLogFile(log.path));
+        } catch {
+          continue;
+        }
+        const projected = projectRecords(records, { finalizeUnfinished: !item.running });
+        const summary = toSummary(item, workspaceIdFor(item), pinnedSessions.has(item.sessionId), hostId);
+        const text = buildSessionSearchText(
+          [summary.title, projected.title ?? ''].filter(Boolean).join('\n'),
+          projected.turns,
+        );
+        const match = matchSessionText(text, q);
+        if (!match) continue;
+        results.push({
+          sessionId: item.sessionId,
+          title: summary.title,
+          snippet: match.snippet,
+          updatedAt: item.updatedAt,
+          matches: match.matches,
+        });
+      }
+      results.sort((a, b) => b.updatedAt - a.updatedAt);
+      return { results: results.slice(0, max) };
+    },
+
+    'shell.run': async ({ command }) => {
+      const text = String(command ?? '');
+      if (!text.trim()) {
+        throw Object.assign(new Error('命令不能为空'), { code: 'bad_request' satisfies ProtocolError['code'] });
+      }
+      if (text.length > 2_000) {
+        throw Object.assign(new Error('命令太长（最多 2000 字）'), {
+          code: 'bad_request' satisfies ProtocolError['code'],
+        });
+      }
+      const mount = await createWorkspaceMount({
+        backend: makeNodeBackend(activeWorkspaceRoot()),
+        readOnly: true,
+      });
+      const runner = new ShellRunnerClass({
+        fs: mount.fs,
+        cwd: '/workspace',
+        timeoutMs: 15_000,
+        maxOutputChars: 20_000,
+        beforeRun: () => mount.workspace.refreshIndex(),
+      });
+      const result = await runner.run(text);
+      return {
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+        ms: result.ms,
+        timedOut: result.timedOut,
+        truncated: result.truncated,
+      };
+    },
 
     'workspaces.list': async () => {
-      // workspace/follow 的第一帧是 baseline，里面就是工作区清单
-      type WorkspaceView = { workspaceId?: string; path?: string; title?: string };
-      const items = await new Promise<WorkspaceView[]>((resolve) => {
-        let done = false;
-        const finish = (list: WorkspaceView[]): void => {
-          if (done) return;
-          done = true;
-          resolve(list);
-        };
-        const dispose = client.openStream('workspace/follow', {}, (value) => {
-          const v = value as { type?: string; value?: { items?: WorkspaceView[] } };
-          if (v.type === 'baseline') finish(v.value?.items ?? []);
-        });
-        setTimeout(() => {
-          dispose();
-          finish([]);
-        }, 4000);
-      });
-      const workspaces: Workspace[] = items
-        .map((item) => ({
-          id: String(item.workspaceId ?? ''),
-          name: String(item.title ?? item.path ?? ''),
-          root: String(item.path ?? ''),
-          presetIds: [],
-        }))
-        .filter((w) => w.id.length > 0);
-      return { workspaces };
+      await refreshWorkspaces();
+      return { workspaces: workspaceList };
     },
 
     'workspaces.create': async ({ path }) => {
-      const created = await client.rpc<{ workspace?: { workspaceId?: string; path?: string; title?: string } }>(
+      const raw = String(path ?? '').trim();
+      if (!raw) {
+        throw Object.assign(new Error('工作区名称不能为空'), { code: 'bad_request' satisfies ProtocolError['code'] });
+      }
+      const rootPath = resolve(workspaceRoot);
+      const absolute = raw.startsWith('/') ? resolve(raw) : resolve(rootPath, raw);
+      try {
+        await stat(absolute);
+      } catch {
+        // 手机上的新工作区只允许落在 /root/work 下；其他路径必须是已存在的目录。
+        if (absolute !== rootPath && !absolute.startsWith(rootPath + sep)) {
+          throw Object.assign(new Error('新工作区路径必须在工作区根目录下'), {
+            code: 'bad_request' satisfies ProtocolError['code'],
+          });
+        }
+        await mkdir(absolute, { recursive: true });
+      }
+      const created = await client.rpc<{ workspace?: WorkspaceView }>(
         'workspace/create',
-        { request: { path } },
+        { request: { path: absolute } },
       );
-      const w = created.workspace ?? {};
+      const view = created.workspace ?? {};
       const workspace: Workspace = {
-        id: String(w.workspaceId ?? ''),
-        name: String(w.title ?? w.path ?? path),
-        root: String(w.path ?? path),
+        id: String(view.workspaceId ?? ''),
+        name: String(view.title ?? view.path ?? absolute),
+        root: String(view.path ?? absolute),
         presetIds: [],
       };
+      if (workspace.id) {
+        workspaceViews = [...workspaceViews.filter((item) => item.workspaceId !== workspace.id), view];
+        rebuildWorkspaceIndex(workspaceViews);
+        workspaceIdByPath.set(workspace.root, workspace.id);
+        workspaceList = [...workspaceList.filter((item) => item.id !== workspace.id), workspace];
+      }
       return { workspace };
     },
     'attachments.upload': async ({ sessionId, data, name }) => {
@@ -1514,7 +1897,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       });
       const live = liveTurns.get(sessionId);
       const detail: SessionDetail = {
-        ...toSummary(item),
+        ...toSummary(item, undefined, false, hostId),
         turns: live ? mergeLiveTurn(proj.turns, live) : proj.turns,
         contract: { tools: [], net: 'allow' },
       };
@@ -1588,7 +1971,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       });
       const live = liveTurns.get(sessionId);
       const detail: SessionDetail = {
-        ...toSummary(item),
+        ...toSummary(item, undefined, false, hostId),
         turns: live ? mergeLiveTurn(proj.turns, live) : proj.turns,
         contract: { tools: [], net: 'allow' },
       };
@@ -1714,13 +2097,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     },
 
     'account.signIn': async () => {
-      const origin = callbackOrigin();
-      if (!origin) {
-        throw Object.assign(new Error('这个宿主不在这台设备上，没法从手机完成登录'), {
-          code: 'unsupported' satisfies ProtocolError['code'],
-          hint: '连电脑时请在那台电脑的 dsh 界面里登录；手机只显示登录状态。',
-        });
-      }
+      const origin = await signInCallbackOrigin();
       startAccountWatch();
       // 实测：account/startSignIn 是真正的方法名（login / signIn / startLogin 都不存在）
       const account = asAccountState(
@@ -1821,13 +2198,13 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return { providers: await providerRows() };
     },
 
-    'fs.list': async ({ path }: { path?: string }) => listWorkspace(workspaceRoot, path),
+    'fs.list': async ({ path }: { path?: string }) => listWorkspace(activeWorkspaceRoot(), path),
     'fs.rename': async ({ path, to }: { path: string; to: string }) => {
-      await renameWorkspace(workspaceRoot, path, to);
+      await renameWorkspace(activeWorkspaceRoot(), path, to);
       return { ok: true as const };
     },
     'fs.delete': async ({ path }: { path: string }) => {
-      await deleteWorkspace(workspaceRoot, path);
+      await deleteWorkspace(activeWorkspaceRoot(), path);
       return { ok: true as const };
     },
 
@@ -1842,7 +2219,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   const http = createServer((req, res) => {
     if (req.url === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, bridge: 'real', host: HOST_ID }));
+      res.end(JSON.stringify({ ok: true, bridge: 'real', host: hostId, name: identity.name }));
       return;
     }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
@@ -1880,7 +2257,13 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     ws.on('close', () => clients.delete(ws));
     if (issuedKey) {
       // 客户端收到后自己存起来，下次用 ?key= 连
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'event', event: 'device.paired', data: { key: issuedKey } }));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'event',
+          event: 'device.paired',
+          data: { key: issuedKey, hostId },
+        }));
+      }
     }
     broadcast('engine.status', { state: 'ready' });
 
@@ -1930,15 +2313,30 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   const addr = http.address();
   const port = typeof addr === 'object' && addr ? addr.port : (options.port ?? 8788);
 
+  let advertiser: BridgeAdvertiser | null = null;
+  if (options.advertise !== false) {
+    advertiser = advertiseBridge({
+      port,
+      hostId,
+      name: identity.name,
+      kind: hostKind,
+      fingerprint: identity.fingerprint,
+    });
+  }
+
   return {
     port,
     close: () =>
       new Promise<void>((resolve) => {
+        advertiser?.close();
+        advertiser = null;
         eventsDispose?.();
         accountWatchDispose?.();
         accountWatchDispose = null;
         followDispose?.();
         followDispose = null;
+        void signInRelay?.close();
+        signInRelay = null;
         for (const ws of clients) ws.close();
         wss.close();
         http.close(() => resolve());

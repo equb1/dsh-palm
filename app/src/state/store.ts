@@ -234,6 +234,8 @@ export interface AppState {
   defaultPermission?: string;
   /** 这台设备的配对密钥（配对成功后自动存下来） */
   deviceKey: string | null;
+  /** 最近一次远程宿主（M3.2）：用于断线后重连和离线提示 */
+  remoteHost: { url: string; name: string; hostId: string; lastSeenAt: number } | null;
   /** 宿主注册过的工作区 */
   workspaces: Workspace[];
   /** 已上传或暂存、等着跟下一条消息一起发的附件 */
@@ -423,6 +425,7 @@ export class Store {
     permissions: [],
     defaultPermission: undefined,
     deviceKey: null,
+    remoteHost: null,
     workspaces: [],
     pendingAttachments: [],
     connectModalOpen: false,
@@ -833,6 +836,7 @@ export class Store {
         collapseProcess: this.state.collapseProcess,
         chatFontScale: this.state.chatFontScale,
         themeMode: this.state.themeMode,
+        remoteHost: this.state.remoteHost,
       });
       void writeHostUiCache(payload);
     } catch {
@@ -860,6 +864,7 @@ export class Store {
           collapseProcess?: boolean;
           chatFontScale?: number;
           themeMode?: ThemeMode;
+          remoteHost?: { url: string; name: string; hostId: string; lastSeenAt: number } | null;
         };
         if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
           nextPatch.sessions = parsed.sessions;
@@ -909,6 +914,14 @@ export class Store {
         if (parsed.prewarmTier === 'trigger' || parsed.prewarmTier === 'smart' || parsed.prewarmTier === 'always') {
           nextPatch.prewarmTier = parsed.prewarmTier;
           this.emitEngine({ type: 'SET_TIER', tier: parsed.prewarmTier });
+        }
+        if (
+          parsed.remoteHost
+          && typeof parsed.remoteHost.url === 'string'
+          && typeof parsed.remoteHost.name === 'string'
+          && typeof parsed.remoteHost.hostId === 'string'
+        ) {
+          nextPatch.remoteHost = parsed.remoteHost;
         }
       }
       if (Object.keys(nextPatch).length > 0) this.patch(nextPatch);
@@ -1121,6 +1134,16 @@ export class Store {
         draftPresetId: this.state.draftPresetId ?? caps.presets[0]?.id ?? null,
       });
       await this.refreshSessions();
+      if (link === 'remote' && this.state.url.trim()) {
+        this.patch({
+          remoteHost: {
+            url: this.state.url.trim(),
+            name: caps.host.name,
+            hostId: caps.host.id,
+            lastSeenAt: Date.now(),
+          },
+        });
+      }
       void ensureNotificationPermission();
       // 连上就把模型/权限/工作区拉到本地：头部徽标和新会话要立刻可用
       void this.refreshModels();
@@ -2635,6 +2658,22 @@ export class Store {
     }
   }
 
+  /** 新建工作区：完整引擎可创建在 /root/work 下，轻引擎显式不支持 */
+  async createWorkspace(path: string): Promise<boolean> {
+    if (!this.client) return false;
+    const name = path.trim();
+    if (!name) return false;
+    try {
+      const { workspace } = await this.client.request('workspaces.create', { path: name });
+      const workspaces = [...this.state.workspaces.filter((item) => item.id !== workspace.id), workspace];
+      this.patch({ workspaces, error: null });
+      return true;
+    } catch (error) {
+      this.setError(humanizeError(error));
+      return false;
+    }
+  }
+
   /** 完整引擎返回的 detail 只取状态/模型/权限，逻辑会话的合并回合不能丢 */
   private mergePhysicalDetail(session: SessionDetail): SessionDetail {
     const current = this.state.detail;
@@ -3298,7 +3337,11 @@ export class Store {
     this.notifiedApprovals.add(approval.id);
     const title = approval.kind === 'question' ? '有个问题等你回答' : '需要你确认操作';
     const body = approval.summary ? `${approval.title}：${approval.summary}` : approval.title;
-    void notifyEvent(title, body, `approval:${approval.sessionId}:${approval.id}`);
+    void notifyEvent(title, body, `approval:${approval.sessionId}:${approval.id}`, {
+      sessionId: approval.sessionId,
+      approvalId: approval.id,
+      engine: this.state.engineKind === 'light' ? 'light' : 'full',
+    });
   }
 
   private notifyRunFinished(data: { sessionId: string; reason: string; preview?: string; error?: string }): void {
@@ -3313,6 +3356,7 @@ export class Store {
         `会话出错 · ${sessionTitle}`,
         data.error || '执行过程中遇到错误，点击查看详情',
         `run:${data.sessionId}`,
+        { sessionId: data.sessionId, engine: this.state.engineKind === 'light' ? 'light' : 'full' },
       );
       return;
     }
@@ -3320,6 +3364,7 @@ export class Store {
       `回复完成 · ${sessionTitle}`,
       data.preview || '已完成本轮回复，点击查看',
       `run:${data.sessionId}`,
+      { sessionId: data.sessionId, engine: this.state.engineKind === 'light' ? 'light' : 'full' },
     );
   }
 

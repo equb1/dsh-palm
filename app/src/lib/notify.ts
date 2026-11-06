@@ -10,7 +10,18 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   return false;
 }
 
+export interface NotifyRoute {
+  sessionId?: string;
+  engine?: 'light' | 'full';
+  approvalId?: string;
+}
+
 /** 发一条本地通知；tag 相同会覆盖同一条 */
-export async function notifyEvent(_title: string, _body: string, _tag?: string): Promise<boolean> {
+export async function notifyEvent(
+  _title: string,
+  _body: string,
+  _tag?: string,
+  _route?: NotifyRoute,
+): Promise<boolean> {
   return false;
 }

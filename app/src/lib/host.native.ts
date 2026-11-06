@@ -21,6 +21,16 @@ export interface HostStatus {
   pairCode?: string | null;
 }
 
+export interface DiscoveredHost {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  kind: 'phone' | 'desktop' | 'server' | string;
+  fingerprint?: string;
+  version?: string;
+}
+
 interface HostNativeModule {
   start(engineCmd: string | null, bridgeCmd: string | null, port: number): Promise<boolean>;
   stop(): Promise<boolean>;
@@ -38,6 +48,13 @@ interface HostNativeModule {
   deviceConditions?(): Promise<{ charging: boolean; wifi: boolean }>;
   /** 分享一个工作区文件（content:// URI，由 expo File.contentUri 生成） */
   shareFile?(contentUri: string, mime: string | null, title: string | null): Promise<boolean>;
+  /** M3.2 局域网发现 */
+  requestLanPermission?(): Promise<boolean>;
+  discoverLanHosts?(timeoutMs: number): Promise<DiscoveredHost[]>;
+  stopLanDiscovery?(): Promise<boolean>;
+  requestPinWidget?(): Promise<boolean>;
+  requestAddTile?(): Promise<boolean>;
+  getSystemEntryStatus?(): Promise<{ widgetCount: number; overlayAllowed: boolean } | null>;
 }
 
 const native: HostNativeModule | null =
@@ -69,6 +86,64 @@ export async function deviceConditions(): Promise<DeviceConditions | null> {
     const result = await native.deviceConditions();
     if (!result || typeof result.charging !== 'boolean' || typeof result.wifi !== 'boolean') return null;
     return { charging: result.charging, wifi: result.wifi };
+  } catch {
+    return null;
+  }
+}
+
+export async function requestLanPermission(): Promise<boolean> {
+  if (!native?.requestLanPermission) return false;
+  try {
+    return await native.requestLanPermission();
+  } catch {
+    return false;
+  }
+}
+
+export async function discoverLanHosts(timeoutMs = 4000): Promise<DiscoveredHost[]> {
+  if (!native?.discoverLanHosts) return [];
+  try {
+    const list = await native.discoverLanHosts(timeoutMs);
+    return Array.isArray(list) ? list.filter((item) => item && item.host && item.port > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function stopLanDiscovery(): Promise<boolean> {
+  if (!native?.stopLanDiscovery) return false;
+  try {
+    return await native.stopLanDiscovery();
+  } catch {
+    return false;
+  }
+}
+
+export async function requestPinWidget(): Promise<boolean> {
+  if (!native?.requestPinWidget) return false;
+  try {
+    return await native.requestPinWidget();
+  } catch {
+    return false;
+  }
+}
+
+export async function requestAddTile(): Promise<boolean> {
+  if (!native?.requestAddTile) return false;
+  try {
+    return await native.requestAddTile();
+  } catch {
+    return false;
+  }
+}
+
+export async function systemEntryStatus(): Promise<{
+  widgetCount: number;
+  overlayAllowed: boolean;
+} | null> {
+  if (!native?.getSystemEntryStatus) return null;
+  try {
+    return await native.getSystemEntryStatus();
   } catch {
     return null;
   }
