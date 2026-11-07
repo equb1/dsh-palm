@@ -1238,7 +1238,7 @@ export class Store {
     if (!this.client) return;
     try {
       const { sessions: incoming } = await this.client.request('sessions.list', {});
-      const links = this.state.links;
+      const links = this.state.engineKind === 'remote' ? [] : this.state.links;
       const visible: SessionSummary[] = [];
       const seen = new Set<string>();
       for (const session of incoming) {
@@ -1338,14 +1338,34 @@ export class Store {
     );
   }
 
+  async disconnectAndSwitchToLight(): Promise<void> {
+    this.closeEngines();
+    this.patch({
+      conn: 'closed',
+      engineKind: null,
+      connectModalOpen: false,
+      error: null,
+    });
+    this.emitEngine({ type: 'LINK_LOST', error: '已断开远程电脑', now: this.now() });
+    await this.connectLightEffect();
+  }
+
   /** M2.6：点另一个引擎的会话先切引擎（完整会起 proot），再按原 id 打开 */
   async openSessionRow(id: string, engine: SessionEngine): Promise<void> {
-    if (!this.client) return;
     const current = this.sessionEngine();
     if (current !== engine) {
-      const ok = await this.switchEngine(engine);
-      if (!ok) return;
+      if (this.state.engineKind === 'remote' && engine === 'light') {
+        // 当前连着电脑，但用户点击了手机本机的轻引擎会话：断开远程并平滑切回轻引擎打开
+        await this.disconnectAndSwitchToLight();
+      } else if (engine === 'full' && this.state.remoteHost?.url) {
+        // 如果点的是电脑上的会话，自动连接电脑
+        await this.connect(this.state.remoteHost.url);
+      } else {
+        const ok = await this.switchEngine(engine);
+        if (!ok) return;
+      }
     }
+    if (!this.client) return;
     await this.openSession(id);
   }
 
@@ -1852,6 +1872,11 @@ export class Store {
       // 分享方没给读权限 / 文件被删：别让未捕获的 Promise 抛到红屏，给人话提示
       this.setError(err instanceof Error ? err.message : '读取分享内容失败');
     }
+  }
+
+  setPendingShareText(text: string): void {
+    if (!text) return;
+    this.patch({ pendingShare: { text } });
   }
 
   /** 首页取走分享来的文字（取完清掉，只填一次输入框） */

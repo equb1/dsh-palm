@@ -68,11 +68,11 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
     const handle = (url: string | null): void => {
       if (url?.includes('source=widget') || url?.includes('source=shortcut') || url?.includes('source=pet_float')) {
         const draftMatch = url.match(/[?&]draft=([^&]+)/);
-        const draftText = draftMatch ? decodeURIComponent(draftMatch[1]) : '';
+        const draftText = draftMatch?.[1] ? decodeURIComponent(draftMatch[1]) : '';
         const autoSend = url.includes('autoSend=true');
 
-        if (url.includes('newChat=true') || !state.activeSessionId || draftText) {
-          store.createSessionDraft();
+        if (url.includes('newChat=true') || state.currentId || draftText) {
+          store.closeSession();
         }
         if (draftText) {
           if (autoSend) {
@@ -114,6 +114,11 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
 
   React.useEffect(() => {
     const onBackPress = (): boolean => {
+      // 0. 内置应用网页浏览器：优先关闭浏览器
+      if (state.inAppBrowserUrl) {
+        store.closeInAppBrowser();
+        return true;
+      }
       // 1. 如果在设置页，返回首页
       if (state.view === 'settings') {
         store.closeSettings();
@@ -165,7 +170,7 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [state.view, state.connectModalOpen, state.detail]);
+  }, [state.view, state.connectModalOpen, state.detail, state.inAppBrowserUrl]);
 
   const screen =
     state.view === 'plugins' ? (

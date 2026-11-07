@@ -136,10 +136,16 @@ export function canSwitch(state: EngineSnapshot, target?: EngineTarget): { ok: b
   if (state.busy) return { ok: false, reason: '正在执行回合，等这一轮结束再切换引擎' };
   if (state.pendingApprovals > 0) return { ok: false, reason: '还有审批/提问等着处理，处理完再切换引擎' };
   if (state.mode === 'starting-proot') return { ok: false, reason: '完整引擎正在启动，请稍候' };
-  if (state.link === 'remote') return { ok: false, reason: '当前连着另一台电脑的宿主，先断开再切换引擎' };
+  if (state.link === 'remote' && target !== 'light') {
+    return { ok: false, reason: '当前连着另一台电脑的宿主，先断开再切换引擎' };
+  }
   const wanted = target ?? (state.mode === 'full' ? 'light' : 'full');
-  if (wanted === 'full' && state.mode === 'full') return { ok: false, reason: '已经是完整引擎' };
-  if (wanted === 'light' && state.mode === 'light') return { ok: false, reason: '已经是轻引擎' };
+  if (wanted === 'full' && state.mode === 'full' && (state.link === 'remote' || state.link === 'proot')) {
+    return { ok: false, reason: '已经是完整引擎' };
+  }
+  if (wanted === 'light' && state.mode === 'light' && state.link === 'light') {
+    return { ok: false, reason: '已经是轻引擎' };
+  }
   return { ok: true };
 }
 

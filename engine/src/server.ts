@@ -1,4 +1,7 @@
 import { createServer, type Server } from 'node:http';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer, WebSocket } from 'ws';
 
@@ -19,9 +22,10 @@ import type {
   SessionDetail,
   SessionSummary,
   Turn,
+  Workspace,
 } from '../../app/src/protocol';
 import { PROTOCOL_VERSION } from '../../app/src/protocol';
-import { PRESETS, SCRIPTS, WORKSPACES, presetById } from './presets';
+import { PRESETS, SCRIPTS, WORKSPACES, presetById, type ScriptStep } from './presets';
 
 /* ------------------------------------------------------------------ *
  * 内存状态
@@ -172,7 +176,144 @@ function seedSessions(): void {
   }
 }
 
-seedSessions();
+function cleanPromptText(raw: string): string {
+  if (!raw) return '';
+  const match = raw.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/i);
+  const text = match?.[1] ? match[1].trim() : raw.trim();
+  return text.replace(/^\/[a-z0-9_-]+\s*/i, '').trim() || text;
+}
+
+let currentWorkspaces: Workspace[] = [...WORKSPACES];
+
+function loadRealDshSessions(): void {
+  try {
+    const dshDir = path.join(os.homedir(), '.dsh');
+    const wsFile = path.join(dshDir, 'storages', 'workspace.json');
+    const cacheDir = path.join(dshDir, 'storages', 'session_projcache', 'sessions');
+    if (!fs.existsSync(wsFile) || !fs.existsSync(cacheDir)) {
+      return;
+    }
+
+    const wsData = JSON.parse(fs.readFileSync(wsFile, 'utf-8'));
+    const loadedWorkspaces: Workspace[] = [];
+    const loadedSessions: SessionState[] = [];
+
+    const tables = wsData?.tables?.workspaces ?? {};
+    for (const [wsId, ws] of Object.entries<any>(tables)) {
+      const wsTitle = ws.title === 'default-workspace' ? '默认工作区' : (ws.title || '工作区');
+      loadedWorkspaces.push({
+        id: wsId,
+        name: wsTitle,
+        root: ws.path || '',
+        presetIds: ['code', 'standard'],
+      });
+
+      const sessionIds = Array.isArray(ws.sessionIds) ? ws.sessionIds : [];
+      for (const sId of sessionIds) {
+        const jsonPath = path.join(cacheDir, `${sId}.json`);
+        if (!fs.existsSync(jsonPath)) continue;
+
+        try {
+          const stat = fs.statSync(jsonPath);
+          const d = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+          const rows = d.record?.rows ?? {};
+          const title = rows.title?.val || sId;
+          const outlineTurns = rows.turnOutline?.val?.turns || [];
+          const previewRaw = rows.titleInput?.val?.first?.text || (outlineTurns[0]?.prompt) || '';
+          const preview = cleanPromptText(previewRaw).slice(0, 100) || '点击查看会话内容';
+          const updatedAt = rows.timeContext?.val?.lastMessageTime || stat.mtimeMs;
+
+          const turns: Turn[] = [];
+          let tIdx = 1;
+          for (const item of outlineTurns) {
+            const time = (updatedAt - (outlineTurns.length - tIdx) * 60_000);
+            if (item.prompt) {
+              turns.push({
+                id: `turn_u_${tIdx}`,
+                role: 'user',
+                createdAt: time,
+                status: 'done',
+                blocks: [
+                  {
+                    kind: 'text',
+                    id: `b_u_${tIdx}`,
+                    text: item.prompt,
+                  },
+                ],
+              });
+            }
+            if (item.response) {
+              turns.push({
+                id: `turn_a_${tIdx}`,
+                role: 'assistant',
+                createdAt: time + 500,
+                status: 'done',
+                blocks: [
+                  {
+                    kind: 'text',
+                    id: `b_a_${tIdx}`,
+                    text: item.response,
+                  },
+                ],
+              });
+            }
+            tIdx++;
+          }
+
+          if (turns.length === 0) {
+            turns.push({
+              id: `turn_u_init`,
+              role: 'user',
+              createdAt: updatedAt,
+              status: 'done',
+              blocks: [
+                {
+                  kind: 'text',
+                  id: `b_u_init`,
+                  text: title,
+                },
+              ],
+            });
+          }
+
+          loadedSessions.push({
+            summary: {
+              id: sId,
+              title,
+              presetId: 'code',
+              workspaceId: wsId,
+              hostId: HOST_ID,
+              status: 'idle',
+              updatedAt,
+              unread: 0,
+              preview,
+            },
+            turns,
+            contract: presetById('code').contract,
+          });
+        } catch (err) {
+          console.warn('[engine] 解析 DSH 会话失败：', sId, err);
+        }
+      }
+    }
+
+    if (loadedSessions.length > 0) {
+      sessions.clear();
+      for (const s of loadedSessions) {
+        sessions.set(s.summary.id, s);
+      }
+      if (loadedWorkspaces.length > 0) {
+        currentWorkspaces = loadedWorkspaces;
+      }
+      console.log(`[engine] 成功从 ~/.dsh 加载 ${loadedSessions.length} 个真实电脑会话及 ${loadedWorkspaces.length} 个工作区！`);
+    }
+  } catch (err) {
+    console.warn('[engine] 读取 DSH 数据失败：', err);
+  }
+}
+
+// 不再载入 mock 的合同或发票测试数据，只保留真实 DSH 电脑数据
+loadRealDshSessions();
 
 /* ------------------------------------------------------------------ *
  * 工具
@@ -229,7 +370,7 @@ function capabilities(): Capabilities {
     ],
     actions: ['approve', 'reject', 'steer', 'stop', 'switch_preset', 'create_session'],
     presets: PRESETS,
-    workspaces: WORKSPACES,
+    workspaces: currentWorkspaces,
     limits: { maxAttachmentMB: 20, maxFetchFileMB: 50 },
   };
 }
@@ -264,7 +405,14 @@ function waitApproval(approval: Approval): Promise<ApprovalDecision> {
 async function runScript(session: SessionState, userText: string, runId: string): Promise<void> {
   const sessionId = session.summary.id;
   const turnId = newId('turn');
-  const script = SCRIPTS[session.summary.presetId] ?? SCRIPTS.doc ?? [];
+  const script: ScriptStep[] = SCRIPTS[session.summary.presetId] ?? [
+    { kind: 'thinking', text: `正在连接电脑端 DSH 宿主处理：「${userText}」...`, ms: 300 },
+    {
+      kind: 'text',
+      text: `已收到指令：「${userText}」。\n\n已与电脑端当前会话（${session.summary.title}）同步。`,
+      ms: 400,
+    },
+  ];
 
   const turn: Turn = {
     id: turnId,
@@ -429,6 +577,7 @@ const handlers: { [M in Method]: Handler<M> } = {
   },
 
   'sessions.list': ({ limit }) => {
+    loadRealDshSessions();
     const list = [...sessions.values()]
       .map((s) => s.summary)
       .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -437,6 +586,7 @@ const handlers: { [M in Method]: Handler<M> } = {
   },
 
   'sessions.get': ({ sessionId }) => {
+    loadRealDshSessions();
     const s = requireSession(sessionId);
     const detail: SessionDetail = {
       ...s.summary,
@@ -648,7 +798,7 @@ const handlers: { [M in Method]: Handler<M> } = {
 
   'presets.list': () => ({ presets: PRESETS }),
 
-  'workspaces.list': () => ({ workspaces: WORKSPACES }),
+  'workspaces.list': () => ({ workspaces: currentWorkspaces }),
 
   'credentials.describe': ({ refs }) => ({
     credentials: Object.fromEntries(

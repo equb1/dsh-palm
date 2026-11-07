@@ -78,10 +78,31 @@ function SideTag({ link }: { link?: ConversationLink }): React.ReactElement | nu
   );
 }
 
-/** 另一个引擎的会话：行上标「轻/完整」，点了先切引擎再打开 */
-function EngineTag({ engine }: { engine: SessionRow['engine'] }): React.ReactElement {
+/** 会话所属引擎标签：连电脑时标「💻 电脑 / 📱 手机」；手机本地时标「完整 / 轻」 */
+function EngineTag({
+  engine,
+  isRemote,
+}: {
+  engine: SessionRow['engine'];
+  isRemote?: boolean;
+}): React.ReactElement {
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
+  if (isRemote) {
+    const isPc = engine === 'full';
+    return (
+      <View
+        style={[
+          styles.tag,
+          { backgroundColor: isPc ? palette.blueSoft : palette.glassStrong },
+        ]}
+      >
+        <Text style={[styles.tagText, { color: isPc ? palette.blue : palette.textDim, fontWeight: isPc ? '600' : '400' }]}>
+          {isPc ? '💻 电脑' : '📱 手机'}
+        </Text>
+      </View>
+    );
+  }
   const full = engine === 'full';
   return (
     <View style={[styles.tag, { backgroundColor: full ? palette.blueSoft : palette.glassStrong }]}>
@@ -315,7 +336,11 @@ export function SessionDrawer({
             <Text style={styles.rowPreview} numberOfLines={1}>
               {s.preview || preset?.name || ''}
             </Text>
-            {otherEngine ? <EngineTag engine={s.engine} /> : null}
+            {state.engineKind === 'remote' ? (
+              <EngineTag engine={s.engine} isRemote={true} />
+            ) : otherEngine ? (
+              <EngineTag engine={s.engine} />
+            ) : null}
             <SideTag link={link} />
             <StatusTag s={s} />
             {state.sessionFolders[s.id] ? (
@@ -431,24 +456,64 @@ export function SessionDrawer({
           </View>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="连接电脑主机"
-          onPress={() => {
-            onClose();
-            store.openConnectModal();
-          }}
-          style={({ pressed }) => [styles.hostBanner, pressed && { opacity: 0.75 }]}
-        >
-          <View style={styles.hostBannerIcon}>
-            <BrandIcon name="laptop" size={16} color={palette.blue} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.hostBannerTitle}>电脑主机 (Remote Host)</Text>
-            <Text style={styles.hostBannerSub} numberOfLines={1}>同一局域网扫码或填 IP，连电脑 dsh</Text>
-          </View>
-          <BrandIcon name="external" size={13} color={palette.textFaint} />
-        </Pressable>
+        {state.engineKind === 'remote' && state.conn === 'connected' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="已连接电脑主机，点击断开"
+            onPress={() => {
+              Alert.alert(
+                '断开电脑连接',
+                `当前已连接至电脑 (${state.remoteHost?.name || '电脑主机'})\n是否断开并切回手机轻引擎？`,
+                [
+                  { text: '取消', style: 'cancel' },
+                  {
+                    text: '断开并切回手机',
+                    style: 'destructive',
+                    onPress: () => {
+                      void store.disconnectAndSwitchToLight();
+                    },
+                  },
+                ],
+              );
+            }}
+            style={({ pressed }) => [styles.hostBannerConnected, pressed && { opacity: 0.8 }]}
+          >
+            <View style={styles.hostBannerIconConnected}>
+              <BrandIcon name="laptop" size={16} color={palette.blue} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.hostBannerTitleConnected}>
+                  已连电脑 {state.remoteHost?.name ? `(${state.remoteHost.name})` : ''}
+                </Text>
+                <View style={styles.onlineDot} />
+              </View>
+              <Text style={styles.hostBannerSubConnected} numberOfLines={1}>
+                点击断开电脑 · 切回手机轻引擎
+              </Text>
+            </View>
+            <BrandIcon name="close" size={14} color={palette.textFaint} />
+          </Pressable>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="连接电脑主机"
+            onPress={() => {
+              onClose();
+              store.openConnectModal();
+            }}
+            style={({ pressed }) => [styles.hostBanner, pressed && { opacity: 0.75 }]}
+          >
+            <View style={styles.hostBannerIcon}>
+              <BrandIcon name="laptop" size={16} color={palette.blue} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.hostBannerTitle}>电脑主机 (Remote Host)</Text>
+              <Text style={styles.hostBannerSub} numberOfLines={1}>同一局域网扫码或填 IP，连电脑 dsh</Text>
+            </View>
+            <BrandIcon name="external" size={13} color={palette.textFaint} />
+          </Pressable>
+        )}
 
         <View style={[styles.searchWrap, searchFocused && styles.searchWrapFocused]}>
           <Text style={styles.searchIcon}>⌕</Text>
@@ -740,6 +805,43 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
       fontSize: 10.5,
       color: c.textDim,
       marginTop: 1,
+    },
+    hostBannerConnected: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginHorizontal: space.md,
+      marginBottom: space.sm,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: radius.md,
+      backgroundColor: c.glassStrong,
+      borderWidth: 1,
+      borderColor: c.blue,
+    },
+    hostBannerIconConnected: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: c.blueSoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    hostBannerTitleConnected: {
+      fontSize: 12.5,
+      fontWeight: '600',
+      color: c.text,
+    },
+    hostBannerSubConnected: {
+      fontSize: 10.5,
+      color: c.blue,
+      marginTop: 1,
+    },
+    onlineDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: c.blue,
     },
     searchWrap: {
       flexDirection: 'row',
