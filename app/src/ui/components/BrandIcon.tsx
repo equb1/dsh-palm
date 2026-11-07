@@ -1,12 +1,14 @@
 import React from 'react';
 import {
   ArrowDown,
+  ArrowUp,
   BatteryCharging,
   Bell,
   Box,
   Brain,
   Check,
   ChevronsDownUp,
+  ChevronDown,
   ChevronLeft,
   CircleDot,
   Cloud,
@@ -15,8 +17,10 @@ import {
   Download,
   Ellipsis,
   ExternalLink,
+  Eye,
   File,
   FileText,
+  Film,
   FlaskConical,
   Folder,
   FolderOpen,
@@ -30,6 +34,7 @@ import {
   LoaderCircle,
   Menu,
   MessageCircle,
+  Music,
   Orbit,
   PanelLeft,
   PanelTop,
@@ -44,9 +49,11 @@ import {
   SlidersHorizontal,
   Smartphone,
   Sparkles,
+  Square,
   SquarePen,
   SquareTerminal,
   SunMoon,
+  TriangleAlert,
   Type,
   Upload,
   UserRound,
@@ -96,6 +103,7 @@ export type BrandIconName =
   | 'back'
   | 'close'
   | 'arrowDown'
+  | 'arrowUp'
   | 'copy'
   | 'share'
   | 'more'
@@ -113,6 +121,12 @@ export type BrandIconName =
   | 'orbit'
   | 'message'
   | 'image'
+  | 'video'
+  | 'audio'
+  | 'eye'
+  | 'alert'
+  | 'chevronDown'
+  | 'square'
   | 'panelLeft'
   | 'sliders'
   | 'pen'
@@ -152,6 +166,7 @@ const ICONS = {
   back: ChevronLeft,
   close: X,
   arrowDown: ArrowDown,
+  arrowUp: ArrowUp,
   copy: Copy,
   share: Share2,
   more: Ellipsis,
@@ -169,6 +184,12 @@ const ICONS = {
   orbit: Orbit,
   message: MessageCircle,
   image: Image,
+  video: Film,
+  audio: Music,
+  eye: Eye,
+  alert: TriangleAlert,
+  chevronDown: ChevronDown,
+  square: Square,
   panelLeft: PanelLeft,
   sliders: SlidersHorizontal,
   pen: SquarePen,

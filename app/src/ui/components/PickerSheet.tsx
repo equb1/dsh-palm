@@ -1,12 +1,14 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { radius, space, useThemedStyles, type Theme } from '../theme';
+import { radius, space, useTheme, useThemedStyles, type Theme } from '../theme';
+import { BrandIcon, type BrandIconName } from './BrandIcon';
 
 export interface PickerOption {
   id: string;
   label: string;
   glyph?: string;
+  icon?: BrandIconName;
 }
 
 export interface PickerSheetProps {
@@ -27,6 +29,7 @@ export function PickerSheet({
   onSelect,
   onClose,
 }: PickerSheetProps): React.ReactElement {
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -50,11 +53,20 @@ export function PickerSheet({
                   pressed && { opacity: 0.75 },
                 ]}
               >
-                {option.glyph ? <Text style={styles.glyph}>{option.glyph}</Text> : null}
+                {option.icon ? (
+                  <BrandIcon
+                    name={option.icon}
+                    size={17}
+                    color={active ? palette.blue : palette.textDim}
+                    strokeWidth={1.8}
+                  />
+                ) : option.glyph ? (
+                  <Text style={styles.glyph}>{option.glyph}</Text>
+                ) : null}
                 <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
                   {option.label}
                 </Text>
-                {active ? <Text style={styles.check}>✓</Text> : null}
+                {active ? <BrandIcon name="check" size={16} color={palette.blue} strokeWidth={2.2} /> : null}
               </Pressable>
             );
           })}

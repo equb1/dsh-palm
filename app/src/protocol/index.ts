@@ -728,6 +728,8 @@ export interface RequestParams {
   'sessions.archive': { sessionId: string; archived: boolean };
   /** 删除会话（E3；完整引擎直接删 dsh 会话目录，运行中拒绝） */
   'sessions.delete': { sessionId: string };
+  /** 回退会话到指定用户回合前（重跑某轮对话） */
+  'sessions.rewind': { sessionId: string; turnId: string };
   /** 正文搜索（E3；完整引擎扫本地会话日志） */
   'sessions.search': { query: string; limit?: number };
   /** 只读终端（U8；写操作会被沙箱拒绝） */
@@ -776,6 +778,7 @@ export interface RequestResults {
   'sessions.pin': { ok: true };
   'sessions.archive': { ok: true };
   'sessions.delete': { ok: true };
+  'sessions.rewind': { session: SessionDetail; removedText?: string };
   'sessions.search': { results: SessionSearchHit[] };
   'shell.run': {
     stdout: string;

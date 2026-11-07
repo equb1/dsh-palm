@@ -522,6 +522,22 @@ const handlers: { [M in Method]: Handler<M> } = {
     return { accepted: true as const };
   },
 
+  'sessions.rewind': ({ sessionId, turnId }) => {
+    const s = requireSession(sessionId);
+    const turnIndex = s.turns.findIndex((t) => t.id === turnId);
+    if (turnIndex >= 0) {
+      s.turns = s.turns.slice(0, turnIndex);
+    }
+    const detail: SessionDetail = {
+      ...s.summary,
+      turns: s.turns,
+      contract: s.contract,
+      ...(s.permission ? { permission: s.permission } : {}),
+      ...(s.model ? { model: s.model } : {}),
+    };
+    return { session: detail };
+  },
+
   // 交接只从轻引擎发起；完整引擎侧没有可回退的历史
   'sessions.handoff': () => {
     throw Object.assign(new Error('完整引擎不支持 sessions.handoff'), { code: 'unsupported' });

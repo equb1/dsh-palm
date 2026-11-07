@@ -403,6 +403,8 @@ export class Store {
   private runStartedAt: number | null = null;
   /** 退出会话时留住 detail，重进时把 live 回合并回去，避免 history + live 两份 */
   private detailCache = new Map<string, SessionDetail>();
+  /** 会话打开序列号，防止快速切换会话时后发的 sessions.get 被先发的覆盖 */
+  private openSessionSeq = 0;
   /** 列表 preview 限流，避免每 token 都重建 sessions */
   private lastSessionPreviewAt = 0;
 
@@ -1468,10 +1470,27 @@ export class Store {
   async openSession(id: string): Promise<void> {
     if (!this.client) return;
     this.noteUserActivity();
+    this.flushDeltas();
+    this.pendingDelta.clear();
+
+    const previousId = this.state.currentId;
+    const previousDetail = this.state.detail;
     const link = this.linkForSession(id);
     const logicalId = link?.id ?? id;
+
+    // 如果之前有打开的会话且不是当前要打开的，保存旧详情到缓存
+    if (previousDetail && previousId && previousId !== logicalId) {
+      this.detailCache.set(previousId, previousDetail);
+      const prevLink = this.linkForSession(previousId);
+      if (!prevLink || prevLink.activeSide === 'light') {
+        this.baseDetails.set(previousId, previousDetail);
+      }
+    }
+
     const cached = this.detailCache.get(logicalId);
     this.detailCache.delete(logicalId);
+    const seq = ++this.openSessionSeq;
+
     // 先推一个空壳详情：点击后右侧页面立刻滑入，标题/输入框先到位，
     // sessions.get 在转场动画期间并行拉取；不要让用户等 IPC 再开始转场。
     const summary = this.state.sessions.find((s) => s.id === logicalId || s.id === id);
@@ -1499,31 +1518,35 @@ export class Store {
     });
 
     if (link) {
-      await this.openLinkedSession(link, cached);
-      this.patch({ detailLoading: false });
+      await this.openLinkedSession(link, cached, seq);
+      if (this.openSessionSeq === seq) {
+        this.patch({ detailLoading: false });
+      }
       return;
     }
 
     try {
       const { session } = await this.client.request('sessions.get', { sessionId: id });
-      let turns = session.turns;
+      if (this.openSessionSeq !== seq) return;
+      let turns = normalizeTurns(session.turns);
       const active = session.status === 'running' || session.status === 'waiting_approval';
-      const live = active
-        ? cached?.turns.find((t) => t.role === 'assistant' && t.status === 'streaming')
-        : undefined;
-      if (live) turns = overlayLiveTurn(turns, live);
-      turns = normalizeTurns(turns);
+      if (!active) {
+        turns = turns.map((t) => (t.status === 'streaming' ? { ...t, status: 'done' as const } : t));
+      }
       this.patch({ detail: { ...session, turns }, currentId: id, busy: false, detailLoading: false });
       // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
       const { approvals } = await this.client.request('approvals.list', { sessionId: id });
+      if (this.openSessionSeq !== seq) return;
       const map: Record<string, Approval> = {};
       for (const a of approvals) {
         if (a.sessionId === id) map[a.id] = a;
       }
       this.patch({ approvals: map });
     } catch (err) {
-      this.patch({ detailLoading: false });
-      this.fail(err);
+      if (this.openSessionSeq === seq) {
+        this.patch({ detailLoading: false });
+        this.fail(err);
+      }
     }
   }
 
@@ -1533,7 +1556,11 @@ export class Store {
    * - active full 但 proot 已停 → 只读显示缓存，绝不在 light 里重放；
    * - active light → 正常拉轻引擎详情。
    */
-  private async openLinkedSession(link: ConversationLink, cached?: SessionDetail): Promise<void> {
+  private async openLinkedSession(
+    link: ConversationLink,
+    cached?: SessionDetail,
+    seq?: number,
+  ): Promise<void> {
     const base = this.baseDetails.get(link.id) ?? cached ?? null;
     const logicalId = link.id;
     try {
@@ -1542,6 +1569,7 @@ export class Store {
           const { session } = await this.client!.request('sessions.get', {
             sessionId: link.fullSessionId,
           });
+          if (seq !== undefined && this.openSessionSeq !== seq) return;
           const merged = mergeDetail(link, base, session);
           this.patch({ detail: merged ?? session, currentId: logicalId, busy: false });
           if (merged) this.detailCache.set(logicalId, merged);
@@ -1549,6 +1577,7 @@ export class Store {
             const { approvals } = await this.client!.request('approvals.list', {
               sessionId: link.fullSessionId,
             });
+            if (seq !== undefined && this.openSessionSeq !== seq) return;
             const map: Record<string, Approval> = {};
             for (const approval of approvals) map[approval.id] = approval;
             this.patch({ approvals: map });
@@ -1562,11 +1591,13 @@ export class Store {
             const { session } = await this.client!.request('sessions.get', {
               sessionId: link.lightSessionId,
             });
+            if (seq !== undefined && this.openSessionSeq !== seq) return;
             detail = mergeDetail(link, session, null);
           } catch {
             /* 连轻侧快照也拿不到时保持当前 detail */
           }
         }
+        if (seq !== undefined && this.openSessionSeq !== seq) return;
         this.patch({ detail: detail ?? this.state.detail, currentId: logicalId, busy: false });
         return;
       }
@@ -1575,30 +1606,36 @@ export class Store {
         const { session } = await this.client!.request('sessions.get', {
           sessionId: link.lightSessionId,
         });
+        if (seq !== undefined && this.openSessionSeq !== seq) return;
         let turns = normalizeTurns(session.turns);
         const active = session.status === 'running' || session.status === 'waiting_approval';
-        const live = active
-          ? cached?.turns.find((t) => t.role === 'assistant' && t.status === 'streaming')
-          : undefined;
-        if (live) turns = overlayLiveTurn(turns, live);
+        if (!active) {
+          turns = turns.map((t) => (t.status === 'streaming' ? { ...t, status: 'done' as const } : t));
+        }
         const detail = mergeDetail(link, { ...session, turns }, null) ?? session;
         this.patch({ detail, currentId: logicalId, busy: false });
         const { approvals } = await this.client!.request('approvals.list', {
           sessionId: link.lightSessionId,
         });
+        if (seq !== undefined && this.openSessionSeq !== seq) return;
         const map: Record<string, Approval> = {};
         for (const approval of approvals) map[approval.id] = approval;
         this.patch({ approvals: map });
         return;
       }
       // 完整链路上打开一个 active-light 逻辑会话：只读缓存
+      if (seq !== undefined && this.openSessionSeq !== seq) return;
       this.patch({ detail: base ?? this.state.detail, currentId: logicalId, busy: false });
     } catch (err) {
-      this.fail(err);
+      if (seq === undefined || this.openSessionSeq === seq) {
+        this.fail(err);
+      }
     }
   }
 
   closeSession(): void {
+    this.flushDeltas();
+    this.pendingDelta.clear();
     const { detail, currentId } = this.state;
     if (detail && currentId) {
       this.detailCache.set(currentId, detail);
@@ -2197,6 +2234,34 @@ export class Store {
       await this.client.request('sessions.stop', { sessionId: this.physicalIdFor(currentId) });
     } catch (err) {
       this.fail(err);
+    }
+  }
+
+  /** 长按历史用户回合回退并重跑：截断后端与前端的历史，填入输入框并发送 */
+  async rewindAndRerun(turnId: string, text: string): Promise<boolean> {
+    const { currentId, detail } = this.state;
+    if (!currentId || !detail || !this.client) return false;
+    const physicalId = this.physicalIdFor(currentId);
+    this.patch({ busy: true, error: null });
+    try {
+      if (detail.status === 'running' || detail.status === 'waiting_approval') {
+        await this.stop().catch(() => undefined);
+      }
+      try {
+        const res = await this.client.request('sessions.rewind', { sessionId: physicalId, turnId });
+        this.patch({ detail: res.session, busy: false });
+      } catch {
+        // 如果远端宿主未实现 sessions.rewind，前端本地做 turns 截断
+        const turnIndex = detail.turns.findIndex((t) => t.id === turnId);
+        if (turnIndex >= 0) {
+          const nextTurns = detail.turns.slice(0, turnIndex);
+          this.patch({ detail: { ...detail, turns: nextTurns }, busy: false });
+        }
+      }
+      return await this.send(text);
+    } catch (err) {
+      this.fail(err);
+      return false;
     }
   }
 
@@ -3480,6 +3545,9 @@ export class Store {
       case 'session.created':
       case 'session.updated': {
         const session = data.session as SessionSummary;
+        if (session.status !== 'running' && session.status !== 'waiting_approval') {
+          this.detailCache.delete(session.id);
+        }
         const sessions = this.state.sessions.slice();
         const i = sessions.findIndex((s) => s.id === session.id);
         if (i >= 0) sessions[i] = session;
@@ -3499,7 +3567,11 @@ export class Store {
       }
 
       case 'block.appended': {
-        if (!detail || data.sessionId !== currentId) return;
+        if (data.sessionId !== currentId) {
+          this.detailCache.delete(data.sessionId);
+          return;
+        }
+        if (!detail) return;
         const raw = data.turn as Turn;
         const blocks: Turn['blocks'] = [];
         for (const b of raw.blocks) {
@@ -3514,19 +3586,40 @@ export class Store {
       case 'block.delta': {
         if (!detail || data.sessionId !== currentId) return;
         // 流式热路径：就地追加，靠 version 触发重渲染，避免每个 token 复制整棵树
-        const turn = detail.turns.find((t) => t.id === data.turnId);
-        const block = turn?.blocks.find((b) => b.id === data.blockId) as
+        let turn = detail.turns.find((t) => t.id === data.turnId);
+        if (!turn && data.runId) {
+          turn = detail.turns.find((t) => t.runId === data.runId);
+        }
+        if (!turn) {
+          turn = {
+            id: data.turnId,
+            runId: data.runId,
+            role: 'assistant',
+            createdAt: Date.now(),
+            blocks: [],
+            status: 'streaming',
+          };
+          detail.turns.push(turn);
+        }
+        let block = turn.blocks.find((b) => b.id === data.blockId) as
           | Extract<Block, { kind: 'text' | 'thinking' }>
           | undefined;
-        if (!block) return;
+        const currentBlock: Extract<Block, { kind: 'text' | 'thinking' }> =
+          block ?? {
+            kind: data.blockId.includes('thinking') ? 'thinking' : 'text',
+            id: data.blockId,
+            text: '',
+          };
+        if (!block) {
+          turn.blocks.push(currentBlock);
+        }
         if (data.op === 'replace') {
           this.pendingDelta.delete(data.blockId);
-          const turnIndex = detail.turns.findIndex((t) => t.id === data.turnId);
-          const turn = detail.turns[turnIndex];
-          const blockIndex = turn?.blocks.findIndex((b) => b.id === data.blockId) ?? -1;
-          if (!turn || blockIndex < 0) return;
+          const turnIndex = detail.turns.findIndex((t) => t.id === turn.id);
+          const blockIndex = turn.blocks.findIndex((b) => b.id === data.blockId);
+          if (turnIndex < 0 || blockIndex < 0) return;
           const blocks = turn.blocks.slice();
-          blocks[blockIndex] = { ...block, text: data.text };
+          blocks[blockIndex] = { ...currentBlock, text: data.text };
           const turns = detail.turns.slice();
           turns[turnIndex] = { ...turn, blocks };
           this.patch({ detail: { ...detail, turns } });
@@ -3540,7 +3633,11 @@ export class Store {
       }
 
       case 'block.updated': {
-        if (!detail || data.sessionId !== currentId) return;
+        if (data.sessionId !== currentId) {
+          this.detailCache.delete(data.sessionId);
+          return;
+        }
+        if (!detail) return;
         const turnIndex = detail.turns.findIndex((t) => t.id === data.turnId);
         const turn = detail.turns[turnIndex];
         if (!turn) return;
@@ -3668,6 +3765,7 @@ export class Store {
 
       case 'run.finished': {
         this.flushDeltas();
+        this.detailCache.delete(data.sessionId);
         this.reportRunActive(false);
         const d = this.state.detail;
         this.notifyRunFinished(data as { sessionId: string; reason: string });

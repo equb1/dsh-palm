@@ -4,7 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import type { AttachmentEngine, AttachmentKind } from '../lib/attachments/types';
 import type { PermissionOption, Preset } from '../protocol';
 import { AttachmentChips } from './AttachmentChips';
-import { PickerSheet } from './components';
+import { PickerSheet, BrandIcon, type BrandIconName } from './components';
 import { radius, space, useTheme, useThemedStyles, type Theme } from './theme';
 
 export interface ComposerAttachment {
@@ -18,12 +18,12 @@ export interface ComposerAttachment {
   status?: 'ready' | 'reading';
 }
 
-const KIND_BADGE: Record<AttachmentKind, string> = {
-  image: '图',
-  document: '文',
-  file: '件',
-  video: '视',
-  audio: '音',
+const KIND_ICON: Record<AttachmentKind, BrandIconName> = {
+  image: 'image',
+  document: 'fileText',
+  file: 'folder',
+  video: 'video',
+  audio: 'audio',
 };
 
 const ATTACH_TYPES: Array<{ kind: AttachmentKind; label: string }> = [
@@ -34,17 +34,28 @@ const ATTACH_TYPES: Array<{ kind: AttachmentKind; label: string }> = [
   { kind: 'audio', label: '音频' },
 ];
 
-const PERMISSION_META: Record<string, { label: string; glyph: string; desc: string }> = {
-  'read-only': { label: '仅可查看', glyph: '◎', desc: '只能看，不能改' },
-  'workspace-write': { label: '工作区内修改', glyph: '✎', desc: '只改当前工作区' },
-  'danger-full-access': { label: '完全权限', glyph: '⚠', desc: '任意读写，不再弹审批' },
-  auto: { label: '自动', glyph: '↻', desc: '由宿主决定' },
-  custom: { label: '自定义', glyph: '⚙', desc: '自定义策略' },
+const PERMISSION_META: Record<string, { label: string; icon: BrandIconName; desc: string }> = {
+  'read-only': { label: '仅可查看', icon: 'eye', desc: '只能看，不能改' },
+  'workspace-write': { label: '工作区内修改', icon: 'pen', desc: '只改当前工作区' },
+  'danger-full-access': { label: '完全权限', icon: 'alert', desc: '任意读写，不再弹审批' },
+  auto: { label: '自动', icon: 'refresh', desc: '由宿主决定' },
+  custom: { label: '自定义', icon: 'sliders', desc: '自定义策略' },
 };
 
-function permissionMeta(option?: PermissionOption): { label: string; glyph: string; desc: string } {
-  if (!option) return { label: '权限', glyph: '◎', desc: '' };
-  return PERMISSION_META[option.value] ?? { label: option.name, glyph: '◎', desc: '' };
+function permissionMeta(option?: PermissionOption): { label: string; icon: BrandIconName; desc: string } {
+  if (!option) return { label: '权限', icon: 'eye', desc: '' };
+  return PERMISSION_META[option.value] ?? { label: option.name, icon: 'eye', desc: '' };
+}
+
+function presetIcon(presetId?: string): BrandIconName {
+  if (!presetId) return 'sparkles';
+  if (presetId === 'reader') return 'eye';
+  if (presetId === 'light') return 'sparkles';
+  if (presetId === 'standard') return 'layers';
+  if (presetId === 'minimal') return 'zap';
+  if (presetId === 'ptc') return 'cpu';
+  if (presetId === 'cordis') return 'puzzle';
+  return 'sparkles';
 }
 
 /**
@@ -184,7 +195,7 @@ export function Composer({
               style={({ pressed }) => [styles.plusItem, pressed && { opacity: 0.7 }]}
             >
               <View style={styles.plusIcon}>
-                <Text style={styles.plusIconText}>{KIND_BADGE[item.kind]}</Text>
+                <BrandIcon name={KIND_ICON[item.kind]} size={16} color={palette.blue} />
               </View>
               <Text style={styles.plusLabel}>{item.label}</Text>
             </Pressable>
@@ -206,8 +217,13 @@ export function Composer({
               onPress={() => setPermissionMenuOpen(true)}
               style={({ pressed }) => [styles.barPill, pressed && { opacity: 0.7 }]}
             >
+              <BrandIcon
+                name={permissionMeta(activePermissionOption).icon}
+                size={13}
+                color={palette.textDim}
+              />
               <Text style={styles.barPillText}>{permissionMeta(activePermissionOption).label}</Text>
-              <Text style={styles.barChevron}>▾</Text>
+              <BrandIcon name="chevronDown" size={11} color={palette.textFaint} />
             </Pressable>
           ) : null}
 
@@ -219,11 +235,13 @@ export function Composer({
               disabled={!presetsInteractive}
               style={({ pressed }) => [styles.barPill, pressed && { opacity: 0.7 }]}
             >
-              <Text style={styles.barPillGlyph}>{activePreset?.glyph ?? '·'}</Text>
+              <BrandIcon name={presetIcon(activePreset?.id)} size={13} color={palette.textDim} />
               <Text style={styles.barPillText} numberOfLines={1}>
                 {activePreset?.name ?? '标准'}
               </Text>
-              {presetsInteractive ? <Text style={styles.barChevron}>▾</Text> : null}
+              {presetsInteractive ? (
+                <BrandIcon name="chevronDown" size={11} color={palette.textFaint} />
+              ) : null}
             </Pressable>
           ) : null}
         </ScrollView>
@@ -237,8 +255,12 @@ export function Composer({
           disabled={!onPickAttachment && !onAttach}
           style={({ pressed }) => [styles.key, pressed && { opacity: 0.65 }]}
         >
-          <View style={styles.plusBarH} />
-          <View style={styles.plusBarV} />
+          <BrandIcon
+            name={plusOpen ? 'close' : 'plus'}
+            size={18}
+            color={palette.textDim}
+            strokeWidth={2}
+          />
         </Pressable>
 
         <TextInput
@@ -267,14 +289,24 @@ export function Composer({
             { opacity: showStop || canSend ? (pressed ? 0.75 : 1) : 0.3 },
           ]}
         >
-          <Text style={[styles.sendGlyph, showStop && { color: palette.text }]}>{showStop ? '■' : '↑'}</Text>
+          <BrandIcon
+            name={showStop ? 'square' : 'arrowUp'}
+            size={16}
+            color={showStop ? palette.text : palette.bg}
+            strokeWidth={2.4}
+          />
         </Pressable>
       </View>
 
       <PickerSheet
         visible={presetMenuOpen}
         title="选择锦囊"
-        options={presets.map((p) => ({ id: p.id, label: p.name, glyph: p.glyph }))}
+        options={presets.map((p) => ({
+          id: p.id,
+          label: p.name,
+          glyph: p.glyph,
+          icon: presetIcon(p.id),
+        }))}
         activeId={activePresetId}
         onSelect={onPickPreset}
         onClose={() => setPresetMenuOpen(false)}
@@ -285,7 +317,7 @@ export function Composer({
         options={permissions.map((p) => ({
           id: p.value,
           label: permissionMeta(p).label,
-          glyph: permissionMeta(p).glyph,
+          icon: permissionMeta(p).icon,
         }))}
         activeId={activePermission}
         onSelect={choosePermission}

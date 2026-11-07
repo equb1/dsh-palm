@@ -599,6 +599,53 @@ export class LightHost {
         await this.repo.remove(session.id);
         return { ok: true as const };
       },
+      'sessions.rewind': async ({ sessionId, turnId }: { sessionId: string; turnId: string }) => {
+        const session = this.requireSession(sessionId);
+        const run = this.runs.get(sessionId);
+        if (run) {
+          run.abortKind = 'stop';
+          run.step.abort();
+          this.rejectPending(sessionId, 'stop');
+        }
+        // 定位 turn
+        const turnIndex = session.turns.findIndex((t) => t.id === turnId);
+        if (turnIndex < 0) {
+          throw new EngineProtocolError({ code: 'not_found', message: `未找到指定回合：${turnId}` });
+        }
+        const targetTurn = session.turns[turnIndex]!;
+        let removedText = '';
+        for (const block of targetTurn.blocks) {
+          if (block.kind === 'text') removedText += block.text;
+        }
+
+        // 计算 targetTurn 在所有 user turns 中的序号
+        let userTurnCount = 0;
+        for (let i = 0; i <= turnIndex; i++) {
+          if (session.turns[i]!.role === 'user') userTurnCount++;
+        }
+
+        // 截断 turns 到 turnIndex 之前
+        session.turns = session.turns.slice(0, turnIndex);
+
+        // 截断 history 中对应的用户消息及其后续
+        let userMsgSeen = 0;
+        let historyCut = -1;
+        for (let i = 0; i < session.history.length; i++) {
+          if (session.history[i]!.role === 'user') {
+            userMsgSeen++;
+            if (userMsgSeen === userTurnCount) {
+              historyCut = i;
+              break;
+            }
+          }
+        }
+        if (historyCut >= 0) {
+          session.history = session.history.slice(0, historyCut);
+        }
+
+        await this.save(session);
+        return { session: this.detail(session), removedText };
+      },
       'shell.run': async ({ command }: { command: string }) => {
         if (!command.trim()) {
           throw new EngineProtocolError({ code: 'bad_request', message: '命令不能为空' });

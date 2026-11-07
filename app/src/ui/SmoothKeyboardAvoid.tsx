@@ -1,14 +1,25 @@
 import React from 'react';
 import {
   Animated,
+  Easing,
   Keyboard,
+  LayoutAnimation,
   Platform,
   StyleSheet,
+  UIManager,
   type KeyboardEvent,
   type LayoutChangeEvent,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  try {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  } catch {
+    /* 忽略不支持的情况 */
+  }
+}
 
 interface SmoothKeyboardAvoidProps {
   children: React.ReactNode;
@@ -19,8 +30,8 @@ interface SmoothKeyboardAvoidProps {
 /**
  * 智能键盘协同避让容器：
  * 1. 优先监听 keyboardWillShow，在键盘刚升起的第一毫秒同时启动动画，输入框与键盘同频同速升起。
- * 2. 避免 keyboardDidShow 延迟导致的“键盘先出来、输入框过一会才出现”的问题；若仅收到 didShow，直接零延迟就位。
- * 3. 在 Android 上与系统 adjustResize 智能互补，若系统已缩小窗口则不重复叠加，杜绝抖动与脱节。
+ * 2. 针对 Android 系统 adjustResize 导致的高读突变，调用 LayoutAnimation 实现页面内容平滑过渡，消除生硬跳跃。
+ * 3. 采用高质量缓动曲线（Easing.bezier），消除生硬感。
  */
 export function SmoothKeyboardAvoid({ children, style, offset = 0 }: SmoothKeyboardAvoidProps): React.ReactElement {
   const keyboardHeight = React.useRef(new Animated.Value(0)).current;
@@ -33,7 +44,16 @@ export function SmoothKeyboardAvoid({ children, style, offset = 0 }: SmoothKeybo
     if (initialLayoutHeight.current === 0) {
       initialLayoutHeight.current = height;
     }
+    const prev = currentLayoutHeight.current;
     currentLayoutHeight.current = height;
+
+    // 当系统 resize 改变高度时，使用 LayoutAnimation 赋予内容平滑缩放过渡动画
+    if (prev > 0 && Math.abs(prev - height) > 50) {
+      LayoutAnimation.configureNext({
+        duration: 250,
+        update: { type: LayoutAnimation.Types.easeInEaseOut },
+      });
+    }
 
     // 如果系统原生已经 resize（容器高度减少了键盘高度），则无需叠加 paddingBottom
     if (currentKeyboardHeight.current > 0 && initialLayoutHeight.current > 0) {
@@ -59,32 +79,44 @@ export function SmoothKeyboardAvoid({ children, style, offset = 0 }: SmoothKeybo
         }
       }
 
+      const duration = e.duration && e.duration > 0 ? e.duration : Platform.OS === 'ios' ? 250 : 220;
       if (isWill) {
         // 与键盘同时启动动画，完全同频同速升起
-        const duration = e.duration && e.duration > 0 ? e.duration : Platform.OS === 'ios' ? 250 : 200;
         Animated.timing(keyboardHeight, {
           toValue: target,
           duration,
+          easing: Easing.bezier(0.2, 0.8, 0.25, 1),
           useNativeDriver: false,
         }).start();
       } else {
-        // didShow 到达时，键盘已经完全出来了，立即零延迟就位，杜绝慢半拍爬升
-        keyboardHeight.setValue(target);
+        // didShow 时平缓完成剩余部分
+        Animated.timing(keyboardHeight, {
+          toValue: target,
+          duration: 120,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: false,
+        }).start();
       }
     };
 
     const handleHide = (e: KeyboardEvent | undefined, isWill: boolean): void => {
       currentKeyboardHeight.current = 0;
+      const duration = e?.duration && e.duration > 0 ? e.duration : Platform.OS === 'ios' ? 250 : 200;
 
       if (isWill) {
-        const duration = e?.duration && e.duration > 0 ? e.duration : Platform.OS === 'ios' ? 250 : 200;
         Animated.timing(keyboardHeight, {
           toValue: 0,
           duration,
+          easing: Easing.bezier(0.2, 0.8, 0.25, 1),
           useNativeDriver: false,
         }).start();
       } else {
-        keyboardHeight.setValue(0);
+        Animated.timing(keyboardHeight, {
+          toValue: 0,
+          duration: 120,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: false,
+        }).start();
       }
     };
 

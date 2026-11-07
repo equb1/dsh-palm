@@ -65,7 +65,7 @@ function ThinkingGlyph({ live }: { live: boolean }): React.ReactElement {
     >
       <BrandIcon
         name="sparkles"
-        size={15}
+        size={13}
         color={live ? palette.blue : palette.textFaint}
         strokeWidth={1.6}
       />
@@ -111,13 +111,13 @@ function ThinkingDots(): React.ReactElement {
         <Animated.View
           key={index}
           style={{
-            width: 4,
-            height: 4,
-            borderRadius: 2,
+            width: 3,
+            height: 3,
+            borderRadius: 1.5,
             backgroundColor: palette.blue,
             transform: [
               {
-                translateY: value.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }),
+                translateY: value.interpolate({ inputRange: [0, 1], outputRange: [0, -2.5] }),
               },
             ],
           }}
@@ -146,15 +146,14 @@ const ThinkingRow = React.memo(function ThinkingRow({
   const shownRaw = open && live ? text.slice(-LIVE_WINDOW) : text;
   const shown = shownRaw.length > MAX_OPEN ? shownRaw.slice(-MAX_OPEN) : shownRaw;
   const truncated = text.length > MAX_OPEN;
-  const preview = text.trim().split('\n')[0]?.replace(/\*\*/g, '').slice(0, 120) ?? '';
-  // 实时思考收成 3 行窗：只跟最后几行，不再每 token 重排前面已读的内容
-  const livePreview = text
+  const lines = text
     .trim()
     .split('\n')
-    .slice(-3)
-    .join('\n')
-    .replace(/\*\*/g, '')
-    .slice(-240);
+    .map((l) => l.replace(/\*\*/g, '').trim())
+    .filter(Boolean);
+  const preview = (lines[0] ?? '').slice(0, 120);
+  // 实时思考单行紧凑预览：只跟最后一行内容
+  const livePreview = (lines[lines.length - 1] ?? '').slice(-120);
 
   // dsh-go 的做法：一轮结束就把展开的全文收回去，过程收进一行摘要。
   React.useEffect(() => {
@@ -179,7 +178,7 @@ const ThinkingRow = React.memo(function ThinkingRow({
       </Text>
       {live ? <ThinkingDots /> : null}
       {!open ? (
-        <Text style={[styles.rowText, live && styles.rowTextLive]} numberOfLines={live ? 3 : 1}>
+        <Text style={[styles.rowText, live && styles.rowTextLive]} numberOfLines={1}>
           {live ? livePreview : preview}
         </Text>
       ) : (
@@ -342,7 +341,8 @@ function renderBlock(
   approvals: Record<string, Approval>,
   onToggleThinking?: () => void,
   live?: boolean,
-  fontScale = 1
+  fontScale = 1,
+  selectionResetKey?: number,
 ): React.ReactElement | null {
   switch (block.kind) {
     case 'thinking':
@@ -358,7 +358,15 @@ function renderBlock(
       );
     }
     case 'text':
-      return <MarkdownView key={block.id} text={block.text} streaming={live} fontScale={fontScale} />;
+      return (
+        <MarkdownView
+          key={block.id}
+          text={block.text}
+          streaming={live}
+          fontScale={fontScale}
+          selectionResetKey={selectionResetKey}
+        />
+      );
     case 'approval': {
       const view = approvalBlockView(block, approvals);
       if (!view) return null;
@@ -458,6 +466,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
   fallbackDurationMs,
   expandProcess,
   fontScale = 1,
+  selectionResetKey,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
@@ -467,6 +476,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
   expandProcess?: boolean;
   /** U7 对话字号倍率 */
   fontScale?: number;
+  selectionResetKey?: number;
 }): React.ReactElement {
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -547,7 +557,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
             <ToolGroupRow key={entry.key} tools={entry.tools} />
           ) : (
             <React.Fragment key={entry.key}>
-              {renderBlock(entry.block, approvals, onToggleThinking, false, fontScale)}
+              {renderBlock(entry.block, approvals, onToggleThinking, false, fontScale, selectionResetKey)}
             </React.Fragment>
           ),
         )}
@@ -556,12 +566,12 @@ const AssistantTurn = React.memo(function AssistantTurn({
         ? [
             ...noticeBlocks.map((b, i) => (
               <React.Fragment key={`notice-${b.id}-${i}`}>
-                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale)}
+                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale, selectionResetKey)}
               </React.Fragment>
             )),
             ...answerBlocks.map((b, i) => (
               <React.Fragment key={`${b.id}-${i}`}>
-                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale)}
+                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale, selectionResetKey)}
               </React.Fragment>
             )),
           ]
@@ -572,7 +582,8 @@ const AssistantTurn = React.memo(function AssistantTurn({
                 approvals,
                 onToggleThinking,
                 turn.status === 'streaming' && i === visibleBlocks.length - 1,
-                fontScale
+                fontScale,
+                selectionResetKey,
               )}
             </React.Fragment>
           ))}
@@ -589,6 +600,8 @@ function TurnViewImpl({
   fallbackDurationMs,
   expandProcess,
   fontScale = 1,
+  onPressUserTurn,
+  selectionResetKey,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
@@ -596,6 +609,8 @@ function TurnViewImpl({
   fallbackDurationMs?: number;
   expandProcess?: boolean;
   fontScale?: number;
+  onPressUserTurn?: (turn: Turn, text: string) => void;
+  selectionResetKey?: number;
 }): React.ReactElement {
   const styles = useThemedStyles(createStyles);
   if (turn.role === 'user') {
@@ -605,8 +620,14 @@ function TurnViewImpl({
       .trim();
     return (
       <View style={styles.userRow}>
-        <View style={styles.userBubble}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`用户消息：${text}，点击回填到输入框`}
+          onPress={onPressUserTurn ? () => onPressUserTurn(turn, text) : undefined}
+          style={({ pressed }) => [styles.userBubble, pressed && styles.userBubblePressed]}
+        >
           <Text
+            key={selectionResetKey ? `user-sel-${selectionResetKey}` : undefined}
             selectable
             style={[
               styles.userText,
@@ -615,7 +636,7 @@ function TurnViewImpl({
           >
             {text}
           </Text>
-        </View>
+        </Pressable>
       </View>
     );
   }
@@ -628,6 +649,7 @@ function TurnViewImpl({
       fallbackDurationMs={fallbackDurationMs}
       expandProcess={expandProcess}
       fontScale={fontScale}
+      selectionResetKey={selectionResetKey}
     />
   );
 }
@@ -643,6 +665,9 @@ const createStyles = ({ palette: c }: Theme) =>
     paddingVertical: 10,
     borderRadius: radius.lg,
     maxWidth: '84%',
+  },
+  userBubblePressed: {
+    opacity: 0.75,
   },
   userText: { color: c.text, fontSize: 14, lineHeight: 22 },
 
@@ -675,9 +700,9 @@ const createStyles = ({ palette: c }: Theme) =>
   row: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
   rowGlyph: { color: c.textFaint, fontSize: 11 },
   rowText: { color: c.textDim, fontSize: 13, flex: 1 },
-  rowTextLive: { fontSize: 12, lineHeight: 17 },
+  rowTextLive: { fontSize: 12, lineHeight: 16 },
   toolGroupTitle: { color: c.textDim, fontSize: 12, fontWeight: '600' },
-  thinkingLabel: { color: c.textFaint, fontSize: 13 },
+  thinkingLabel: { color: c.textFaint, fontSize: 12, lineHeight: 16 },
   toolName: { color: c.textFaint, fontSize: 11, fontFamily: font.mono },
   rowState: { fontSize: 11 },
   chevron: { color: c.textFaint, fontSize: 11 },

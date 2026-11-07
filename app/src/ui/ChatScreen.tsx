@@ -41,6 +41,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const [draft, setDraft] = React.useState('');
   const [showJump, setShowJump] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
+  const [selectionResetKey, setSelectionResetKey] = React.useState(0);
   // 浮动顶栏：先量高度给正文留位，列表滚起来再加底色/描边（玻璃感用半透明近似，不引原生 blur）
   // 先给顶栏一个稳定高度，避免首帧 onLayout 后列表整体下跳；实际高度仍以 onLayout 为准。
   const [headerH, setHeaderH] = React.useState(Math.round(topInset + 52));
@@ -138,7 +139,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   }, []);
 
   React.useEffect(() => {
-    const onShow = (): void => scrollToLatest(false);
+    const onShow = (): void => scrollToLatest(true);
     const willShowSub = Keyboard.addListener('keyboardWillShow', onShow);
     const didShowSub = Keyboard.addListener('keyboardDidShow', onShow);
     return () => {
@@ -185,6 +186,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const handleTouchStart = React.useCallback((): void => {
     touchActive.current = true;
     programmaticUntil.current = 0;
+    setSelectionResetKey((k) => k + 1);
   }, []);
 
   const handleTouchEnd = React.useCallback((): void => {
@@ -212,6 +214,22 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
 
   const handleToggleThinking = React.useCallback((): void => {}, []);
 
+  const pendingRewind = React.useRef<{ turnId: string } | null>(null);
+
+  const handlePressUserTurn = React.useCallback(
+    (turn: Turn, text: string): void => {
+      // 点击只回填，不立刻重跑；点发送时才截断并重试这一轮
+      pendingRewind.current = { turnId: turn.id };
+      setDraft(text);
+    },
+    [],
+  );
+
+  // 换会话时丢掉待重试的回合，避免发到新会话里
+  React.useEffect(() => {
+    pendingRewind.current = null;
+  }, [session.id]);
+
   const send = (): void => {
     const hasAttachments = state.pendingAttachments.length > 0;
     if (running && !hasText && !hasAttachments) {
@@ -224,6 +242,19 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       return;
     }
     const text = draft.trim();
+    const rewind = pendingRewind.current;
+    if (rewind) {
+      // 有回填标记：这一次发送先回退到该回合之前，再带上（可编辑的）文本重试
+      pendingRewind.current = null;
+      void store.rewindAndRerun(rewind.turnId, text).then((ok) => {
+        if (ok) setDraft((current) => (current === draft ? '' : current));
+        else {
+          pendingRewind.current = rewind;
+          setDraft((current) => (current.trim().length > 0 ? current : text));
+        }
+      });
+      return;
+    }
     // 发送成功才清空草稿；失败时把用户这句话放回去
     void store.send(text).then((ok) => {
       if (ok) setDraft((current) => (current === draft ? '' : current));
@@ -237,8 +268,10 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         turn={item}
         approvals={state.approvals}
         onToggleThinking={handleToggleThinking}
+        onPressUserTurn={handlePressUserTurn}
         expandProcess={!state.collapseProcess}
         fontScale={state.chatFontScale}
+        selectionResetKey={selectionResetKey}
         fallbackDurationMs={
           index === lastAssistantIndex && item.status !== 'streaming' && session.updatedAt > item.createdAt
             ? session.updatedAt - item.createdAt
@@ -246,7 +279,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         }
       />
     ),
-    [handleToggleThinking, lastAssistantIndex, session.updatedAt, state.approvals, state.collapseProcess],
+    [handlePressUserTurn, handleToggleThinking, lastAssistantIndex, selectionResetKey, session.updatedAt, state.approvals, state.chatFontScale, state.collapseProcess],
   );
 
   const renderEmpty = React.useCallback(

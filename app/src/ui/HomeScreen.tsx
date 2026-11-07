@@ -168,10 +168,6 @@ export function HomeScreen(): React.ReactElement {
       <View style={styles.header}>
         <IconButton icon="menu" label="打开会话列表" onPress={() => setDrawer(true)} />
         <View style={styles.brandBlock}>
-          <View style={styles.brandRow}>
-            <BrandMark size={21} color={palette.blue} accent={palette.gold} />
-            <Text style={styles.brand}>锦囊</Text>
-          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`模型：${modelLabel}`}
@@ -425,7 +421,10 @@ const createStyles = ({ palette: c }: Theme) =>
       gap: 4,
       alignSelf: 'flex-start',
       maxWidth: '100%',
-      paddingLeft: 28,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: radius.pill,
+      backgroundColor: c.glassStrong,
     },
     modelChipText: { color: c.textFaint, fontSize: 11.5, lineHeight: 16, flexShrink: 1 },
     modePill: {

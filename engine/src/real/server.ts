@@ -810,7 +810,17 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   let liveStepNo = 0;
   /** 正在流式的回合按会话存一份，sessions.get 时补进快照，避免重进会话看到两份 */
   const liveTurns = new Map<string, Turn>();
+  const blockIdsBySession = new Map<string, Map<number, string>>();
   const blockIdByIndex = new Map<number, string>();
+
+  function getSessionBlockIds(sid: string): Map<number, string> {
+    let map = blockIdsBySession.get(sid);
+    if (!map) {
+      map = new Map<number, string>();
+      blockIdsBySession.set(sid, map);
+    }
+    return map;
+  }
   /** 非流式 assistant/message 可能与流式帧/重连快照重复，按事件指纹去重 */
   const seenAssistant = new Set<string>();
   /** 已收尾的 run，防止迟到的 turn/end 或 assistant/message 把回合重新拉起来 */
@@ -859,17 +869,20 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
   function startFollow(sessionId: string): void {
     const sameSession = followSessionId === sessionId;
-    // 同一会话重开 follow 时保留 liveTurn/blockId 映射；否则中途重连后 delta 找不到 block
+    // 换会话或重开 follow 时保留 liveTurn 与对应会话的 blockId 映射；切走再切回不会丢流式状态
     followDispose?.();
     followDispose = null;
     followSessionId = sessionId;
-    if (!sameSession) {
-      liveTurn = null;
+    liveTurn = liveTurns.get(sessionId) ?? null;
+    liveRunId = liveTurn?.runId ?? '';
+    const blockIds = getSessionBlockIds(sessionId);
+    blockIdByIndex.clear();
+    for (const [idx, bId] of blockIds.entries()) {
+      blockIdByIndex.set(idx, bId);
+    }
+    if (!sameSession && !liveTurn) {
       liveStep = 0;
       liveStepNo = 0;
-      blockIdByIndex.clear();
-    } else if (!liveTurn) {
-      liveTurn = liveTurns.get(sessionId) ?? null;
     }
 
     followDispose = client.follow(sessionId, (value) => {
@@ -979,6 +992,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     }
 
     liveTurns.delete(sessionId);
+    blockIdsBySession.delete(sessionId);
     liveTurn = null;
     liveRunId = '';
     liveStepNo = 0;
@@ -1261,6 +1275,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         ...(previous?.usage ? { usage: previous.usage } : {}),
       };
       blockIdByIndex.clear();
+      getSessionBlockIds(sessionId).clear();
       liveTurns.set(sessionId, liveTurn);
       reviveRun(sessionId, runId);
       broadcast('run.started', { sessionId, runId: liveRunId, turnId: liveTurn.id });
@@ -1268,14 +1283,25 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       return;
     }
 
-    if (frame.type !== 'chunk' || !liveTurn) return;
+    if (frame.type !== 'chunk') return;
+    if (!liveTurn) {
+      liveTurn = liveTurns.get(sessionId) ?? null;
+      if (!liveTurn) {
+        liveTurn = beginLiveTurn(
+          sessionId,
+          liveRunId || canonicalRunId(undefined, crypto.randomUUID())!,
+          Date.now(),
+        );
+      }
+    }
     const chunk = (frame.chunk ?? {}) as Record<string, any>;
     const index = typeof chunk.index === 'number' ? chunk.index : 0;
 
     if (chunk.type === 'block-start') {
       const kind = chunk.blockType === 'reasoning' ? 'thinking' : 'text';
-      const id = liveBlockId(liveRunId, liveStep, index);
+      const id = liveBlockId(liveRunId || 'run', liveStep, index);
       blockIdByIndex.set(index, id);
+      getSessionBlockIds(sessionId).set(index, id);
       liveTurn.blocks.push({ kind, id, text: '' } as Block);
       broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
       return;
@@ -1284,8 +1310,15 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     if (chunk.type === 'reasoning-delta' || chunk.type === 'text-delta') {
       const text = typeof chunk.text === 'string' ? chunk.text : '';
       if (!text) return;
-      const blockId = blockIdByIndex.get(index);
-      if (!blockId) return;
+      let blockId = blockIdByIndex.get(index) ?? getSessionBlockIds(sessionId).get(index);
+      if (!blockId) {
+        const kind = chunk.type === 'reasoning-delta' ? 'thinking' : 'text';
+        blockId = liveBlockId(liveRunId || 'run', liveStep, index);
+        blockIdByIndex.set(index, blockId);
+        getSessionBlockIds(sessionId).set(index, blockId);
+        liveTurn.blocks.push({ kind, id: blockId, text: '' } as Block);
+        broadcast('block.appended', { sessionId, runId: liveRunId, turn: liveTurn });
+      }
       const block = liveTurn.blocks.find((b) => b.id === blockId);
       if (block && (block.kind === 'text' || block.kind === 'thinking')) block.text += text;
       broadcast('block.delta', {
@@ -1300,7 +1333,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     }
 
     if (chunk.type === 'block-end' && chunk.block) {
-      const blockId = blockIdByIndex.get(index);
+      const blockId = blockIdByIndex.get(index) ?? getSessionBlockIds(sessionId).get(index);
       const block = liveTurn.blocks.find((b) => b.id === blockId);
       if (block && (block.kind === 'text' || block.kind === 'thinking')) {
         const finalText = typeof chunk.block.text === 'string' ? chunk.block.text : '';
@@ -1455,7 +1488,11 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       const snap = await client.snapshot(sessionId);
       const records = (snap?.records ?? []) as RealRecord[];
       const proj = projectRecords(records, { finalizeUnfinished: !item.running });
-      const live = liveTurns.get(sessionId);
+      if (!item.running) {
+        liveTurns.delete(sessionId);
+        blockIdsBySession.delete(sessionId);
+      }
+      const live = item.running ? liveTurns.get(sessionId) : undefined;
 
       const detail: SessionDetail = {
         ...toSummary(item, workspaceIdFor(item), pinnedSessions.has(sessionId), hostId),
@@ -1779,6 +1816,18 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       }
       results.sort((a, b) => b.updatedAt - a.updatedAt);
       return { results: results.slice(0, max) };
+    },
+
+    'sessions.rewind': async ({ sessionId, turnId }) => {
+      const result = (await handlers['sessions.get']({ sessionId }, {} as HandlerContext)) as {
+        session: SessionDetail;
+      };
+      const session = result.session;
+      const turnIndex = session.turns.findIndex((t: Turn) => t.id === turnId);
+      if (turnIndex >= 0) {
+        session.turns = session.turns.slice(0, turnIndex);
+      }
+      return { session };
     },
 
     'shell.run': async ({ command }) => {

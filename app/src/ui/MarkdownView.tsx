@@ -200,7 +200,7 @@ function handleOpenUrl(url?: string): void {
     });
 }
 
-function InlineText({
+function InlineTokenSpans({
   text,
   baseStyle,
   trailingCursor,
@@ -213,7 +213,7 @@ function InlineText({
   const tokens = parseInlineTokens(text);
 
   return (
-    <Text style={baseStyle} selectable>
+    <Text style={baseStyle}>
       {tokens.map((token, idx) => {
         switch (token.type) {
           case 'bold':
@@ -265,6 +265,22 @@ function InlineText({
         }
       })}
       {trailingCursor ? <StreamingCursor /> : null}
+    </Text>
+  );
+}
+
+function InlineText({
+  text,
+  baseStyle,
+  trailingCursor,
+}: {
+  text: string;
+  baseStyle?: object;
+  trailingCursor?: boolean;
+}): React.ReactElement {
+  return (
+    <Text style={baseStyle} selectable>
+      <InlineTokenSpans text={text} trailingCursor={trailingCursor} />
     </Text>
   );
 }
@@ -723,6 +739,144 @@ export interface MarkdownViewProps {
   isStreaming?: boolean;
   /** U7 对话字号倍率（1 = 标准） */
   fontScale?: number;
+  /** 选中重置标识：改变时强制卸载原生选择器，快速取消选中 */
+  selectionResetKey?: number;
+}
+
+type ProseBlockItem = Extract<BlockItem, { type: 'h1' | 'h2' | 'h3' | 'quote' | 'ul' | 'ol' | 'p' }>;
+
+type RenderSection =
+  | { kind: 'prose'; items: Array<{ block: ProseBlockItem; trailingCursor?: boolean }> }
+  | { kind: 'block'; block: BlockItem; trailingCursor?: boolean };
+
+function groupBlocksForContinuousSelection(
+  blocks: BlockItem[],
+  streaming: boolean,
+): RenderSection[] {
+  const sections: RenderSection[] = [];
+  let currentProse: Array<{ block: ProseBlockItem; trailingCursor?: boolean }> = [];
+
+  const flushProse = (): void => {
+    if (currentProse.length > 0) {
+      sections.push({ kind: 'prose', items: [...currentProse] });
+      currentProse = [];
+    }
+  };
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    const isLast = i === blocks.length - 1;
+    const isTrailing = streaming && isLast && block.type === 'p';
+
+    if (
+      block.type === 'p' ||
+      block.type === 'h1' ||
+      block.type === 'h2' ||
+      block.type === 'h3' ||
+      block.type === 'quote' ||
+      block.type === 'ul' ||
+      block.type === 'ol'
+    ) {
+      currentProse.push({ block, trailingCursor: isTrailing });
+    } else {
+      flushProse();
+      sections.push({ kind: 'block', block, trailingCursor: isTrailing });
+    }
+  }
+  flushProse();
+  return sections;
+}
+
+function ContinuousProseText({
+  items,
+  selectionResetKey,
+}: {
+  items: Array<{ block: ProseBlockItem; trailingCursor?: boolean }>;
+  selectionResetKey?: number;
+}): React.ReactElement {
+  const { styles } = useMarkdownStyles();
+
+  return (
+    <View style={styles.proseContainer}>
+      <Text key={selectionResetKey ? `sel-${selectionResetKey}` : undefined} style={styles.proseRootText} selectable>
+        {items.map((item, idx) => {
+          const { block, trailingCursor } = item;
+          const isNotFirst = idx > 0;
+          const leadingNewlines = isNotFirst ? '\n\n' : '';
+
+          switch (block.type) {
+            case 'h1':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <InlineTokenSpans text={block.text} baseStyle={styles.h1Text} />
+                </Text>
+              );
+            case 'h2':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <InlineTokenSpans text={block.text} baseStyle={styles.h2Text} />
+                </Text>
+              );
+            case 'h3':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <InlineTokenSpans text={block.text} baseStyle={styles.h3Text} />
+                </Text>
+              );
+            case 'quote':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <Text style={styles.quoteBar}>▌ </Text>
+                  <InlineTokenSpans text={block.text} baseStyle={styles.quoteText} />
+                </Text>
+              );
+            case 'ul':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  {block.items.map((li, lIdx) => (
+                    <Text key={lIdx}>
+                      {lIdx > 0 ? '\n' : ''}
+                      <Text style={styles.bullet}>• </Text>
+                      <InlineTokenSpans text={li} baseStyle={styles.paragraph} />
+                    </Text>
+                  ))}
+                </Text>
+              );
+            case 'ol':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  {block.items.map((li, lIdx) => (
+                    <Text key={lIdx}>
+                      {lIdx > 0 ? '\n' : ''}
+                      <Text style={styles.orderNumber}>{`${lIdx + 1}. `}</Text>
+                      <InlineTokenSpans text={li} baseStyle={styles.paragraph} />
+                    </Text>
+                  ))}
+                </Text>
+              );
+            case 'p':
+            default:
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <InlineTokenSpans
+                    text={block.text}
+                    baseStyle={styles.paragraph}
+                    trailingCursor={trailingCursor}
+                  />
+                </Text>
+              );
+          }
+        })}
+      </Text>
+    </View>
+  );
 }
 
 const MarkdownBlock = React.memo(function MarkdownBlock({
@@ -808,64 +962,48 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
   }
 });
 
-const BlockList = React.memo(function BlockList({
-  blocks,
-  prefix,
-  streaming = false,
-  fontScale = 1,
-}: {
-  blocks: BlockItem[];
-  prefix: string;
-  streaming?: boolean;
-  fontScale?: number;
-}): React.ReactElement {
-  return (
-    <>
-      {blocks.map((block, index) => (
-        <MarkdownBlock
-          key={`${prefix}:${index}`}
-          block={block}
-          trailingCursor={streaming && index === blocks.length - 1 && block.type === 'p'}
-          fontScale={fontScale}
-        />
-      ))}
-    </>
-  );
-});
-
 function MarkdownViewImpl({
   text,
   style,
   streaming,
   isStreaming,
   fontScale = 1,
+  selectionResetKey,
 }: MarkdownViewProps): React.ReactElement {
   const theme = useTheme();
   const baseStyles = useThemedStyles(createStyles);
   const styles = React.useMemo(() => scaleStyles(baseStyles, fontScale), [baseStyles, fontScale]);
   const syntax = React.useMemo(() => syntaxStyles(theme.palette), [theme.palette]);
   const activeStreaming = Boolean(streaming || isStreaming);
-  const { stable, tail } = splitStableMarkdown(text);
-  const stableBlocks = React.useMemo(
-    () => (stable ? parseMarkdownBlocks(stable) : []),
-    [stable]
+
+  const blocks = React.useMemo(() => parseMarkdownBlocks(text), [text]);
+  const sections = React.useMemo(
+    () => groupBlocksForContinuousSelection(blocks, activeStreaming),
+    [blocks, activeStreaming],
   );
-  const tailBlocks = React.useMemo(() => (tail ? parseMarkdownBlocks(tail) : []), [tail]);
-  const tailEndsWithParagraph =
-    tailBlocks.length > 0 && tailBlocks[tailBlocks.length - 1]?.type === 'p';
-  const activeBlock = tailBlocks[tailBlocks.length - 1] ?? stableBlocks[stableBlocks.length - 1];
-  const lastIsParagraph = activeBlock?.type === 'p';
 
   return (
     <MarkdownStylesContext.Provider value={{ styles, syntax }}>
       <View style={[styles.root, style]}>
-        <BlockList blocks={stableBlocks} prefix="stable" fontScale={fontScale} />
-        <BlockList blocks={tailBlocks} prefix="tail" streaming={activeStreaming} fontScale={fontScale} />
-        {activeStreaming && (!tailEndsWithParagraph || !lastIsParagraph) ? (
-          <View style={styles.trailingCursorWrap}>
-            <StreamingCursor />
-          </View>
-        ) : null}
+        {sections.map((section, idx) => {
+          if (section.kind === 'prose') {
+            return (
+              <ContinuousProseText
+                key={`prose-${idx}`}
+                items={section.items}
+                selectionResetKey={selectionResetKey}
+              />
+            );
+          }
+          return (
+            <MarkdownBlock
+              key={`block-${idx}`}
+              block={section.block}
+              trailingCursor={section.trailingCursor}
+              fontScale={fontScale}
+            />
+          );
+        })}
       </View>
     </MarkdownStylesContext.Provider>
   );
@@ -876,6 +1014,16 @@ export const MarkdownView = React.memo(MarkdownViewImpl);
 const createStyles = ({ palette: c, semantic: s }: Theme) =>
   StyleSheet.create({
   root: { gap: space.sm },
+  proseContainer: {
+    marginVertical: 1,
+  },
+  proseRootText: {
+    color: c.text,
+  },
+  quoteBar: {
+    color: c.borderStrong,
+    fontWeight: '700',
+  },
   bold: { fontWeight: '700', color: c.text },
   italic: { fontStyle: 'italic', color: c.text },
   strike: { textDecorationLine: 'line-through', color: c.textFaint },
