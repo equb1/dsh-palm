@@ -22,6 +22,7 @@ import android.media.MediaScannerConnection
 import android.os.Environment
 import android.provider.MediaStore
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.facebook.react.uimanager.UIManagerHelper
@@ -935,12 +936,29 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         return null
     }
 
+    private fun computeFullBounds(view: View): Pair<Int, Int> {
+        var maxRight = if (view.width > 0) view.width else view.measuredWidth
+        var maxBottom = if (view.height > 0) view.height else view.measuredHeight
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val child = view.getChildAt(i)
+                if (child.visibility != View.GONE) {
+                    val (childW, childH) = computeFullBounds(child)
+                    val r = child.left + maxOf(child.width, childW)
+                    val b = child.top + maxOf(child.height, childH)
+                    if (r > maxRight) maxRight = r
+                    if (b > maxBottom) maxBottom = b
+                }
+            }
+        }
+        return Pair(maxRight, maxBottom)
+    }
+
     /**
      * 将目标视图以其完整度量宽高绘制成高清位图（不受父级滚动视口截断）。
      */
     private fun renderViewToBitmap(view: View): Bitmap {
-        var w = if (view.width > 0) view.width else view.measuredWidth
-        var h = if (view.height > 0) view.height else view.measuredHeight
+        var (w, h) = computeFullBounds(view)
         if (w <= 0 || h <= 0) {
             view.measure(
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
@@ -949,6 +967,9 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
             w = if (view.measuredWidth > 0) view.measuredWidth else 1080
             h = if (view.measuredHeight > 0) view.measuredHeight else 1920
             view.layout(0, 0, w, h)
+            val full = computeFullBounds(view)
+            w = maxOf(w, full.first)
+            h = maxOf(h, full.second)
         }
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)

@@ -66,6 +66,13 @@
       android:name=".system.FloatPetService"
       android:exported="false" />
 
+    <!-- 桌面小组件半透明快速输入浮层 -->
+    <activity
+      android:name=".system.QuickSearchActivity"
+      android:theme="@style/Theme.Dsh.TranslucentDialog"
+      android:exported="false"
+      android:windowSoftInputMode="stateVisible|adjustResize" />
+
     <!-- M3.3：快捷设置磁贴 -->
     <service
       android:name=".system.DshTileService"

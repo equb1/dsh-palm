@@ -13,7 +13,7 @@ import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
 import { TerminalScreen } from './src/ui/TerminalScreen';
 import { PluginsScreen } from './src/ui/PluginsScreen';
 import { ScreenStack } from './src/ui/components/ScreenStack';
-import { TopNoticeBanner } from './src/ui/components';
+import { TopNoticeBanner, InAppBrowserModal } from './src/ui/components';
 import { store, useStore } from './src/ui/useStore';
 import { ThemeProvider, useTheme, useThemedStyles, type Theme } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
@@ -67,8 +67,19 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
   React.useEffect(() => {
     const handle = (url: string | null): void => {
       if (url?.includes('source=widget') || url?.includes('source=shortcut') || url?.includes('source=pet_float')) {
-        if (url.includes('newChat=true') || !state.activeSessionId) {
+        const draftMatch = url.match(/[?&]draft=([^&]+)/);
+        const draftText = draftMatch ? decodeURIComponent(draftMatch[1]) : '';
+        const autoSend = url.includes('autoSend=true');
+
+        if (url.includes('newChat=true') || !state.activeSessionId || draftText) {
           store.createSessionDraft();
+        }
+        if (draftText) {
+          if (autoSend) {
+            void store.startWith(draftText);
+          } else {
+            store.setPendingShareText(draftText);
+          }
         }
         return;
       }
@@ -213,6 +224,7 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
       {statusBar}
       {shown}
       <TopNoticeBanner />
+      <InAppBrowserModal />
       {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
     </View>
   );

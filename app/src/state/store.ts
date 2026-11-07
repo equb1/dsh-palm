@@ -244,6 +244,8 @@ export interface AppState {
   pendingAttachments: PendingAttachment[];
   /** 是否打开连接/诊断面板（本机模式下默认不挡首屏，直接进主页） */
   connectModalOpen: boolean;
+  /** 内置浏览器打开的 URL，为 null 时关闭 */
+  inAppBrowserUrl: string | null;
   /** DeepSeek 账号（未登录 / 已存凭据，含正在进行的登录尝试） */
   account: AccountState | null;
   /** 宿主上配置的模型提供商（自定义渠道） */
@@ -446,6 +448,7 @@ export class Store {
     workspaces: [],
     pendingAttachments: [],
     connectModalOpen: false,
+    inAppBrowserUrl: null,
     account: null,
     providers: [],
     providerCatalog: [],
@@ -840,6 +843,15 @@ export class Store {
 
   closeConnectModal(): void {
     this.patch({ connectModalOpen: false });
+  }
+
+  openInAppBrowser(url: string): void {
+    if (!url) return;
+    this.patch({ inAppBrowserUrl: url });
+  }
+
+  closeInAppBrowser(): void {
+    this.patch({ inAppBrowserUrl: null });
   }
 
   private persistUiCache(): void {

@@ -46,10 +46,22 @@ class DshWidgetProvider : AppWidgetProvider() {
             RemoteViews(context.packageName, R.layout.dsh_widget).apply {
                 setTextViewText(R.id.widget_title, "问问锦囊… 搜索或输入问题")
                 setTextViewText(R.id.widget_status, text)
-                setOnClickPendingIntent(R.id.widget_root, openApp(context, newChat = false))
-                setOnClickPendingIntent(R.id.widget_search_box, openApp(context, newChat = false))
+                setOnClickPendingIntent(R.id.widget_root, openQuickSearch(context))
+                setOnClickPendingIntent(R.id.widget_search_box, openQuickSearch(context))
                 setOnClickPendingIntent(R.id.widget_btn_new, openApp(context, newChat = true))
             }
+
+        private fun openQuickSearch(context: Context): PendingIntent {
+            val intent = Intent(context, QuickSearchActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            return PendingIntent.getActivity(
+                context,
+                4706,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        }
 
         private fun openApp(context: Context, newChat: Boolean = false): PendingIntent {
             val intent = Intent(context, MainActivity::class.java).apply {

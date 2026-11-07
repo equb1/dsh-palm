@@ -323,6 +323,14 @@ export function SettingsScreen(): React.ReactElement {
       title: '主机',
       rows: [
         {
+          id: 'remote-pc-host',
+          title: '连接电脑主机',
+          value: '局域网配对 ›',
+          icon: '脑',
+          tone: 'blue',
+          onPress: () => store.openConnectModal(),
+        },
+        {
           id: 'engine',
           title: '本机引擎',
           value: hostLabel,

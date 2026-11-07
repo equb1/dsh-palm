@@ -29,6 +29,7 @@ import { highlight, type SyntaxKind } from './syntax';
 import { TableModal } from './chat/TableModal';
 import { BrandIcon } from './components';
 import { captureAndShareView, captureAndSaveView } from '../lib/host';
+import { store } from './useStore';
 
 type SyntaxStyles = Record<SyntaxKind, TextStyle>;
 
@@ -190,6 +191,11 @@ function parseInlineTokens(text: string): InlineToken[] {
 function handleOpenUrl(url?: string): void {
   if (!url) return;
   const target = url.trim();
+  // 网页链接全部在 App 内部 WebView 运行，不跳出 App
+  if (/^https?:\/\//i.test(target)) {
+    store.openInAppBrowser(target);
+    return;
+  }
   Linking.canOpenURL(target)
     .then((supported) => {
       if (supported) {
@@ -1328,8 +1334,10 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
     paddingBottom: 2,
   },
   tableGrid: {
-    minWidth: '100%',
+    alignSelf: 'flex-start',
     backgroundColor: '#FFFFFF',
+    borderRadius: radius.sm,
+    overflow: 'hidden',
   },
   tableHeaderBar: {
     flexDirection: 'row',

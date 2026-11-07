@@ -15,7 +15,7 @@ import type { SessionSummary } from '../protocol';
 import type { SessionRow } from '../state/sessionList';
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
-import { EmptyState } from './components';
+import { EmptyState, BrandIcon } from './components';
 import { loadAccountPhone } from '../lib/accountPhone';
 import type { ConversationLink } from '../lib/handoff';
 import { motion, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
@@ -431,6 +431,25 @@ export function SessionDrawer({
           </View>
         </View>
 
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="连接电脑主机"
+          onPress={() => {
+            onClose();
+            store.openConnectModal();
+          }}
+          style={({ pressed }) => [styles.hostBanner, pressed && { opacity: 0.75 }]}
+        >
+          <View style={styles.hostBannerIcon}>
+            <BrandIcon name="laptop" size={16} color={palette.blue} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.hostBannerTitle}>电脑主机 (Remote Host)</Text>
+            <Text style={styles.hostBannerSub} numberOfLines={1}>同一局域网扫码或填 IP，连电脑 dsh</Text>
+          </View>
+          <BrandIcon name="external" size={13} color={palette.textFaint} />
+        </Pressable>
+
         <View style={[styles.searchWrap, searchFocused && styles.searchWrapFocused]}>
           <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
@@ -691,6 +710,37 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
     },
     panelTitle: { color: c.text, fontSize: 16, lineHeight: 28, fontWeight: '500', letterSpacing: 0.2 },
     panelHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+    hostBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginHorizontal: space.md,
+      marginBottom: space.sm,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: radius.md,
+      backgroundColor: c.blueSoft,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.blue,
+    },
+    hostBannerIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: c.glassStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    hostBannerTitle: {
+      fontSize: 12.5,
+      fontWeight: '600',
+      color: c.text,
+    },
+    hostBannerSub: {
+      fontSize: 10.5,
+      color: c.textDim,
+      marginTop: 1,
+    },
     searchWrap: {
       flexDirection: 'row',
       alignItems: 'center',

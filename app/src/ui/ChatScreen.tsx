@@ -332,23 +332,40 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   };
 
   const renderTurn = React.useCallback(
-    ({ item, index }: { item: Turn; index: number }): React.ReactElement => (
-      <TurnView
-        turn={item}
-        approvals={state.approvals}
-        onToggleThinking={handleToggleThinking}
-        onPressUserTurn={handlePressUserTurn}
-        expandProcess={!state.collapseProcess}
-        fontScale={state.chatFontScale}
-        selectionResetKey={selectionResetKey}
-        fallbackDurationMs={
-          index === lastAssistantIndex && item.status !== 'streaming' && session.updatedAt > item.createdAt
-            ? session.updatedAt - item.createdAt
-            : undefined
+    ({ item, index }: { item: Turn; index: number }): React.ReactElement => {
+      let previousUserText: string | undefined;
+      if (item.role === 'assistant') {
+        for (let i = index - 1; i >= 0; i--) {
+          const t = session.turns[i];
+          if (t && t.role === 'user') {
+            previousUserText = t.blocks
+              .map((b) => (b.kind === 'text' ? b.text : ''))
+              .join('')
+              .trim();
+            break;
+          }
         }
-      />
-    ),
-    [handlePressUserTurn, handleToggleThinking, lastAssistantIndex, selectionResetKey, session.updatedAt, state.approvals, state.chatFontScale, state.collapseProcess],
+      }
+      return (
+        <TurnView
+          turn={item}
+          approvals={state.approvals}
+          onToggleThinking={handleToggleThinking}
+          onPressUserTurn={handlePressUserTurn}
+          expandProcess={!state.collapseProcess}
+          fontScale={state.chatFontScale}
+          selectionResetKey={selectionResetKey}
+          previousUserText={previousUserText}
+          sessionTitle={session.title}
+          fallbackDurationMs={
+            index === lastAssistantIndex && item.status !== 'streaming' && session.updatedAt > item.createdAt
+              ? session.updatedAt - item.createdAt
+              : undefined
+          }
+        />
+      );
+    },
+    [handlePressUserTurn, handleToggleThinking, lastAssistantIndex, selectionResetKey, session.turns, session.updatedAt, session.title, state.approvals, state.chatFontScale, state.collapseProcess],
   );
 
   const renderEmpty = React.useCallback(

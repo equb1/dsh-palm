@@ -326,7 +326,9 @@ const createStyles = ({ palette: c }: Theme) =>
     cardPreview: {
       backgroundColor: '#FFFFFF',
       borderRadius: radius.lg,
-      padding: space.lg,
+      paddingHorizontal: space.lg,
+      paddingTop: space.lg,
+      paddingBottom: 28,
       borderWidth: 1,
       borderColor: '#E2E8F0',
       shadowColor: '#000000',

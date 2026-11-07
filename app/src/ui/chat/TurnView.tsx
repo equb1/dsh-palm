@@ -384,7 +384,15 @@ function renderBlock(
   }
 }
 
-function AssistantActions({ text }: { text: string }): React.ReactElement | null {
+function AssistantActions({
+  text,
+  userText,
+  sessionTitle,
+}: {
+  text: string;
+  userText?: string;
+  sessionTitle?: string;
+}): React.ReactElement | null {
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [copied, setCopied] = React.useState(false);
@@ -430,8 +438,9 @@ function AssistantActions({ text }: { text: string }): React.ReactElement | null
       <ShareTurnSheet
         visible={shareOpen}
         onClose={() => setShareOpen(false)}
-        userText=""
+        userText={userText || ''}
         assistantText={text}
+        sessionTitle={sessionTitle}
       />
     </>
   );
@@ -477,6 +486,8 @@ const AssistantTurn = React.memo(function AssistantTurn({
   expandProcess,
   fontScale = 1,
   selectionResetKey,
+  previousUserText,
+  sessionTitle,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
@@ -487,6 +498,8 @@ const AssistantTurn = React.memo(function AssistantTurn({
   /** U7 对话字号倍率 */
   fontScale?: number;
   selectionResetKey?: number;
+  previousUserText?: string;
+  sessionTitle?: string;
 }): React.ReactElement {
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -598,7 +611,13 @@ const AssistantTurn = React.memo(function AssistantTurn({
             </React.Fragment>
           ))}
 
-      {completed ? <AssistantActions text={answerText} /> : null}
+      {completed ? (
+        <AssistantActions
+          text={answerText}
+          userText={previousUserText}
+          sessionTitle={sessionTitle}
+        />
+      ) : null}
     </View>
   );
 });
@@ -612,6 +631,8 @@ function TurnViewImpl({
   fontScale = 1,
   onPressUserTurn,
   selectionResetKey,
+  previousUserText,
+  sessionTitle,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
@@ -621,6 +642,8 @@ function TurnViewImpl({
   fontScale?: number;
   onPressUserTurn?: (turn: Turn, text: string) => void;
   selectionResetKey?: number;
+  previousUserText?: string;
+  sessionTitle?: string;
 }): React.ReactElement {
   const styles = useThemedStyles(createStyles);
   if (turn.role === 'user') {
@@ -658,6 +681,8 @@ function TurnViewImpl({
       expandProcess={expandProcess}
       fontScale={fontScale}
       selectionResetKey={selectionResetKey}
+      previousUserText={previousUserText}
+      sessionTitle={sessionTitle}
     />
   );
 }

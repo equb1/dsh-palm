@@ -227,22 +227,33 @@ export function HomeScreen(): React.ReactElement {
             </View>
           </Pressable>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`运行模式：${modeLabel}`}
-          onPress={() => setModeSheetOpen(true)}
-          style={({ pressed }) => [styles.modePill, pressed && { opacity: 0.75 }]}
-        >
-          <View style={[styles.modeDot, { backgroundColor: connColor }]} />
-          <BrandIcon
-            name={booting ? 'loader' : engine.mode === 'full' ? 'box' : 'zap'}
-            size={14}
-            color={engine.mode === 'full' ? palette.text : palette.blue}
-          />
-          <Text style={[styles.modeText, engine.mode === 'full' && { color: palette.text }]}>
-            {booting ? modeLabel : `${modeLabel}模式`}
-          </Text>
-        </Pressable>
+        <View style={styles.rightActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="连接电脑主机"
+            onPress={() => store.openConnectModal()}
+            style={({ pressed }) => [styles.hostQuickBtn, pressed && { opacity: 0.75 }]}
+          >
+            <BrandIcon name="laptop" size={14} color={palette.textDim} />
+            <Text style={styles.hostQuickText}>电脑</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`运行模式：${modeLabel}`}
+            onPress={() => setModeSheetOpen(true)}
+            style={({ pressed }) => [styles.modePill, pressed && { opacity: 0.75 }]}
+          >
+            <View style={[styles.modeDot, { backgroundColor: connColor }]} />
+            <BrandIcon
+              name={booting ? 'loader' : engine.mode === 'full' ? 'box' : 'zap'}
+              size={14}
+              color={engine.mode === 'full' ? palette.text : palette.blue}
+            />
+            <Text style={[styles.modeText, engine.mode === 'full' && { color: palette.text }]}>
+              {booting ? modeLabel : `${modeLabel}模式`}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       {engine.mode === 'light' && !engine.lightReady && Boolean(engine.error) ? (
@@ -415,6 +426,27 @@ const createStyles = ({ palette: c }: Theme) =>
       backgroundColor: c.glassStrong,
     },
     modelChipText: { color: c.textFaint, fontSize: 11.5, lineHeight: 16, flexShrink: 1 },
+    rightActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    hostQuickBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      height: 32,
+      paddingHorizontal: 8,
+      borderRadius: radius.pill,
+      backgroundColor: c.glassStrong,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
+    hostQuickText: {
+      fontSize: 11.5,
+      fontWeight: '500',
+      color: c.textDim,
+    },
     modePill: {
       flexDirection: 'row',
       alignItems: 'center',

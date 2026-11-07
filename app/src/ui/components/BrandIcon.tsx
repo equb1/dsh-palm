@@ -207,8 +207,9 @@ export function BrandIcon({
   size?: number;
   color?: string;
   strokeWidth?: number;
-}): React.ReactElement {
-  const Icon = ICONS[name];
+}): React.ReactElement | null {
+  const Icon = ICONS[name] || ICONS.info;
+  if (!Icon) return null;
   return <Icon size={size} color={color} strokeWidth={strokeWidth} />;
 }
 
