@@ -17,6 +17,7 @@
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
   <uses-permission android:name="android.permission.VIBRATE"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+  <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -60,6 +61,11 @@
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 
+    <!-- 桌面常驻桌宠悬浮窗 -->
+    <service
+      android:name=".system.FloatPetService"
+      android:exported="false" />
+
     <!-- M3.3：快捷设置磁贴 -->
     <service
       android:name=".system.DshTileService"
@@ -78,7 +84,7 @@
     <!-- M3.3：桌面小组件 -->
     <receiver
       android:name=".system.DshWidgetProvider"
-      android:exported="false">
+      android:exported="true">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
       </intent-filter>

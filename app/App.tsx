@@ -13,6 +13,7 @@ import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
 import { TerminalScreen } from './src/ui/TerminalScreen';
 import { PluginsScreen } from './src/ui/PluginsScreen';
 import { ScreenStack } from './src/ui/components/ScreenStack';
+import { TopNoticeBanner } from './src/ui/components';
 import { store, useStore } from './src/ui/useStore';
 import { ThemeProvider, useTheme, useThemedStyles, type Theme } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
@@ -65,6 +66,12 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
 
   React.useEffect(() => {
     const handle = (url: string | null): void => {
+      if (url?.includes('source=widget') || url?.includes('source=shortcut') || url?.includes('source=pet_float')) {
+        if (url.includes('newChat=true') || !state.activeSessionId) {
+          store.createSessionDraft();
+        }
+        return;
+      }
       // dshpalm://session?id=…&engine=full —— WebView / 外部把官方会话带回 RN（M2.1）
       const webSession = parseWebSessionDeepLink(url);
       if (webSession) {
@@ -194,6 +201,7 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
         {statusBar}
         <View style={styles.webFrame}>
           {shown}
+          <TopNoticeBanner />
           {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
         </View>
       </View>
@@ -204,6 +212,7 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
     <View style={styles.root}>
       {statusBar}
       {shown}
+      <TopNoticeBanner />
       {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
     </View>
   );

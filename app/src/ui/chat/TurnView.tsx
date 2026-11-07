@@ -23,6 +23,7 @@ import { BrandIcon, type BrandIconName } from '../components/BrandIcon';
 import { ApprovalCard } from './ApprovalCard';
 import { CapabilityCard } from './CapabilityCard';
 import { ReadonlyQaCard } from './ReadonlyQaCard';
+import { ShareTurnSheet } from './ShareTurnSheet';
 
 function toolIconName(name: string): BrandIconName {
   const key = name.toLowerCase();
@@ -387,6 +388,7 @@ function AssistantActions({ text }: { text: string }): React.ReactElement | null
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [copied, setCopied] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
   if (!text.trim()) return null;
 
   const copy = (): void => {
@@ -396,34 +398,42 @@ function AssistantActions({ text }: { text: string }): React.ReactElement | null
   };
 
   return (
-    <View style={styles.actions}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="复制回答"
-        onPress={copy}
-        hitSlop={6}
-        style={({ pressed }) => [styles.actionPill, pressed && { opacity: 0.7 }]}
-      >
-        <BrandIcon
-          name={copied ? 'check' : 'copy'}
-          size={13}
-          color={copied ? palette.ok : palette.textDim}
-        />
-        <Text style={[styles.actionLabel, copied && { color: palette.ok }]}>
-          {copied ? '已复制' : '复制'}
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="分享回答"
-        onPress={() => void Share.share({ message: text })}
-        hitSlop={6}
-        style={({ pressed }) => [styles.actionPill, pressed && { opacity: 0.7 }]}
-      >
-        <BrandIcon name="share" size={13} color={palette.textDim} />
-        <Text style={styles.actionLabel}>分享</Text>
-      </Pressable>
-    </View>
+    <>
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="复制回答"
+          onPress={copy}
+          hitSlop={6}
+          style={({ pressed }) => [styles.actionPill, pressed && { opacity: 0.7 }]}
+        >
+          <BrandIcon
+            name={copied ? 'check' : 'copy'}
+            size={13}
+            color={copied ? palette.ok : palette.textDim}
+          />
+          <Text style={[styles.actionLabel, copied && { color: palette.ok }]}>
+            {copied ? '已复制' : '复制'}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="分享回答"
+          onPress={() => setShareOpen(true)}
+          hitSlop={6}
+          style={({ pressed }) => [styles.actionPill, pressed && { opacity: 0.7 }]}
+        >
+          <BrandIcon name="share" size={13} color={palette.textDim} />
+          <Text style={styles.actionLabel}>分享</Text>
+        </Pressable>
+      </View>
+      <ShareTurnSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        userText=""
+        assistantText={text}
+      />
+    </>
   );
 }
 

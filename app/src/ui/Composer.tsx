@@ -4,7 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import type { AttachmentEngine, AttachmentKind } from '../lib/attachments/types';
 import type { PermissionOption, Preset } from '../protocol';
 import { AttachmentChips } from './AttachmentChips';
-import { PickerSheet, BrandIcon, type BrandIconName } from './components';
+import { PickerSheet, BrandIcon, CompanionPet, type BrandIconName } from './components';
 import { radius, space, useTheme, useThemedStyles, type Theme } from './theme';
 
 export interface ComposerAttachment {
@@ -241,52 +241,56 @@ export function Composer({
         </ScrollView>
       ) : null}
 
-      <View style={styles.box}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="添加附件"
-          onPress={handlePlus}
-          disabled={!onPickAttachment && !onAttach}
-          style={({ pressed }) => [styles.key, pressed && { opacity: 0.65 }]}
-        >
-          <BrandIcon
-            name={plusOpen ? 'close' : 'plus'}
-            size={18}
-            color={palette.textDim}
-            strokeWidth={2}
-          />
-        </Pressable>
+      <View style={styles.inputAreaWrapper}>
+        <CompanionPet />
 
-        <TextInput
-          style={styles.input}
-          value={draft}
-          onChangeText={onChangeDraft}
-          placeholder={placeholder}
-          placeholderTextColor={palette.textFaint}
-          multiline
-          scrollEnabled
-          textAlignVertical="top"
-          accessibilityLabel="输入框"
-        />
+        <View style={styles.box}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="添加附件"
+            onPress={handlePlus}
+            disabled={!onPickAttachment && !onAttach}
+            style={({ pressed }) => [styles.key, pressed && { opacity: 0.65 }]}
+          >
+            <BrandIcon
+              name={plusOpen ? 'close' : 'plus'}
+              size={18}
+              color={palette.textDim}
+              strokeWidth={2}
+            />
+          </Pressable>
 
-        <Pressable
-          onPress={showStop ? onStop : onSend}
-          disabled={!showStop && !canSend}
-          accessibilityRole="button"
-          accessibilityLabel={showStop ? '停止' : '发送'}
-          style={({ pressed }) => [
-            styles.send,
-            showStop && { backgroundColor: palette.glassStrong },
-            { opacity: showStop || canSend ? (pressed ? 0.75 : 1) : 0.3 },
-          ]}
-        >
-          <BrandIcon
-            name={showStop ? 'square' : 'arrowUp'}
-            size={16}
-            color={showStop ? palette.text : palette.bg}
-            strokeWidth={2.4}
+          <TextInput
+            style={styles.input}
+            value={draft}
+            onChangeText={onChangeDraft}
+            placeholder={placeholder}
+            placeholderTextColor={palette.textFaint}
+            multiline
+            scrollEnabled
+            textAlignVertical="top"
+            accessibilityLabel="输入框"
           />
-        </Pressable>
+
+          <Pressable
+            onPress={showStop ? onStop : onSend}
+            disabled={!showStop && !canSend}
+            accessibilityRole="button"
+            accessibilityLabel={showStop ? '停止' : '发送'}
+            style={({ pressed }) => [
+              styles.send,
+              showStop && { backgroundColor: palette.glassStrong },
+              { opacity: showStop || canSend ? (pressed ? 0.75 : 1) : 0.3 },
+            ]}
+          >
+            <BrandIcon
+              name={showStop ? 'square' : 'arrowUp'}
+              size={16}
+              color={showStop ? palette.text : palette.bg}
+              strokeWidth={2.4}
+            />
+          </Pressable>
+        </View>
       </View>
 
       <PickerSheet
@@ -403,6 +407,9 @@ const createStyles = ({ palette: c }: Theme) =>
   barPillGlyph: { color: c.textDim, fontSize: 11, fontWeight: '600' },
   barPillText: { color: c.text, fontSize: 12, flexShrink: 1 },
   barChevron: { color: c.textFaint, fontSize: 9 },
+  inputAreaWrapper: {
+    position: 'relative',
+  },
   box: {
     flexDirection: 'row',
     alignItems: 'flex-end',

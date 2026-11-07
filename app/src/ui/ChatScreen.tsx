@@ -23,6 +23,7 @@ import { ModelSheet } from './ModelSheet';
 import { GeneratedFilesSheet } from './GeneratedFilesSheet';
 import { collectGeneratedFiles } from '../lib/generatedFiles';
 import { TurnView, JumpButton } from './chat';
+import { ChatSkeleton } from './Skeletons';
 import type { AttachmentKind } from '../lib/attachments/types';
 import { BrandIcon } from './components';
 import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
@@ -110,6 +111,41 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     }
   }
 
+  // 智能重型会话判定：轮数多、文字量巨大（如架构评审报告、长 Markdown）、或正在异步拉取详情
+  const totalCharacters = React.useMemo(() => {
+    let count = 0;
+    for (const t of turns) {
+      if (Array.isArray(t.blocks)) {
+        for (const b of t.blocks) {
+          if ('text' in b && typeof b.text === 'string') count += b.text.length;
+        }
+      }
+    }
+    return count;
+  }, [turns]);
+
+  const isHeavySession = turns.length > 4 || totalCharacters > 1200 || state.detailLoading;
+  const [transitionReady, setTransitionReady] = React.useState(!isHeavySession);
+
+  React.useEffect(() => {
+    if (!isHeavySession) {
+      setTransitionReady(true);
+      return;
+    }
+    setTransitionReady(false);
+    let active = true;
+    const frame = requestAnimationFrame(() => {
+      const timer = setTimeout(() => {
+        if (active) setTransitionReady(true);
+      }, 120);
+      return () => clearTimeout(timer);
+    });
+    return () => {
+      active = false;
+      cancelAnimationFrame(frame);
+    };
+  }, [session.id, isHeavySession]);
+
   // 系统分享进来的文件已由 store 收进待发列表，这里不用再单独处理
   const hasText = draft.trim().length > 0;
 
@@ -160,7 +196,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     (event: LayoutChangeEvent): void => {
       viewportHeight.current = event.nativeEvent.layout.height;
       if (!initialPositioned) {
-        if (contentHeight.current > 0 && viewportHeight.current > 0) {
+        if (!state.detailLoading && turns.length > 0 && contentHeight.current > 0 && viewportHeight.current > 0) {
           const offset = Math.max(0, contentHeight.current - viewportHeight.current);
           listRef.current?.scrollToOffset({ offset, animated: false });
           setInitialPositioned(true);
@@ -169,14 +205,14 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         scrollToLatest(false);
       }
     },
-    [initialPositioned, scrollToLatest],
+    [initialPositioned, scrollToLatest, state.detailLoading, turns.length],
   );
 
   const handleContentSizeChange = React.useCallback(
     (_width: number, height: number): void => {
       contentHeight.current = height;
       if (!initialPositioned) {
-        if (contentHeight.current > 0 && viewportHeight.current > 0) {
+        if (!state.detailLoading && turns.length > 0 && contentHeight.current > 0 && viewportHeight.current > 0) {
           const offset = Math.max(0, contentHeight.current - viewportHeight.current);
           listRef.current?.scrollToOffset({ offset, animated: false });
           setInitialPositioned(true);
@@ -185,7 +221,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         scrollToLatest(false);
       }
     },
-    [initialPositioned, scrollToLatest],
+    [initialPositioned, scrollToLatest, state.detailLoading, turns.length],
   );
 
   const handleScroll = React.useCallback(
@@ -385,35 +421,41 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           </Pressable>
         ) : null}
         <View style={styles.listWrap}>
-          <FlatList
-            ref={listRef}
-            style={[styles.list, turns.length > 0 && !initialPositioned && { opacity: 0 }]}
-            data={turns}
-            renderItem={renderTurn}
-            keyExtractor={(turn, index) => `${turn.id ?? turn.runId ?? 'turn'}#${index}`}
-            extraData={state.approvals}
-            ItemSeparatorComponent={TurnSeparator}
-            ListEmptyComponent={renderEmpty}
-            contentContainerStyle={styles.listContent}
-            onLayout={handleListLayout}
-            onContentSizeChange={handleContentSizeChange}
-            onScroll={handleScroll}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-            onScrollBeginDrag={handleScrollBeginDrag}
-            onMomentumScrollBegin={handleMomentumBegin}
-            onScrollEndDrag={handleScrollSettled}
-            onMomentumScrollEnd={handleScrollSettled}
-            scrollEventThrottle={16}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            initialNumToRender={8}
-            maxToRenderPerBatch={6}
-            windowSize={9}
-            updateCellsBatchingPeriod={32}
-            removeClippedSubviews={false}
-            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-          />
+          {!transitionReady ? (
+            <View style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
+              <ChatSkeleton />
+            </View>
+          ) : (
+            <FlatList
+              ref={listRef}
+              style={[styles.list, turns.length > 0 && !initialPositioned && { opacity: 0 }]}
+              data={turns}
+              renderItem={renderTurn}
+              keyExtractor={(turn, index) => `${turn.id ?? turn.runId ?? 'turn'}#${index}`}
+              extraData={state.approvals}
+              ItemSeparatorComponent={TurnSeparator}
+              ListEmptyComponent={renderEmpty}
+              contentContainerStyle={styles.listContent}
+              onLayout={handleListLayout}
+              onContentSizeChange={handleContentSizeChange}
+              onScroll={handleScroll}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              onScrollBeginDrag={handleScrollBeginDrag}
+              onMomentumScrollBegin={handleMomentumBegin}
+              onScrollEndDrag={handleScrollSettled}
+              onMomentumScrollEnd={handleScrollSettled}
+              scrollEventThrottle={16}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              initialNumToRender={6}
+              maxToRenderPerBatch={6}
+              windowSize={7}
+              updateCellsBatchingPeriod={32}
+              removeClippedSubviews={false}
+              maintainVisibleContentPosition={initialPositioned ? { minIndexForVisible: 0 } : undefined}
+            />
+          )}
 
           <View style={styles.jumpWrap} pointerEvents="box-none">
             <JumpButton

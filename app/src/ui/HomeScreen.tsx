@@ -2,8 +2,8 @@ import React from 'react';
 import {
   Animated,
   BackHandler,
+  PanResponder,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -73,11 +73,56 @@ export function HomeScreen(): React.ReactElement {
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [draft, setDraft] = React.useState('');
-  const [refreshing, setRefreshing] = React.useState(false);
   const [drawer, setDrawer] = React.useState(false);
   const [modeSheetOpen, setModeSheetOpen] = React.useState(false);
   // 抽屉 0→1 进度；首页主体同步轻微右移，形成“推开”而不是一张死板的面板。
   const drawerAnim = React.useRef(new Animated.Value(0)).current;
+
+  // 左侧滑动手势唤出抽屉（采用 Capture 阶段优先拦截，不受 ScrollView 抢事件影响）
+  const homePanResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (evt, gesture) =>
+          !drawer && gesture.dx > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
+        onMoveShouldSetPanResponder: (evt, gesture) =>
+          !drawer && gesture.dx > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
+        onPanResponderGrant: () => {
+          drawerAnim.stopAnimation();
+        },
+        onPanResponderMove: (_evt, gesture) => {
+          const next = Math.max(0, Math.min(1, gesture.dx / 302));
+          drawerAnim.setValue(next);
+        },
+        onPanResponderRelease: (_evt, gesture) => {
+          const next = Math.max(0, Math.min(1, gesture.dx / 302));
+          if (next > 0.25 || gesture.vx > 0.3) {
+            setDrawer(true);
+            Animated.spring(drawerAnim, {
+              toValue: 1,
+              friction: 8,
+              tension: 65,
+              useNativeDriver: true,
+            }).start();
+          } else {
+            Animated.spring(drawerAnim, {
+              toValue: 0,
+              friction: 8,
+              tension: 65,
+              useNativeDriver: true,
+            }).start();
+          }
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(drawerAnim, {
+            toValue: 0,
+            friction: 8,
+            tension: 65,
+            useNativeDriver: true,
+          }).start();
+        },
+      }),
+    [drawer, drawerAnim],
+  );
 
   // 从系统分享菜单进来的文字：填进输入框（只填一次；回前台再分享也生效）
   React.useEffect(() => {
@@ -154,7 +199,7 @@ export function HomeScreen(): React.ReactElement {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} {...homePanResponder.panHandlers}>
       <Animated.View
         style={{
           flex: 1,
@@ -212,68 +257,11 @@ export function HomeScreen(): React.ReactElement {
           contentContainerStyle={styles.scrollOuter}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              tintColor={palette.textDim}
-              onRefresh={() => {
-                setRefreshing(true);
-                void store.refreshSessions().finally(() => setRefreshing(false));
-              }}
-            />
-          }
         >
           <View style={styles.greeting}>
             <TypewriterText text="需要我做点什么？" style={styles.greetingTitle} />
             <RotatingHint items={HOME_HINTS} style={styles.greetingSub} />
           </View>
-
-          {state.sessions.length > 0 ? (
-            <View style={styles.list}>
-              <Text style={styles.sectionTitle}>最近</Text>
-              {state.sessions.slice(0, 8).map((s) => {
-                const p = presets.find((x) => x.id === s.presetId);
-                const link = state.links.find((item) => item.id === s.id);
-                return (
-                  <Pressable
-                    key={s.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${s.title}${s.preview ? '，' + s.preview : ''}`}
-                    onPress={() => void store.openSession(s.id)}
-                    style={({ pressed }) => [styles.row, pressed && { backgroundColor: palette.glassPressed }]}
-                  >
-                    <View style={{ flex: 1, gap: 3 }}>
-                      <View style={styles.rowTop}>
-                        <Text style={styles.rowTitle} numberOfLines={1}>
-                          {s.title}
-                        </Text>
-                        <Text style={styles.rowTime}>{relTime(s.updatedAt)}</Text>
-                      </View>
-                      <View style={styles.rowBottom}>
-                        <Text style={styles.rowPreview} numberOfLines={1}>
-                          {s.preview || p?.name || ''}
-                        </Text>
-                        {link ? (
-                          <View style={[styles.engineTag, link.activeSide === 'full' && styles.engineTagFull]}>
-                            <Text style={[styles.engineTagText, link.activeSide === 'full' && styles.engineTagTextFull]}>
-                              {link.activeSide === 'full' ? '完整' : '轻'}
-                            </Text>
-                          </View>
-                        ) : null}
-                        <StatusTag s={s} />
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : (
-            <EmptyState
-              glyph="💬"
-              title="还没有会话"
-              description="发第一条消息，或者从下面的锦囊开始。"
-            />
-          )}
 
           {Boolean(state.error) ? (
             <Pressable onPress={() => store.clearError()}>

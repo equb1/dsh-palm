@@ -52,6 +52,7 @@ export function PluginsScreen(): React.ReactElement {
   const [query, setQuery] = React.useState('');
   const [tier, setTier] = React.useState<PluginFilter>('all');
   const [expanded, setExpanded] = React.useState<string | null>(null);
+  const [importNotice, setImportNotice] = React.useState<string | null>(null);
   const counts = React.useMemo(() => effectiveTierCounts(), []);
   const chips = React.useMemo(() => filterChips(counts), [counts]);
   const results = React.useMemo(() => filterPlugins(PLUGIN_COMPAT, query, tier), [query, tier]);
@@ -138,11 +139,65 @@ export function PluginsScreen(): React.ReactElement {
     );
   };
 
+  const activeExtensions = [
+    {
+      name: '@dsh/companion-pet',
+      version: '1.0.0',
+      desc: 'Deepy 与鲸娘 · 工作伴侣：敲代码/等待确认/任务汇报/用量统计',
+      tier: 'L1',
+    },
+    {
+      name: '@dsh/workbuddy-share',
+      version: '1.2.0',
+      desc: 'WorkBuddy 风格多维分享：长图卡片、二维码与文本分享',
+      tier: 'L1',
+    },
+    {
+      name: '@dsh/table-insight-tools',
+      version: '1.1.0',
+      desc: '数据表格增强：全屏放大浏览、字号调节、CSV 与 Markdown 导出',
+      tier: 'L0',
+    },
+  ];
+
+  const renderActiveHeader = () => (
+    <View style={styles.activeWrap}>
+      <View style={styles.activeTitleRow}>
+        <Text style={styles.activeTitle}>已启用内置与核心插件</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setImportNotice('已就绪：支持通过轻引擎锦囊或 Proot npm 目录自动发现扩展。');
+            setTimeout(() => setImportNotice(null), 3000);
+          }}
+          style={styles.importBtn}
+        >
+          <Text style={styles.importBtnText}>＋ 导入扩展</Text>
+        </Pressable>
+      </View>
+      {importNotice ? <Text style={styles.importNoticeText}>{importNotice}</Text> : null}
+      {activeExtensions.map((ext) => (
+        <View key={ext.name} style={styles.activeCard}>
+          <View style={styles.activeCardTop}>
+            <View style={styles.activeBadge}>
+              <Text style={styles.activeBadgeText}>{ext.tier}</Text>
+            </View>
+            <Text style={styles.activeName}>{ext.name}</Text>
+            <Text style={styles.activeVersion}>v{ext.version}</Text>
+          </View>
+          <Text style={styles.activeDesc}>{ext.desc}</Text>
+        </View>
+      ))}
+      <View style={styles.divider} />
+      <Text style={styles.activeTitle}>官方生态兼容库 ({results.length})</Text>
+    </View>
+  );
+
   return (
     <View style={styles.root}>
       <View style={styles.header}>
         <IconButton glyph="‹" label="返回" onPress={() => store.closePlugins()} />
-        <Text style={styles.title}>插件兼容</Text>
+        <Text style={styles.title}>插件兼容与管理</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -214,6 +269,7 @@ export function PluginsScreen(): React.ReactElement {
         keyExtractor={(item) => item.name}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={!filtering ? renderActiveHeader : undefined}
         ListEmptyComponent={
           <EmptyState
             glyph="◈"
@@ -301,4 +357,81 @@ const createStyles = ({ palette: c }: Theme) =>
       gap: 3,
     },
     detailLine: { color: c.textDim, fontSize: 11.5, lineHeight: 17 },
+    activeWrap: {
+      gap: 8,
+      marginBottom: 14,
+    },
+    activeTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 2,
+    },
+    activeTitle: {
+      color: c.text,
+      fontSize: 13.5,
+      fontWeight: '700',
+    },
+    importBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.pill,
+      backgroundColor: c.blueSoft,
+    },
+    importBtnText: {
+      color: c.blue,
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    importNoticeText: {
+      color: c.ok,
+      fontSize: 11.5,
+      backgroundColor: c.okSoft,
+      padding: 8,
+      borderRadius: radius.sm,
+    },
+    activeCard: {
+      backgroundColor: c.glass,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.borderStrong,
+      padding: 10,
+      gap: 4,
+    },
+    activeCardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    activeBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      borderRadius: radius.pill,
+      backgroundColor: c.okSoft,
+    },
+    activeBadgeText: {
+      color: c.ok,
+      fontSize: 10,
+      fontWeight: '700',
+    },
+    activeName: {
+      flex: 1,
+      color: c.text,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    activeVersion: {
+      color: c.textFaint,
+      fontSize: 10.5,
+    },
+    activeDesc: {
+      color: c.textDim,
+      fontSize: 11.5,
+      lineHeight: 16,
+    },
+    divider: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: c.border,
+      marginVertical: 6,
+    },
   });

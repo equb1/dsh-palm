@@ -4,8 +4,11 @@ import { useColorScheme } from 'react-native';
 import {
   darkColors,
   darkSemantic,
+  deepyColors,
+  emeraldColors,
   lightColors,
   lightSemantic,
+  violetColors,
   type Palette,
   type ResolvedTheme,
   type Semantic,
@@ -36,12 +39,17 @@ export function ThemeProvider({
   const system = useColorScheme();
   const resolved: ResolvedTheme = mode === 'system' ? (system === 'dark' ? 'dark' : 'light') : mode;
   const value = React.useMemo<Theme>(() => {
-    const palette = resolved === 'dark' ? darkColors : lightColors;
+    let palette = lightColors;
+    if (resolved === 'dark') palette = darkColors;
+    else if (resolved === 'deepy') palette = deepyColors;
+    else if (resolved === 'violet') palette = violetColors;
+    else if (resolved === 'emerald') palette = emeraldColors;
+
     return {
       mode,
       resolved,
       palette,
-      semantic: resolved === 'dark' ? darkSemantic : lightSemantic,
+      semantic: resolved === 'light' ? lightSemantic : darkSemantic,
     };
   }, [mode, resolved]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

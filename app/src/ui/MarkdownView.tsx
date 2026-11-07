@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Animated,
   Clipboard,
+  findNodeHandle,
   Image,
   Linking,
   Platform,
@@ -25,6 +26,9 @@ import {
   type Theme,
 } from './theme';
 import { highlight, type SyntaxKind } from './syntax';
+import { TableModal } from './chat/TableModal';
+import { BrandIcon } from './components';
+import { captureAndShareView, captureAndSaveView } from '../lib/host';
 
 type SyntaxStyles = Record<SyntaxKind, TextStyle>;
 
@@ -670,57 +674,145 @@ function TableView({
   rows: string[][];
 }): React.ReactElement {
   const { styles } = useMarkdownStyles();
+  const [modalOpen, setModalOpen] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+  const tableRef = React.useRef<React.ComponentRef<typeof View>>(null);
   const wide = header.length >= 4;
   const cellAlign = (col: number): TextStyleAlign => {
     return align[col] ?? 'left';
   };
 
-  const body = (
-    <View style={[styles.tableWrap, wide ? styles.tableWrapWide : null]}>
-      <View style={[styles.tableRow, styles.tableHeaderRow]}>
-        {header.map((cell, col) => (
-          <View
-            key={col}
-            style={[
-              styles.tableCell,
-              col === 0 ? styles.tableCellFirst : null,
-              wide ? styles.tableCellWide : { flex: 1 },
-            ]}
+  const toMarkdown = (): string => {
+    const delim = align.map((a) => (a === 'center' ? ':---:' : a === 'right' ? '---:' : ':---'));
+    const lines = [
+      `| ${header.join(' | ')} |`,
+      `| ${delim.join(' | ')} |`,
+      ...rows.map((row) => `| ${row.join(' | ')} |`),
+    ];
+    return lines.join('\n');
+  };
+
+  const handleCopy = () => {
+    Clipboard.setString(toMarkdown());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSaveImage = () => {
+    if (!tableRef.current) return;
+    const node = findNodeHandle(tableRef.current);
+    if (!node) return;
+    void captureAndSaveView(node, '表格').then((ok) => {
+      if (ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    });
+  };
+
+  const handleShareImage = () => {
+    if (!tableRef.current) return;
+    const node = findNodeHandle(tableRef.current);
+    if (!node) return;
+    void captureAndShareView(node, '表格分享');
+  };
+
+  return (
+    <View style={styles.tableCardContainer}>
+      {/* 顶部固定操作栏（严格对齐 WorkBuddy：左侧「表格」，右侧 4 个固定操作图标：复制、存图、全屏、分享） */}
+      <View style={styles.tableTopBar}>
+        <Text style={styles.tableTopTitle}>表格</Text>
+        <View style={styles.tableTopActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="复制表格内容"
+            onPress={handleCopy}
+            style={({ pressed }) => [styles.tableIconBtn, pressed && styles.tableIconBtnPressed]}
+            hitSlop={6}
           >
-            <InlineText
-              text={cell}
-              baseStyle={{ ...styles.tableHeaderText, textAlign: cellAlign(col) }}
-            />
-          </View>
-        ))}
+            <BrandIcon name={copied ? 'check' : 'copy'} size={15} color={copied ? '#10B981' : '#64748B'} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="保存表格图片到相册"
+            onPress={handleSaveImage}
+            style={({ pressed }) => [styles.tableIconBtn, pressed && styles.tableIconBtnPressed]}
+            hitSlop={6}
+          >
+            <BrandIcon name={saved ? 'check' : 'image'} size={15} color={saved ? '#10B981' : '#64748B'} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="全屏放大表格"
+            onPress={() => setModalOpen(true)}
+            style={({ pressed }) => [styles.tableIconBtn, pressed && styles.tableIconBtnPressed]}
+            hitSlop={6}
+          >
+            <BrandIcon name="external" size={15} color="#64748B" />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="分享表格长图"
+            onPress={handleShareImage}
+            style={({ pressed }) => [styles.tableIconBtn, pressed && styles.tableIconBtnPressed]}
+            hitSlop={6}
+          >
+            <BrandIcon name="share" size={15} color="#64748B" />
+          </Pressable>
+        </View>
       </View>
-      {rows.map((row, r) => (
-        <View key={r} style={[styles.tableRow, r % 2 === 1 ? styles.tableRowStripe : null]}>
-          {row.map((cell, col) => (
-            <View
-              key={col}
-              style={[
-                styles.tableCell,
-                col === 0 ? styles.tableCellFirst : null,
-                wide ? styles.tableCellWide : { flex: 1 },
-              ]}
-            >
-              <InlineText
-                text={cell}
-                baseStyle={{ ...styles.tableCellText, textAlign: cellAlign(col) }}
-              />
+
+      {/* 横向滚动表格正文：截图 Ref 仅挂载在包含所有列完整宽度的 tableGrid 上，不包含上方操作栏 */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tableScrollContent}>
+        <View ref={tableRef} collapsable={false} style={styles.tableGrid}>
+          <View style={[styles.tableRow, styles.tableHeaderRow]}>
+            {header.map((cell, col) => (
+              <View
+                key={col}
+                style={[
+                  styles.tableCell,
+                  col === 0 ? styles.tableCellFirst : null,
+                  wide ? styles.tableCellWide : { flex: 1 },
+                ]}
+              >
+                <InlineText
+                  text={cell}
+                  baseStyle={{ ...styles.tableHeaderText, textAlign: cellAlign(col) }}
+                />
+              </View>
+            ))}
+          </View>
+          {rows.map((row, r) => (
+            <View key={r} style={[styles.tableRow, r % 2 === 1 ? styles.tableRowStripe : null]}>
+              {row.map((cell, col) => (
+                <View
+                  key={col}
+                  style={[
+                    styles.tableCell,
+                    col === 0 ? styles.tableCellFirst : null,
+                    wide ? styles.tableCellWide : { flex: 1 },
+                  ]}
+                >
+                  <InlineText
+                    text={cell}
+                    baseStyle={{ ...styles.tableCellText, textAlign: cellAlign(col) }}
+                  />
+                </View>
+              ))}
             </View>
           ))}
         </View>
-      ))}
-    </View>
-  );
+      </ScrollView>
 
-  if (!wide) return body;
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      {body}
-    </ScrollView>
+      <TableModal
+        visible={modalOpen}
+        onClose={() => setModalOpen(false)}
+        header={header}
+        align={align}
+        rows={rows}
+      />
+    </View>
   );
 }
 
@@ -1192,6 +1284,79 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
     fontStyle: 'italic',
   },
   /* 表格 */
+  tableCardContainer: {
+    marginVertical: 8,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tableTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  tableTopTitle: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tableTopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tableIconBtn: {
+    padding: 4,
+    borderRadius: radius.xs,
+  },
+  tableIconBtnPressed: {
+    opacity: 0.5,
+  },
+  tableScrollContent: {
+    paddingBottom: 2,
+  },
+  tableGrid: {
+    minWidth: '100%',
+    backgroundColor: '#FFFFFF',
+  },
+  tableHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: c.glassStrong,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: c.border,
+  },
+  tableCountText: {
+    color: c.textFaint,
+    fontSize: 10.5,
+    fontWeight: '500',
+  },
+  tableExpandBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.xs,
+    backgroundColor: c.blueSoft,
+  },
+  tableExpandText: {
+    color: c.blue,
+    fontSize: 10.5,
+    fontWeight: '600',
+  },
   tableWrap: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.borderStrong,

@@ -188,12 +188,14 @@ export function SessionDrawer({
     return () => animation.stop();
   }, [visible, anim]);
 
-  // 打开状态下手势左滑关闭：跟手 + 松手按速度/位移决定回弹或收起。
+  // 打开状态下手势左滑关闭：采用 Capture 阶段优先拦截，防止被列表 ScrollView 抢事件
   const panResponder = React.useMemo(
     () =>
       PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_event, gesture) =>
+          visible && gesture.dx < -10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
         onMoveShouldSetPanResponder: (_event, gesture) =>
-          visible && gesture.dx < -6 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+          visible && gesture.dx < -10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
         onPanResponderGrant: () => {
           anim.stopAnimation();
         },

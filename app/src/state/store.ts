@@ -286,6 +286,18 @@ export interface AppState {
   chatFontScale: number;
   /** U7 主题：跟随系统 / 浅色 / 深色（持久化在 UI cache） */
   themeMode: ThemeMode;
+  /** WorkBuddy 风格顶部下滑通知 */
+  inAppNotice: InAppNotice | null;
+}
+
+export interface InAppNotice {
+  id: string;
+  kind: 'done' | 'approval' | 'error';
+  title: string;
+  body: string;
+  sessionId: string;
+  engine: SessionEngine;
+  createdAt: number;
 }
 
 /**
@@ -455,6 +467,7 @@ export class Store {
     collapseProcess: true,
     chatFontScale: 1,
     themeMode: 'system',
+    inAppNotice: null,
   };
 
   private readonly engineDeps: EngineDeps;
@@ -578,7 +591,13 @@ export class Store {
           await this.connectLocal();
           break;
         case 'stop-host':
-          await this.stopHostEffect();
+          // 只有用户在设置页显式手动停止（或低内存强制回收）时才停 host；
+          // 从完整模式切回轻模式时，让 Proot 在后台热驻留（Hot Standby），下次切回完整模式无需再漫长加载
+          if (this.state.engine.tier === 'always' || this.engineDeps.hostAvailable) {
+            // 保持热驻留，不杀 Proot
+          } else {
+            await this.stopHostEffect();
+          }
           break;
         case 'report':
           break;
@@ -906,7 +925,10 @@ export class Store {
         if (
           parsed.themeMode === 'system' ||
           parsed.themeMode === 'light' ||
-          parsed.themeMode === 'dark'
+          parsed.themeMode === 'dark' ||
+          parsed.themeMode === 'deepy' ||
+          parsed.themeMode === 'violet' ||
+          parsed.themeMode === 'emerald'
         ) {
           nextPatch.themeMode = parsed.themeMode;
         }
@@ -3208,7 +3230,13 @@ export class Store {
           await this.connectLocal();
           break;
         case 'stop-host':
-          await this.stopHostEffect();
+          // 只有用户在设置页显式手动停止（或低内存强制回收）时才停 host；
+          // 从完整模式切回轻模式时，让 Proot 在后台热驻留（Hot Standby），下次切回完整模式无需再漫长加载
+          if (this.state.engine.tier === 'always' || this.engineDeps.hostAvailable) {
+            // 保持热驻留，不杀 Proot
+          } else {
+            await this.stopHostEffect();
+          }
           break;
         case 'report':
           break;
@@ -3459,33 +3487,84 @@ export class Store {
     this.patch({ error: null });
   }
 
-  /** App 不在前台时才发系统通知：在看着界面就别打扰 */
+  showInAppNotice(notice: Omit<InAppNotice, 'id' | 'createdAt'>): void {
+    const id = `notice-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    this.patch({
+      inAppNotice: {
+        ...notice,
+        id,
+        createdAt: Date.now(),
+      },
+    });
+  }
+
+  dismissInAppNotice(): void {
+    this.patch({ inAppNotice: null });
+  }
+
+  handleInAppNoticeClick(): void {
+    const notice = this.state.inAppNotice;
+    if (!notice) return;
+    this.patch({ inAppNotice: null, view: 'main', connectModalOpen: false });
+    void this.openSessionRow(notice.sessionId, notice.engine);
+  }
+
+  /** App 在前台时若不在该会话则弹顶部通知；不在前台时发系统通知 */
   private notifyApproval(approval: Approval): void {
-    if (isAppActive()) return;
     if (this.notifiedApprovals.has(approval.id)) return;
     this.notifiedApprovals.add(approval.id);
     const title = approval.kind === 'question' ? '有个问题等你回答' : '需要你确认操作';
     const body = approval.summary ? `${approval.title}：${approval.summary}` : approval.title;
+    const engine: SessionEngine = this.state.engineKind === 'light' ? 'light' : 'full';
+
+    if (isAppActive()) {
+      if (this.state.currentId !== approval.sessionId || this.state.view !== 'main') {
+        this.showInAppNotice({
+          kind: 'approval',
+          title,
+          body,
+          sessionId: approval.sessionId,
+          engine,
+        });
+      }
+      return;
+    }
+
     void notifyEvent(title, body, `approval:${approval.sessionId}:${approval.id}`, {
       sessionId: approval.sessionId,
       approvalId: approval.id,
-      engine: this.state.engineKind === 'light' ? 'light' : 'full',
+      engine,
     });
   }
 
   private notifyRunFinished(data: { sessionId: string; reason: string; preview?: string; error?: string }): void {
-    if (isAppActive()) return;
     if (data.reason === 'stopped') return;
     const session =
       this.state.sessions.find((s) => s.id === data.sessionId) ??
       (this.state.detail?.id === data.sessionId ? this.state.detail : undefined);
     const sessionTitle = session?.title ?? '会话';
+    const engine: SessionEngine = this.state.engineKind === 'light' ? 'light' : 'full';
+
+    if (isAppActive()) {
+      // 在前台：只要当前屏幕不是该会话，就弹顶部下滑通知卡片
+      if (this.state.currentId !== data.sessionId || this.state.view !== 'main') {
+        this.showInAppNotice({
+          kind: data.reason === 'error' ? 'error' : 'done',
+          title: data.reason === 'error' ? `会话出错 · ${sessionTitle}` : `回复完成 · ${sessionTitle}`,
+          body: data.reason === 'error' ? (data.error || '执行过程中遇到错误，点击查看') : (data.preview || '已完成本轮回复，点击查看'),
+          sessionId: data.sessionId,
+          engine,
+        });
+      }
+      return;
+    }
+
     if (data.reason === 'error') {
       void notifyEvent(
         `会话出错 · ${sessionTitle}`,
         data.error || '执行过程中遇到错误，点击查看详情',
         `run:${data.sessionId}`,
-        { sessionId: data.sessionId, engine: this.state.engineKind === 'light' ? 'light' : 'full' },
+        { sessionId: data.sessionId, engine },
       );
       return;
     }
@@ -3493,7 +3572,7 @@ export class Store {
       `回复完成 · ${sessionTitle}`,
       data.preview || '已完成本轮回复，点击查看',
       `run:${data.sessionId}`,
-      { sessionId: data.sessionId, engine: this.state.engineKind === 'light' ? 'light' : 'full' },
+      { sessionId: data.sessionId, engine },
     );
   }
 

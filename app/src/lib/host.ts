@@ -60,6 +60,14 @@ export async function requestPinWidget(): Promise<boolean> {
   return false;
 }
 
+export async function requestPinShortcut(): Promise<boolean> {
+  return false;
+}
+
+export async function openAppSettings(): Promise<boolean> {
+  return false;
+}
+
 export async function requestAddTile(): Promise<boolean> {
   return false;
 }
@@ -67,8 +75,42 @@ export async function requestAddTile(): Promise<boolean> {
 export async function systemEntryStatus(): Promise<{
   widgetCount: number;
   overlayAllowed: boolean;
+  floatingPetActive?: boolean;
 } | null> {
   return null;
+}
+
+export async function isOverlayPermissionGranted(): Promise<boolean> {
+  return false;
+}
+
+export async function requestOverlayPermission(): Promise<boolean> {
+  return false;
+}
+
+export async function setFloatingPetEnabled(
+  _enabled: boolean,
+  _role?: string,
+  _state?: string,
+): Promise<boolean> {
+  return false;
+}
+
+export async function getFloatingPetStatus(): Promise<{
+  isShowing: boolean;
+  allowed: boolean;
+  role: string;
+  state: string;
+} | null> {
+  return null;
+}
+
+export async function captureAndShareView(_reactTag: number, _title?: string): Promise<boolean> {
+  return false;
+}
+
+export async function captureAndSaveView(_reactTag: number, _title?: string): Promise<boolean> {
+  return false;
 }
 
 /**

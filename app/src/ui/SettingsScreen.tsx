@@ -1,5 +1,5 @@
 import React from 'react';
-import { BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, BackHandler, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
@@ -9,7 +9,9 @@ import {
   hostAvailable,
   hostBatteryWhitelisted,
   hostLogs,
+  openAppSettings,
   requestAddTile,
+  requestPinShortcut,
   requestPinWidget,
   systemEntryStatus,
 } from '../lib/host';
@@ -243,15 +245,49 @@ export function SettingsScreen(): React.ReactElement {
         },
         {
           id: 'widget',
-          title: '桌面小组件',
+          title: '桌面卡片与小组件',
           value: entryStatus?.widgetCount ? '已添加' : '添加',
           icon: '▦',
           tone: 'amber',
           onPress: () => {
-            void requestPinWidget().then((ok) => {
-              flash(ok ? '已请求添加桌面小组件' : '当前桌面不支持快捷添加，请从小部件列表里添加「锦囊」');
-              void systemEntryStatus().then(setEntryStatus).catch(() => undefined);
-            });
+            Alert.alert(
+              '添加桌面入口',
+              '一加/OPPO/小米等定制 ROM 需先开启权限或手动拖动：\n\n1. 双指捏合手机桌面 -> 点击「插件/小部件」-> 找到「锦囊」直接拖到桌面即可（100%成功）。\n2. 若系统弹窗被拦截，请点击下方「开启权限」允许「创建桌面快捷方式」。',
+              [
+                {
+                  text: '添加微件卡片',
+                  onPress: () => {
+                    void requestPinWidget().then((ok) => {
+                      if (!ok) {
+                        Alert.alert('提示', '系统未放行请求。请在桌面「双指捏合」->「插件」中手动添加，或点击开启权限。', [
+                          { text: '开启权限', onPress: () => void openAppSettings() },
+                          { text: '知道了' },
+                        ]);
+                      }
+                      void systemEntryStatus().then(setEntryStatus).catch(() => undefined);
+                    });
+                  },
+                },
+                {
+                  text: '添加桌面图标',
+                  onPress: () => {
+                    void requestPinShortcut().then((ok) => {
+                      if (!ok) {
+                        Alert.alert('提示', '未能添加快捷图标。请检查是否已在系统设置中允许「创建桌面快捷方式」权限。', [
+                          { text: '去设置权限', onPress: () => void openAppSettings() },
+                          { text: '取消' },
+                        ]);
+                      }
+                    });
+                  },
+                },
+                {
+                  text: '去设置权限',
+                  onPress: () => void openAppSettings(),
+                },
+                { text: '取消', style: 'cancel' },
+              ],
+            );
           },
         },
         {
@@ -262,7 +298,13 @@ export function SettingsScreen(): React.ReactElement {
           tone: 'amber',
           onPress: () => {
             void requestAddTile().then((ok) => {
-              flash(ok ? '磁贴已添加到快捷设置' : '当前系统不支持自动添加，请在快捷设置编辑里添加「锦囊」');
+              Alert.alert(
+                '快捷设置磁贴',
+                ok
+                  ? '已将「锦囊」添加到顶部快捷设置栏！下拉手机状态栏即可快速打开。'
+                  : '当前系统版本或定制 ROM 需手动开启：下拉手机通知栏 -> 点击右上角「编辑/笔」图标 -> 将「锦囊」磁贴拖动到常用区即可。',
+                [{ text: '知道了' }],
+              );
             });
           },
         },

@@ -11,6 +11,7 @@ import {
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
 import { BrandIcon, type BrandIconName } from './components/BrandIcon';
+import { requestPinWidget } from '../lib/host';
 
 const FEATURE_ICONS: Record<string, BrandIconName> = {
   new: 'plus',
@@ -23,6 +24,7 @@ const FEATURE_ICONS: Record<string, BrandIconName> = {
   terminal: 'terminal',
   workspace: 'grid',
   plugins: 'puzzle',
+  widget: 'sparkles',
   community: 'users',
   about: 'info',
 };
@@ -164,6 +166,18 @@ export function FeaturesScreen(): React.ReactElement {
           icon: '◈',
           tone: 'amber',
           onPress: () => store.openPlugins(),
+        },
+        {
+          id: 'widget',
+          title: '桌面小组件',
+          hint: '添加到手机桌面，随时看任务状态',
+          icon: '微',
+          tone: 'blue',
+          onPress: () => {
+            void requestPinWidget().then((ok) => {
+              flash(ok ? '已请求添加桌面小组件，请在系统弹窗确认' : '设备不支持或请在手机桌面长按空白处添加「锦囊」小组件');
+            });
+          },
         },
         {
           id: 'community',

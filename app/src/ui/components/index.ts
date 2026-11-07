@@ -25,3 +25,6 @@ export { TypewriterText, RotatingHint } from './TypewriterText';
 
 export { PickerSheet } from './PickerSheet';
 export type { PickerOption, PickerSheetProps } from './PickerSheet';
+
+export { TopNoticeBanner } from './TopNoticeBanner';
+export { CompanionPet } from './CompanionPet';
