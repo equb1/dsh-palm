@@ -627,8 +627,6 @@ function TurnViewImpl({
           style={({ pressed }) => [styles.userBubble, pressed && styles.userBubblePressed]}
         >
           <Text
-            key={selectionResetKey ? `user-sel-${selectionResetKey}` : undefined}
-            selectable
             style={[
               styles.userText,
               fontScale !== 1 && { fontSize: 14 * fontScale, lineHeight: 22 * fontScale },

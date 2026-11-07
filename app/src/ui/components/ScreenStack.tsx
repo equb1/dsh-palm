@@ -39,84 +39,64 @@ export function ScreenStack({
   children: React.ReactNode;
 }): React.ReactElement {
   const { width } = useWindowDimensions();
+  const [prevKey, setPrevKey] = React.useState(screenKey);
   const [stack, setStack] = React.useState<PageEntry[]>([
     { key: screenKey, depth, node: children },
   ]);
   const [transition, setTransition] = React.useState<Transition | null>(null);
-  const stackRef = React.useRef(stack);
-  stackRef.current = stack;
-  const transitionRef = React.useRef<Transition | null>(transition);
-  transitionRef.current = transition;
-  const childRef = React.useRef(children);
-  childRef.current = children;
   const progress = React.useRef(new Animated.Value(1)).current;
   const animationRef = React.useRef<Animated.CompositeAnimation | null>(null);
   const widthRef = React.useRef(width);
   widthRef.current = width;
 
-  React.useLayoutEffect(() => {
-    const current = stackRef.current;
-    const index = current.findIndex((page) => page.key === screenKey);
-    if (index === current.length - 1) return;
-
-    // 上一次转场还没完就再次切页：先收口，避免两个 outgoing 叠在一起。
+  // 当路由 key 改变时，在渲染阶段同步更新栈与转场状态，彻底杜绝首帧将新组件错挂入旧槽位的双重挂载与重复动画
+  if (screenKey !== prevKey) {
+    setPrevKey(screenKey);
     animationRef.current?.stop();
-    let base = current;
-    const active = transitionRef.current;
-    if (active) {
-      base = active.direction === 'back' ? current.slice(0, active.targetIndex + 1) : current;
-      setTransition(null);
+    let base = stack;
+    if (transition) {
+      base = transition.direction === 'back' ? stack.slice(0, transition.targetIndex + 1) : stack;
     }
-
-    let nextStack: PageEntry[];
-    let targetIndex: number;
-    let fromIndex: number;
-    let direction: 'forward' | 'back';
-
-    const existing = base.findIndex((page) => page.key === screenKey);
+    const existing = base.findIndex((p) => p.key === screenKey);
     if (existing >= 0 && existing < base.length - 1) {
       const outgoing = base[base.length - 1]!;
-      nextStack = [...base.slice(0, existing + 1), outgoing];
-      targetIndex = existing;
-      fromIndex = nextStack.length - 1;
-      direction = 'back';
-    } else if (existing >= 0) {
-      // 已经是顶层，不需要转场
-      setStack(base);
-      return;
-    } else {
-      nextStack = [...base, { key: screenKey, depth, node: childRef.current }];
-      targetIndex = nextStack.length - 1;
-      fromIndex = Math.max(0, targetIndex - 1);
-      direction = 'forward';
+      const nextStack = [...base.slice(0, existing + 1), outgoing];
+      setStack(nextStack);
+      setTransition({ targetIndex: existing, fromIndex: nextStack.length - 1, direction: 'back' });
+      progress.setValue(0);
+    } else if (existing < 0) {
+      const nextStack = [...base, { key: screenKey, depth, node: children }];
+      setStack(nextStack);
+      setTransition({
+        targetIndex: nextStack.length - 1,
+        fromIndex: Math.max(0, nextStack.length - 2),
+        direction: 'forward',
+      });
+      progress.setValue(0);
     }
+  }
 
-    setStack(nextStack);
-    const nextTransition: Transition = { targetIndex, fromIndex, direction };
-    setTransition(nextTransition);
-    progress.setValue(0);
-
+  React.useEffect(() => {
+    if (!transition) return;
+    animationRef.current?.stop();
     const animation = Animated.spring(progress, {
       toValue: 1,
       ...motion.spring.page,
       useNativeDriver: true,
     });
     animationRef.current = animation;
-    const frame = requestAnimationFrame(() => {
-      animation.start(({ finished }) => {
-        if (!finished) return;
-        animationRef.current = null;
-        setTransition(null);
-        if (direction === 'back') {
-          setStack(nextStack.slice(0, targetIndex + 1));
-        }
-      });
+    animation.start(({ finished }) => {
+      if (!finished) return;
+      animationRef.current = null;
+      if (transition.direction === 'back') {
+        setStack((current) => current.slice(0, transition.targetIndex + 1));
+      }
+      setTransition(null);
     });
     return () => {
-      cancelAnimationFrame(frame);
       animation.stop();
     };
-  }, [screenKey, depth, progress]);
+  }, [transition, progress]);
 
   const activeIndex = transition ? transition.targetIndex : stack.length - 1;
 
@@ -127,7 +107,10 @@ export function ScreenStack({
         const isTarget = transition ? index === transition.targetIndex : index === stack.length - 1;
         const isOutgoing = transition ? index === transition.fromIndex : false;
         const visiblePage = isActive || (transition !== null && (isTarget || isOutgoing));
-        const node = isActive ? children : page.node;
+        // 关键修复：只有当前槽位 key 与传入的 screenKey 一致时才渲染最新的 children，旧槽位严格保留原节点，避免跨槽位双重挂载
+        const isCurrentScreen = page.key === screenKey;
+        if (isCurrentScreen) page.node = children;
+        const node = isCurrentScreen ? children : page.node;
 
         let translateX: Animated.AnimatedInterpolation<number> | number = 0;
         if (transition) {

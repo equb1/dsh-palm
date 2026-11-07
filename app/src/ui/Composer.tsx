@@ -116,7 +116,6 @@ export function Composer({
   const reading = attaching || attachments.some((a) => a.status === 'reading');
   const showStop = running && !hasText && !hasAttachments && canStop;
   const canSend = (hasText || hasAttachments) && !reading && (!running || canSteer);
-  const [contentHeight, setContentHeight] = React.useState(40);
   const [plusOpen, setPlusOpen] = React.useState(false);
   const [presetMenuOpen, setPresetMenuOpen] = React.useState(false);
   const [permissionMenuOpen, setPermissionMenuOpen] = React.useState(false);
@@ -126,11 +125,6 @@ export function Composer({
   const activePermissionOption =
     permissions.find((p) => p.value === activePermission) ?? permissions[0];
 
-  React.useEffect(() => {
-    if (!draft) setContentHeight(40);
-  }, [draft]);
-
-  const clampedHeight = Math.max(40, Math.min(120, contentHeight));
   const showBar =
     (permissions.length > 0 && Boolean(onPickPermission)) || (showPresets && presets.length > 0);
 
@@ -264,17 +258,14 @@ export function Composer({
         </Pressable>
 
         <TextInput
-          style={[styles.input, { height: clampedHeight }]}
+          style={styles.input}
           value={draft}
           onChangeText={onChangeDraft}
           placeholder={placeholder}
           placeholderTextColor={palette.textFaint}
           multiline
-          scrollEnabled={contentHeight >= 120}
-          onContentSizeChange={(e) => {
-            const h = e.nativeEvent.contentSize.height;
-            if (h > 0) setContentHeight(h);
-          }}
+          scrollEnabled
+          textAlignVertical="top"
           accessibilityLabel="输入框"
         />
 

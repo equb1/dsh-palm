@@ -2980,7 +2980,8 @@ export class Store {
     this.startIdleSweeper();
     await this.runEngineEffects(effects);
     if (this.state.engine.mode !== 'light') return;
-    if (this.state.engine.tier === 'always') void this.warmLocalHost();
+    if (this.engineDeps.hostAvailable) void this.warmLocalHost();
+    else if (this.state.engine.tier === 'always') void this.warmLocalHost();
     else void this.maybeSmartPrewarm();
   }
 
@@ -3057,7 +3058,12 @@ export class Store {
     if (before) this.emitEngine({ type: 'HOST_STATUS', host: before });
     const alreadyReady = before?.engine === 'ready' && before?.bridge === 'ready';
     // 已热着：纯预热直接成功；切换时由 switchEngine 接着 connectLocal()
-    if (alreadyReady) return true;
+    if (alreadyReady) {
+      if (!switching && this.state.engine.mode === 'light') {
+        void this.refreshProotSessionCache();
+      }
+      return true;
+    }
     const started = await this.engineDeps
       .startHost({
         engineCmd: this.state.hostEngineCmd.trim() || undefined,
@@ -3086,7 +3092,12 @@ export class Store {
       if (!status) continue;
       // HostRuntime 自己会重试，failed 只是暂时状态：这里继续等，不立刻判死
       this.emitEngine({ type: 'HOST_STATUS', host: status });
-      if (status.engine === 'ready' && status.bridge === 'ready') return true;
+      if (status.engine === 'ready' && status.bridge === 'ready') {
+        if (!switching && this.state.engine.mode === 'light') {
+          void this.refreshProotSessionCache();
+        }
+        return true;
+      }
     }
     const timeoutError = `完整引擎 ${Math.round(timeoutMs / 1000)} 秒内没就绪，已回到轻引擎`;
     this.patch({ error: timeoutError });
@@ -3099,6 +3110,32 @@ export class Store {
       }),
     );
     return false;
+  }
+
+  /** 轻引擎运行且 proot 已就绪时，静默拉取 proot 的会话列表填充抽屉缓存 */
+  private async refreshProotSessionCache(): Promise<void> {
+    if (this.state.engine.mode !== 'light') return;
+    try {
+      const client = new EngineClient({ url: this.authEndpoint(LOCAL_WS_URL), autoReconnect: false });
+      await withTimeout(client.connect(), 3000, 'proot connect');
+      const res = (await withTimeout(
+        client.request('sessions.list', {}),
+        3000,
+        'sessions.list',
+      )) as { sessions?: SessionSummary[] };
+      client.close();
+      if (Array.isArray(res?.sessions)) {
+        this.patch({
+          sessionCache: {
+            ...this.state.sessionCache,
+            full: res.sessions,
+          },
+        });
+        this.persistUiCache();
+      }
+    } catch {
+      // 预热静默拉取失败不打扰用户
+    }
   }
 
   /**

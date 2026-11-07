@@ -233,7 +233,8 @@ export function reduceEngine(state: EngineSnapshot, event: EngineEvent): EngineS
           ['warm-host'],
         );
       }
-      // 回轻引擎：先确保轻引擎连上，再停宿主（effects 顺序即执行顺序）
+      // 回轻引擎：先确保轻引擎连上。如果常备档位（always），宿主保持热着随时秒切；否则停宿主
+      const effects: EngineEffect[] = state.tier === 'always' ? ['connect-light'] : ['connect-light', 'stop-host'];
       return step(
         state,
         {
@@ -243,7 +244,7 @@ export function reduceEngine(state: EngineSnapshot, event: EngineEvent): EngineS
           error: null,
           idleSince: idleStart(state, event.now),
         },
-        ['connect-light', 'stop-host'],
+        effects,
       );
     }
 

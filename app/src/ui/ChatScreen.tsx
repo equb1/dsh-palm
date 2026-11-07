@@ -24,7 +24,8 @@ import { GeneratedFilesSheet } from './GeneratedFilesSheet';
 import { collectGeneratedFiles } from '../lib/generatedFiles';
 import { TurnView, JumpButton } from './chat';
 import type { AttachmentKind } from '../lib/attachments/types';
-import { radius, space, topInset, useThemedStyles, type Theme } from './theme';
+import { BrandIcon } from './components';
+import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 /* ------------------------------------------------------------------ *
  * 会话页
@@ -37,11 +38,13 @@ function TurnSeparator(): React.ReactElement {
 
 export function ChatScreen({ session }: { session: SessionDetail }): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [draft, setDraft] = React.useState('');
   const [showJump, setShowJump] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
   const [selectionResetKey, setSelectionResetKey] = React.useState(0);
+  const [initialPositioned, setInitialPositioned] = React.useState(false);
   // 浮动顶栏：先量高度给正文留位，列表滚起来再加底色/描边（玻璃感用半透明近似，不引原生 blur）
   // 先给顶栏一个稳定高度，避免首帧 onLayout 后列表整体下跳；实际高度仍以 onLayout 为准。
   const [headerH, setHeaderH] = React.useState(Math.round(topInset + 52));
@@ -149,20 +152,40 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     };
   }, [scrollToLatest]);
 
+  React.useEffect(() => {
+    setInitialPositioned(false);
+  }, [session.id]);
+
   const handleListLayout = React.useCallback(
     (event: LayoutChangeEvent): void => {
       viewportHeight.current = event.nativeEvent.layout.height;
-      scrollToLatest(false);
+      if (!initialPositioned) {
+        if (contentHeight.current > 0 && viewportHeight.current > 0) {
+          const offset = Math.max(0, contentHeight.current - viewportHeight.current);
+          listRef.current?.scrollToOffset({ offset, animated: false });
+          setInitialPositioned(true);
+        }
+      } else {
+        scrollToLatest(false);
+      }
     },
-    [scrollToLatest],
+    [initialPositioned, scrollToLatest],
   );
 
   const handleContentSizeChange = React.useCallback(
     (_width: number, height: number): void => {
       contentHeight.current = height;
-      scrollToLatest(false);
+      if (!initialPositioned) {
+        if (contentHeight.current > 0 && viewportHeight.current > 0) {
+          const offset = Math.max(0, contentHeight.current - viewportHeight.current);
+          listRef.current?.scrollToOffset({ offset, animated: false });
+          setInitialPositioned(true);
+        }
+      } else {
+        scrollToLatest(false);
+      }
     },
-    [scrollToLatest],
+    [initialPositioned, scrollToLatest],
   );
 
   const handleScroll = React.useCallback(
@@ -186,7 +209,6 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const handleTouchStart = React.useCallback((): void => {
     touchActive.current = true;
     programmaticUntil.current = 0;
-    setSelectionResetKey((k) => k + 1);
   }, []);
 
   const handleTouchEnd = React.useCallback((): void => {
@@ -238,6 +260,17 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     }
     if (!hasText && !hasAttachments) return;
     if (readOnly) {
+      if (link) {
+        const target = link.activeSide === 'full' ? 'full' : 'light';
+        void store.switchEngine(target).then((ok) => {
+          if (ok) {
+            void store.openSession(link.id).then(() => {
+              void store.send(text);
+            });
+          }
+        });
+        return;
+      }
       store.setError('已切换引擎，这个会话只读；回首页新建会话继续。');
       return;
     }
@@ -311,30 +344,38 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         }}
       >
         <IconButton icon="back" label="返回会话列表" onPress={() => store.closeSession()} />
-        <Pill style={styles.titlePill}>
+        <View style={styles.headerCenter}>
           <Text style={styles.titleText} numberOfLines={1}>
             {session.title}
           </Text>
-        </Pill>
-        <Pill onPress={() => store.openModelSheet()} style={styles.presetPill}>
-          <Text style={styles.presetText} numberOfLines={1}>
-            {shortModelName ?? '模型'}
-            {effortName ? ` · ${effortName}` : ''}
-          </Text>
-        </Pill>
-        <EngineBadge
-          kind={engineBadge.kind}
-          label={engineBadge.label}
-          onPress={
-            engineSwitch.ok
-              ? () => {
-                  void store.switchEngine(state.engine.mode === 'light' ? 'full' : 'light');
-                }
-              : undefined
-          }
-        />
-        <IconButton icon="folderOpen" label="生成文件" onPress={() => setFilesOpen(true)} />
-        <View style={{ flex: 1 }} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`模型选择：${shortModelName ?? '模型'}`}
+            onPress={() => store.openModelSheet()}
+            style={({ pressed }) => [styles.headerSubtitleRow, pressed && { opacity: 0.7 }]}
+            hitSlop={6}
+          >
+            <Text style={styles.presetText} numberOfLines={1}>
+              {shortModelName ?? '模型'}
+              {effortName ? ` · ${effortName}` : ''}
+            </Text>
+            <BrandIcon name="chevronDown" size={10} color={palette.textFaint} />
+          </Pressable>
+        </View>
+        <View style={styles.headerRight}>
+          <EngineBadge
+            kind={engineBadge.kind}
+            label={engineBadge.label}
+            onPress={
+              engineSwitch.ok
+                ? () => {
+                    void store.switchEngine(state.engine.mode === 'light' ? 'full' : 'light');
+                  }
+                : undefined
+            }
+          />
+          <IconButton icon="folderOpen" label="生成文件" onPress={() => setFilesOpen(true)} />
+        </View>
       </View>
 
       <SmoothKeyboardAvoid style={[styles.bodyWrap, { marginTop: headerH }]}>
@@ -346,7 +387,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         <View style={styles.listWrap}>
           <FlatList
             ref={listRef}
-            style={styles.list}
+            style={[styles.list, turns.length > 0 && !initialPositioned && { opacity: 0 }]}
             data={turns}
             renderItem={renderTurn}
             keyExtractor={(turn, index) => `${turn.id ?? turn.runId ?? 'turn'}#${index}`}
@@ -490,10 +531,26 @@ const createStyles = ({ palette: c }: Theme) =>
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
+  headerCenter: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+  headerSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+  },
   titlePill: { flexShrink: 1, paddingVertical: 3 },
-  titleText: { color: c.text, fontSize: 14, fontWeight: '600' },
+  titleText: { color: c.text, fontSize: 14.5, fontWeight: '600' },
   presetPill: { flexShrink: 1 },
-  presetText: { color: c.textDim, fontSize: 12 },
+  presetText: { color: c.textDim, fontSize: 11.5 },
   readOnly: {
     color: c.warn,
     fontSize: 11.5,

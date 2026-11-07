@@ -563,6 +563,8 @@ export class LightHost {
       }) => {
         const session = this.requireSession(sessionId);
         session.model = { provider, model };
+        if (model) this.options.model.model = model;
+        if (provider) this.options.model.providerName = provider;
         await this.save(session);
         return { session: this.detail(session) };
       },
@@ -711,18 +713,36 @@ export class LightHost {
         return { results: results.slice(0, max) };
       },
       'models.list': async () => {
-        const currentModel: ModelOption = {
-          provider: this.providerId(),
-          providerName: this.options.model.providerName ?? '轻引擎',
-          id: this.options.model.model,
-          name: this.options.model.model,
-          description: '轻引擎当前使用的模型',
-        };
         const catalog = await this.modelCatalog();
-        const models = catalog.length > 0 ? catalog.slice() : [currentModel];
-        // 旧配置的 deepseek-chat 不在账号目录里，仍然让用户能选回当前值
-        if (!models.some((item) => item.id === currentModel.id)) models.unshift(currentModel);
-        return { models, default: this.modelChoice() };
+        let currentId = this.options.model.model;
+        let models: ModelOption[];
+        if (catalog.length > 0) {
+          models = catalog.slice();
+          // 如果当前是占位符 deepseek-chat 且不在目录里，自动对齐到目录第一项
+          if (currentId === 'deepseek-chat' && !models.some((item) => item.id === currentId)) {
+            currentId = models[0]!.id;
+            this.options.model.model = currentId;
+          } else if (!models.some((item) => item.id === currentId)) {
+            models.push({
+              provider: this.providerId(),
+              providerName: this.options.model.providerName ?? '轻引擎',
+              id: currentId,
+              name: currentId,
+              description: '当前自定义模型',
+            });
+          }
+        } else {
+          models = [
+            {
+              provider: this.providerId(),
+              providerName: this.options.model.providerName ?? '轻引擎',
+              id: currentId,
+              name: currentId,
+              description: '轻引擎当前使用的模型',
+            },
+          ];
+        }
+        return { models, default: { provider: this.providerId(), model: currentId } };
       },
       'permissions.list': async () => ({ options: PERMISSIONS, default: 'workspace-write' }),
       'presets.list': async () => ({ presets: PRESETS }),
