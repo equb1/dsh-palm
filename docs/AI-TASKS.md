@@ -552,6 +552,12 @@ type AttachmentChipsProps = {
   - [ ] E2E WS（X25519 + 加密帧）未做；当前仍是明文 `ws://`
   - [ ] 多宿主索引/密钥分仓未做（目前只有一个 active remote host + 全局设备密钥）
   - [ ] 完整离线状态机（在线/重连/离线/配对失效 + 最后同步时间）只做了「上次宿主重连」
+  - [x] 远程重连 soak（2026-11-09，12 轮）：电脑侧每 ~100s 推一条，手机跟随渲染；
+    完成延迟 1.556–1.595s（median 1.576s）；桥重启 2 次恢复 **3.1s / 2.6s**；
+    锁屏 40s 后 PSS 209→177MB，电脑侧推送仍成功（手机端渲染要等解锁，PITFALLS I26）。
+    产物 `scratch/soak-remote-2026-11-09.jsonl`、`scratch/soak-shots/`，驱动 `scratch/soak-remote.ts`。
+  - [ ] 30 分钟整段 + Wi-Fi/蜂窝切换还没做：无线 adb 和桥走同一个 Wi-Fi，切网会同时断开 adb，
+    需要人工配合或 USB adb（PITFALLS I26/I28）。
 - [ ] **3.3 系统入口**（小组件、悬浮球、QS、通知直达、后台分享）
   - [x] QS 磁贴、桌面小组件、通知 ACTION_VIEW 直达会话/审批、常驻通知可点回 App
   - [ ] 悬浮球（overlay service）未做，设置里明确标注「暂未接入」

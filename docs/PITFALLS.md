@@ -809,3 +809,35 @@
   两次 `motionevent` 只用来做单次探测，用完最好 force-stop 重开 App。
 - 备注：`uiautomator dump` 在动画/连续帧（桌宠）时会 `could not get idle state`，
   失败后返回的是上一次的 `/sdcard/ui.xml`，别把旧 dump 当现状——以截图为准。
+
+### I26. 锁屏 40s 后 adb 解不开，自动化会卡在安全锁屏（2026-11-09）
+
+- 现象：`input keyevent 26` 关屏 40s，再 `input keyevent 224` + 上滑：截图全黑，
+  `dumpsys window` 一直 `NotificationShade`、`dumpsys display` 先 `DOZE` 后 `ON`；
+  实际停在 EMUI 锁屏（截图里只有时钟/AOD 和指纹圈），后续 UI 操作全部无效。
+- 原因：短时间关屏（5s）唤醒后还能滑开；超过安全超时（约 30s+）进入需要指纹/密码的
+  secure lock。`wm dismiss-keyguard`、`cmd statusbar collapse`、`locksettings set-disabled true`
+  都不生效（`lockscreen.disabled` 仍是 0）。
+- 处理：自动化不要长时间关屏；锁屏恢复验证要人解锁，或者设备本来就没设密码/已 root。
+  锁屏期间可以继续验证「后台会话/桥重连」——电脑侧推消息仍然成功，只是手机不渲染。
+- 验证：2026-11-09 soak 第 8 轮锁屏 40s，PSS 209→177MB；第 9–12 轮电脑侧仍 1.5–1.6s 完成。
+
+### I27. soak 驱动里用 `Start-Process` 起桥会把 Node 卡死（2026-11-09）
+
+- 现象：Node 脚本里 `execFileSync('powershell', ['-Command', "Start-Process node ... -PassThru"])`
+  起桥后不再返回，整段 soak 卡在 `restart-up` 之前；桥其实已经起来（8787 健康）。
+- 原因：`Start-Process` 起的 node 继承了 PowerShell 的 stdout 句柄，父进程等不到管道 EOF。
+- 处理：用原生 `spawn(node, ['--import','tsx','engine/src/main.ts'], { detached:true,
+  stdio:['ignore', fdOut, fdErr] })` + `unref()`；停桥仍可用 `Stop-Process`。
+- 备注：设备锁屏/doze 时 `adb exec-out screencap -p` 也可能长时间不返回，soak 脚本要给它加超时
+  （本轮最后一张 `soak-end.png` 就是卡在这，数据已经齐了）。
+
+### I28. 远程 soak 的可用做法（2026-11-09）
+
+- 手机停在电脑会话上，**由电脑侧通过桥 `sessions.send` 推消息**、手机只负责跟随渲染：
+  不用碰中文 IME，也不需要 UI 输入（`input text` 会被输入法拆成候选词）。
+- 完成判定轮询 DSH 的 `session/list`（`running` + `sessionStats.steps` 增加），比截图 OCR 稳。
+- 本轮 12 轮：延迟 1.556–1.595s（median 1.576s），桥重启 2 次恢复 3.1s / 2.6s，
+  PSS 223→168MB（峰值 273MB，锁屏后回落到 17xMB）。
+- 产物：`scratch/soak-remote-2026-11-09.jsonl`、`scratch/soak-shots/`、
+  驱动 `scratch/soak-remote.ts`、汇总 `scratch/soak-summary.ts`。
