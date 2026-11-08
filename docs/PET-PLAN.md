@@ -46,6 +46,48 @@
 | 没有设置页 | 尺寸、帧率、开关、悬浮窗、气泡都不可配 | 体验不可调 |
 | 没有 hit test | 点击统一随机 reaction；没有 head/body 分区 | 互动不精准 |
 
+## 2.5 竞品研究（2026-11-08）
+
+翻了目前能搜到的 DSH 桌宠插件，按“美术路线 / 动画机制 / 交互物理 / 状态联动”整理：
+
+| 插件 | 美术 / 动画 | 机制亮点 | 不适合直接照搬 |
+|---|---|---|---|
+| [dsh-go](https://github.com/ccch1mneyyy/dsh-go) | Android 原生 sprite sheet；`pack.json` 定义帧、hitbox、idlePool、reactions | 12 态、并发 tiers、60s 睡眠、EdgeSnap、haptics、动态窗口 | 它是 Android 原生实现，不能直接给 RN/DSH 用 |
+| [dsh-live2d-pets](https://github.com/cyanfish-x/dsh-live2d-pets) | Live2D Cubism + PixiJS；模型自带呼吸/眨眼/物理/待机 motion | 鼠标视线跟随、分部位触摸、SSE 状态镜像、人设台词、30/60fps 限帧 | Live2D SDK/模型许可、DOM/PixiJS 依赖，移动端重 |
+| [dsh-pet](https://github.com/song-423/dsh-pet) / [dsh-pet-to-family](https://github.com/zi-O1/dsh-pet-to-family) | **100+ 段透明 WebM（VP9-alpha）**，640×360；AI 生成素材管线 | 动画链按权重首尾相接（idle 10 / turn 5 / move 5）、屏幕漫游、拖拽甩抛/反弹/挤压、多开、触屏重力/摇一摇、余额档位、待办、记忆/对话/语音 | 素材巨大、Electron/Web 运行时；手机装不下也不该装 |
+| [dsh-dafeiyu-pet](https://github.com/lilulj/dsh-dafeiyu-pet) | 104 个动作、11 组；Qt helper 独立窗口；msedge-tts 语音 | 右键动作菜单、待机活跃度（12–22s/45–90s）、动作延时、系统语音 | 首次下载约 580MB；Windows x64 helper，移动端不可用 |
+| [dsh-dfy](https://github.com/D70w/dsh-dfy) | **1280×1280 分层 Canvas**：头发/呆毛/眼/眉/耳/身体/裙/腿/尾巴/附件分别驱动；16 种情绪；粒子特效 | 呼吸/眨眼/视线/关节/次级部件持续运动；抓取点物理；思考分等待/分析/整理三阶段；工具类型→语义道具；离线台词/LLM | 分层 rig 需要美术拆分；实现复杂度高 |
+| [@asahimoon/dsh-desktop-pet](https://github.com/AsahiMoon/dsh-desktop-pet) | Electron 透明置顶窗；鲸鱼娘动画表；Codex/petdex 角色兼容 | 状态表：工作/庆祝→睡 25s→待机、错误惊吓、思考、等待批准、新会话欢迎；5s 心跳；任务进度黑框；宠物内聊天；成长 XP；鼠标穿透 | Electron 桌面窗口，不是移动端 |
+| [dsh-desktop-companion](https://github.com/JiayiXie-jpg/dsh-desktop-pet) | 像素/GIF 或 AI 生成透明动画（Seedream→Seedance→色键） | 养成（6 种族/5 稀有度/XP/心情/饱食/亲密度）、TTS、事件气泡 | 依赖火山引擎凭据；移动端生图/视频成本高 |
+
+### 2.5.1 美术上的共同结论
+
+1. **没有一个是“状态→一张静态图”**：最差也是 GIF/WebM 循环，主流是 sprite sheet 或分层 rig。
+2. **分层 rig 最适合移动端**：dsh-dfy 把角色拆成十几个部件，呼吸/眨眼/视线/尾巴/头发都是 transform，素材小、动作可组合、情绪可换眼眉嘴；这比 100 段视频更适合手机。
+3. **spritesheet 适合像素风**：dsh-go 的 128×128 帧 + pack 元数据，体积可控，适合我们现在的 Deepy/鲸娘像素资产。
+4. **透明视频质量最高但最重**：100+ 段 640×360 WebM 在 PC 上没问题，手机上包体/解码/耗电都不可接受。
+5. **AI 素材管线可借鉴**：dsh-pet 的“提示词→源视频→透明动画”、companion 的“照片→图→视频→色键”，可用于后续生产，不是运行时方案。
+
+### 2.5.2 机制上的共同结论
+
+1. **动画链（Animation Chain）**：每个动作播完按权重选下一个；idle 也参与链，不是“待机图 + 偶尔插播”。
+2. **事件状态机**：思考/工具/审批/完成/错误/新会话，全部有专属动作；`done/error` 是瞬态，播完回主状态。
+3. **中断与回退**：点击/拖拽/审批等 one-shot 可打断 idle，播完 `autoReturn` 回主状态，不能卡动作。
+4. **物理交互**：Q 弹、阻尼拖拽、甩抛、边缘反弹、落地挤压、震动；有的还做多屏漫游、碰撞。
+5. **语义反馈**：dsh-dfy 把“读文件/搜索/命令/写入”映射到不同道具和表情；asahimoon 用黑框显示当前工具/文件/进度。
+6. **安静模式**：睡觉时随机动作、碎碎念、余额、待办全部静默；通知只在该出现时出现。
+7. **人格/记忆/语音**是差异化，不是灵动感的必要条件；先把动画和交互做好。
+
+### 2.5.3 对我们的选型结论
+
+- **主路线：分层 rig + sprite sheet 双支持**：
+  - 像素角色用 sprite sheet（我们现有资产可直接扩帧）；
+  - 高质量角色用分层 rig（Rive/Skia 实现呼吸/眨眼/视线/尾巴），不引 Live2D/Electron；
+  - pack 里用 `renderer: "sheet" | "rig"` 区分。
+- **不采用**：100+ 段 WebM、Qt/Electron helper、Live2D（至少 v1 不）。
+- **机制按优先级借鉴**：动画链 > 事件状态机 > 物理交互 > 语义进度 > 人格/语音。
+- **移动端预算**：单个角色包目标 < 10MB；12 态 × 8 帧 × 128² 像素图约 1–2MB，可行；视频方案直接排除。
+
 ## 3. 总体架构
 
 ```text
@@ -340,6 +382,21 @@ deepy.dshpet (zip)
 - 制作：Aseprite/脚本切帧；命名与 pack 一致；
 - 先生成 deepy 一套核心状态，maid 复用同一套帧结构。
 
+### 9.3 分层 rig（M1.5，推荐给非像素角色）
+
+借鉴 dsh-dfy：不画 100 段视频，而是把角色拆成可驱动的部件：
+
+- 部件：身体、头、头发/呆毛、左右眼、眼睑、眉毛、嘴、耳朵、尾巴、裙子、腿、手持道具；
+- 持续运动：呼吸（胸腔/整体 scale）、眨眼（眼睑）、视线（瞳孔位移）、
+  头发/尾巴次级摆动（spring）、身体轻微摇摆；
+- 情绪：换眼眉嘴组合 + 身体姿态 + 粒子（爱心/怒气/问号/汗滴/Z）；
+- 物理：抓取点越远，部件惯性摆动越大；
+- 运行时：Rive 状态机（`react-native-rive`）或 Skia 分层 Canvas；
+  包体通常几百 KB–几 MB，远比 WebM 小。
+
+`PetPack` 用 `renderer: "sheet" | "rig"` 区分；`rig` 包引用 `.riv` 或部件图 +
+`rig.json`（部件层级/锚点/绑定/表情表）。M1 先 sheet，M1.5 再接 rig。
+
 ## 10. 分阶段实施
 
 ### M0 · 灵动化最小闭环（0.5–1 天）
@@ -361,6 +418,15 @@ deepy.dshpet (zip)
 - 点击分区（head/body）与 reaction。
 
 **验收**：12 态都能手工触发；App 内/悬浮窗动画一致；审批/完成/错误有气泡。
+
+### M1.5 · 分层 rig（可选，2–3 天）
+
+- 选一个角色做 rig：呼吸/眨眼/视线/尾巴次级运动/4 种表情；
+- Rive（优先）或 Skia 分层 Canvas 接入 `PetRuntime`；
+- 证明“即使 idle 没有新帧，也有连续运动”；
+- 为后续非像素角色/换装打基础。
+
+**验收**：rig 角色待机 10 秒内可见眨眼/呼吸/视线变化；包体 < 5MB。
 
 ### M2 · 插件化（3–4 天）
 
@@ -413,8 +479,9 @@ deepy.dshpet (zip)
 5. **悬浮窗权限**：Android 各家 ROM 对 `TYPE_APPLICATION_OVERLAY` 限制不同，需要真机回归。
 6. **包体积**：每个角色 12 态 × 8 帧 × 128² PNG，需压缩/图集，避免 APK 膨胀。
 
-## 13. 建议先确认的三件事
+## 13. 建议先确认的四件事
 
 1. 先做 **M0（不换美术，transform 灵动化）**，还是直接等 sprite sheet 再一起做？
-2. 桌宠插件 v1 是否坚持**纯数据、不执行 JS**？
-3. 双端是否接受“App 内状态机 + 悬浮窗本地帧时钟，App 被杀后悬浮窗保持最后状态”？
+2. 美术主路线是否接受 **sprite sheet + 分层 rig 双支持**（M1.5 先拿一个角色试 Rive/Skia）？
+3. 桌宠插件 v1 是否坚持**纯数据、不执行 JS**？
+4. 双端是否接受“App 内状态机 + 悬浮窗本地帧时钟，App 被杀后悬浮窗保持最后状态”？
