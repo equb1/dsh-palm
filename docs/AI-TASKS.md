@@ -547,8 +547,9 @@ type AttachmentChipsProps = {
     Android NSD 扫描、连接页列表、手填地址兜底、上次宿主重连
   - [x] 第一步：HostService 持有 Wi-Fi 组播锁；宿主页「局域网扫描」可在不断开当前连接时扫描；
     NEARBY_WIFI_DEVICES 运行时权限已接（Android 16 弹窗可见）
-  - [ ] 真机跨设备发现未验证：本机 Windows 防火墙拒绝入站 5353/8788，手机 ping 电脑 100% 丢包；
-    PC 本机 mDNS 查询能拿到 PTR/SRV/TXT/A
+  - [ ] 真机跨设备发现：2026-11-09 复测**扫描已可用**——连接页「扫描局域网宿主」扫到
+    `电脑宿主 (192.168.1.3:8787)`（TCP 探活 + `/health`），点结果即填入地址并连上
+    （`lan-discovery-2026-11-09.png`）；mDNS 广播在 Windows 防火墙下仍不可靠（5353/8788 曾被拒）
   - [ ] E2E WS（X25519 + 加密帧）未做；当前仍是明文 `ws://`
   - [ ] 多宿主索引/密钥分仓未做（目前只有一个 active remote host + 全局设备密钥）
   - [ ] 完整离线状态机（在线/重连/离线/配对失效 + 最后同步时间）只做了「上次宿主重连」
@@ -584,7 +585,9 @@ type AttachmentChipsProps = {
   - [x] 反向「在手机继续（摘要交接）」（2026-11-09）：电脑会话长按 → 切轻引擎 →
     `sessions.import` 重建历史 + seed（**不触发模型**），标题沿用电脑会话；copy 语义不建
     ConversationLink。单测 `test/handoff-reverse.test.ts` 两条（预设落 `light`、seed 标记/replay、
-    非电脑来源直接拒绝）。
+    非电脑来源直接拒绝）。真机通过（02:14）：电脑 tab 长按 → 确认 → 手机 tab 13→14，
+    新会话按 replay 重建 T19–T26（含锁屏期间跑的 round 9–12）；
+    截图 `reverse-menu/reverse-confirm/reverse-imported/reverse-phone-tab-2026-11-09.png`。
   - [x] 同步可行性调研（2026-11-09）：DSH 没有 `session/import|export`（404），只有
     `session/fork`（复制事件、`parentSession`/`isSeeded`）；存储是 `session.v4.jsonl.zstd`
     多帧事件流。方案对比与推荐见 [SESSION-SYNC](SESSION-SYNC.md)。
