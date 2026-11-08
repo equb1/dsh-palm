@@ -410,6 +410,27 @@ export function SessionDrawer({
               <Text style={styles.menuItem}>在轻引擎继续（摘要交接）</Text>
             </Pressable>
           ) : null}
+          {currentSource === 'computer' ? (
+            <Pressable
+              onPress={() => {
+                setMenuFor(null);
+                onClose();
+                Alert.alert(
+                  '在手机继续',
+                  '把电脑会话的历史摘要复制到手机轻引擎，之后两边各自独立；电脑侧不再回写。',
+                  [
+                    { text: '取消', style: 'cancel' },
+                    {
+                      text: '继续',
+                      onPress: () => void store.continueComputerInPhone(s.id),
+                    },
+                  ],
+                );
+              }}
+            >
+              <Text style={styles.menuItem}>在手机继续（摘要交接）</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => {
               setFolderPromptFor(s.id);

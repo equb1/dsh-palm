@@ -1611,6 +1611,71 @@ export class Store {
     }
   }
 
+  /**
+   * 电脑会话 → 手机：与「在电脑继续」反向的复制/接管。
+   *
+   * 和 pushSessionToComputer 不同，这里走轻引擎的 `sessions.import`：只重建历史 + seed，
+   * 不触发模型回合（用户自己接着问）；电脑侧会话保持原样，两边之后独立。
+   */
+  async continueComputerInPhone(remoteSessionId: string): Promise<boolean> {
+    if (this.state.engineKind !== 'remote') {
+      this.setError('先在「电脑」tab 打开这个会话，再发起「在手机继续」');
+      return false;
+    }
+    this.noteUserActivity();
+    let detail: SessionDetail;
+    try {
+      detail = (await this.requestFull('sessions.get', { sessionId: remoteSessionId })).session;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
+
+    const userText = lastUserTextFromDetail(detail);
+    const assistantText = lastAssistantTextFromDetail(detail);
+    const handoff = buildHandoff({
+      conversationId: remoteSessionId,
+      reason: 'continue_in_light',
+      from: { engine: 'full', sessionId: remoteSessionId },
+      presetId: detail.presetId,
+      history: turnDetailToHistory(detail.turns),
+      turns: detail.turns,
+      ...(userText ? { userText } : {}),
+      ...(assistantText ? { assistantText } : {}),
+      limit: 8,
+    });
+    const seed = buildReverseSeedText(handoff);
+
+    if (!(await this.switchToLightForHandoff())) {
+      this.setError('轻引擎没连上，反向交接已取消');
+      return false;
+    }
+    try {
+      // 电脑的 presetId（standard/…）在轻引擎里没有：优先轻引擎自己的 light
+      const lightPresets = this.state.caps?.presets ?? [];
+      const presetId =
+        lightPresets.find((preset) => preset.id === 'light')?.id ?? lightPresets[0]?.id ?? 'light';
+      const { session: imported } = await this.requestLight('sessions.import', {
+        presetId,
+        title: detail.title,
+        text: seed,
+        handoffId: handoff.handoffId,
+        seedMarker: handoff.seedMarker,
+        ...(handoff.replay ? { replay: handoff.replay } : {}),
+      });
+      // 直接把新会话推到前台：copy 语义，不建 ConversationLink（电脑侧不做只读绑定）
+      const { session: lightDetail } = await this.requestLight('sessions.get', {
+        sessionId: imported.id,
+      });
+      this.patch({ currentId: imported.id, detail: lightDetail, view: 'main', error: null });
+      await this.refreshSessions();
+      return true;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
+  }
+
   /** M2.6：完整会话 → 轻引擎继续（摘要 + 最近 8 轮 + 工具结果，原完整会话之后只读） */
   async continueFullInLight(fullSessionId: string): Promise<boolean> {
     if (this.state.engine.mode !== 'full') {

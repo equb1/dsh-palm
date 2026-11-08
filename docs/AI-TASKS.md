@@ -575,6 +575,13 @@ type AttachmentChipsProps = {
     `push-computer-tab-2026-11-09.png`；连电脑后首页角标「电脑模式」、运行模式页
     「电脑宿主（已连接）」（`home-remote-badge-2026-11-09.png`、`mode-sheet-remote-2026-11-09.png`）。
   - 电脑 tab 工作区：`ces-mobile D:\ces-mobile` / `default-workspace C:\Users\chenf\Documents\…`。
+  - [x] 反向「在手机继续（摘要交接）」（2026-11-09）：电脑会话长按 → 切轻引擎 →
+    `sessions.import` 重建历史 + seed（**不触发模型**），标题沿用电脑会话；copy 语义不建
+    ConversationLink。单测 `test/handoff-reverse.test.ts` 两条（预设落 `light`、seed 标记/replay、
+    非电脑来源直接拒绝）。
+  - [x] 同步可行性调研（2026-11-09）：DSH 没有 `session/import|export`（404），只有
+    `session/fork`（复制事件、`parentSession`/`isSeeded`）；存储是 `session.v4.jsonl.zstd`
+    多帧事件流。方案对比与推荐见 [SESSION-SYNC](SESSION-SYNC.md)。
   - 限制：是复制/接管，不是双向同步；电脑侧新增消息不回写手机（要等 DSH import/export API）。
 
 ### M4 · 远期
