@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 
 import type { SessionSummary } from '../protocol';
-import type { SessionRow } from '../state/sessionList';
+import type { SessionRow, SessionSource } from '../state/sessionList';
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
 import { EmptyState, BrandIcon } from './components';
@@ -78,36 +78,19 @@ function SideTag({ link }: { link?: ConversationLink }): React.ReactElement | nu
   );
 }
 
-/** 会话所属引擎标签：连电脑时标「💻 电脑 / 📱 手机」；手机本地时标「完整 / 轻」 */
-function EngineTag({
-  engine,
-  isRemote,
-}: {
-  engine: SessionRow['engine'];
-  isRemote?: boolean;
-}): React.ReactElement {
+/** 会话来源标签：电脑 / 手机轻 / 手机完整 */
+function EngineTag({ source }: { source: SessionSource }): React.ReactElement {
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
-  if (isRemote) {
-    const isPc = engine === 'full';
-    return (
-      <View
-        style={[
-          styles.tag,
-          { backgroundColor: isPc ? palette.blueSoft : palette.glassStrong },
-        ]}
-      >
-        <Text style={[styles.tagText, { color: isPc ? palette.blue : palette.textDim, fontWeight: isPc ? '600' : '400' }]}>
-          {isPc ? '💻 电脑' : '📱 手机'}
-        </Text>
-      </View>
-    );
-  }
-  const full = engine === 'full';
+  const isComputer = source === 'computer';
+  const isProot = source === 'phone-proot';
+  const bg = isComputer ? palette.blueSoft : isProot ? palette.glassStrong : palette.glass;
+  const fg = isComputer ? palette.blue : isProot ? palette.textDim : palette.textFaint;
+  const label = isComputer ? '💻 电脑' : isProot ? '📱 完整' : '📱 轻';
   return (
-    <View style={[styles.tag, { backgroundColor: full ? palette.blueSoft : palette.glassStrong }]}>
-      <Text style={[styles.tagText, { color: full ? palette.blue : palette.textFaint }]}>
-        {full ? '完整' : '轻'}
+    <View style={[styles.tag, { backgroundColor: bg }]}>
+      <Text style={[styles.tagText, { color: fg, fontWeight: isComputer ? '600' : '400' }]}>
+        {label}
       </Text>
     </View>
   );
@@ -253,10 +236,28 @@ export function SessionDrawer({
   }, [visible]);
 
   const presets = state.caps?.presets ?? [];
-  const currentEngine = state.engineKind === 'light' ? 'light' : 'full';
-  const sessions = React.useMemo(
+  const currentSource: SessionSource =
+    state.engineKind === 'light'
+      ? 'phone-light'
+      : state.engineKind === 'remote'
+        ? 'computer'
+        : 'phone-proot';
+  const [scope, setScope] = React.useState<'phone' | 'computer'>('phone');
+  React.useEffect(() => {
+    if (visible) setScope(currentSource === 'computer' ? 'computer' : 'phone');
+  }, [visible, currentSource]);
+  const allSessions = React.useMemo(
     () => store.sessionRows(),
     [state.sessions, state.sessionCache, state.engineKind],
+  );
+  const phoneCount = allSessions.filter((s) => s.source !== 'computer').length;
+  const computerCount = allSessions.length - phoneCount;
+  const sessions = React.useMemo(
+    () =>
+      allSessions.filter((s) =>
+        scope === 'computer' ? s.source === 'computer' : s.source !== 'computer',
+      ),
+    [allSessions, scope],
   );
   const keyword = q.trim().toLowerCase();
   const matched = React.useMemo(
@@ -304,7 +305,7 @@ export function SessionDrawer({
   const renderRow = (s: SessionRow): React.ReactElement => {
     const preset = presets.find((p) => p.id === s.presetId);
     const link = state.links.find((item) => item.id === s.id);
-    const otherEngine = s.engine !== currentEngine;
+    const otherEngine = s.source !== currentSource;
     return (
       <React.Fragment key={s.id}>
       <Pressable
@@ -313,7 +314,7 @@ export function SessionDrawer({
         accessibilityLabel={`会话：${s.title}`}
         onPress={() => {
           onClose();
-          void store.openSessionRow(s.id, s.engine);
+          void store.openSessionRow(s.id, s.source);
         }}
         onLongPress={
           otherEngine
@@ -336,11 +337,7 @@ export function SessionDrawer({
             <Text style={styles.rowPreview} numberOfLines={1}>
               {s.preview || preset?.name || ''}
             </Text>
-            {state.engineKind === 'remote' ? (
-              <EngineTag engine={s.engine} isRemote={true} />
-            ) : otherEngine ? (
-              <EngineTag engine={s.engine} />
-            ) : null}
+            <EngineTag source={s.source} />
             <SideTag link={link} />
             <StatusTag s={s} />
             {state.sessionFolders[s.id] ? (
@@ -354,7 +351,28 @@ export function SessionDrawer({
 
       {menuFor === s.id ? (
         <View style={styles.menu}>
-          {currentEngine === 'full' ? (
+          {s.source !== 'computer' && state.remoteHost?.url ? (
+            <Pressable
+              onPress={() => {
+                setMenuFor(null);
+                onClose();
+                Alert.alert(
+                  '在电脑继续',
+                  '会在电脑 DSH 里新建一条会话，并把手机历史摘要带过去；两边之后各自独立。',
+                  [
+                    { text: '取消', style: 'cancel' },
+                    {
+                      text: '继续',
+                      onPress: () => void store.pushSessionToComputer(s.id),
+                    },
+                  ],
+                );
+              }}
+            >
+              <Text style={styles.menuItem}>在电脑继续（复制历史）</Text>
+            </Pressable>
+          ) : null}
+          {currentSource === 'phone-proot' ? (
             <Pressable
               onPress={() => {
                 setMenuFor(null);
@@ -537,6 +555,31 @@ export function SessionDrawer({
             }}
           >
             <Text style={styles.searchAll}>全文</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.filters}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="手机会话"
+            accessibilityState={{ selected: scope === 'phone' }}
+            onPress={() => setScope('phone')}
+            style={[styles.filterPill, scope === 'phone' && styles.filterPillActive]}
+          >
+            <Text style={[styles.filterText, scope === 'phone' && styles.filterTextActive]}>
+              手机 {phoneCount}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="电脑会话"
+            accessibilityState={{ selected: scope === 'computer' }}
+            onPress={() => setScope('computer')}
+            style={[styles.filterPill, scope === 'computer' && styles.filterPillActive]}
+          >
+            <Text style={[styles.filterText, scope === 'computer' && styles.filterTextActive]}>
+              电脑 {computerCount}
+            </Text>
           </Pressable>
         </View>
 

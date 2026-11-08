@@ -1,5 +1,5 @@
 /**
- * M2.6 统一会话列表（第一步）纯函数：合并、去重、排序、标 engine。
+ * 会话列表纯函数：合并三个来源、排序、标 source。
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -21,41 +21,42 @@ function session(id: string, updatedAt: number, title = id): SessionSummary {
   };
 }
 
-describe('sessions · 统一列表合并', () => {
-  it('当前引擎在前，另一个引擎补在后，按 updatedAt 倒序', () => {
+describe('sessions · 三来源合并', () => {
+  it('当前来源 + 缓存来源，按 updatedAt 倒序，标 source', () => {
     const rows = mergeSessionRows(
-      [session('light-new', 300), session('light-old', 100)],
-      'light',
-      [session('full-a', 200), session('full-b', 400)],
-      'full',
+      [session('phone-new', 300), session('phone-old', 100)],
+      'phone-light',
+      [
+        { source: 'phone-proot', sessions: [session('proot-a', 200)] },
+        { source: 'computer', sessions: [session('pc-b', 400)] },
+      ],
     );
     assert.deepEqual(
-      rows.map((row) => [row.id, row.engine]),
+      rows.map((row) => [row.id, row.source, row.engine]),
       [
-        ['full-b', 'full'],
-        ['light-new', 'light'],
-        ['full-a', 'full'],
-        ['light-old', 'light'],
+        ['pc-b', 'computer', 'full'],
+        ['phone-new', 'phone-light', 'light'],
+        ['proot-a', 'phone-proot', 'full'],
+        ['phone-old', 'phone-light', 'light'],
       ],
     );
   });
 
-  it('同 id 去重（logical link 两边都有时以当前引擎为准）', () => {
+  it('同 source 同 id 去重；不同 source 允许并存', () => {
     const rows = mergeSessionRows(
       [session('s_shared', 100)],
-      'light',
-      [session('s_shared', 900), session('s_full_only', 50)],
-      'full',
+      'phone-light',
+      [
+        { source: 'computer', sessions: [session('s_shared', 900)] },
+        { source: 'computer', sessions: [session('s_shared', 800)] },
+      ],
     );
-    assert.equal(rows.length, 2);
-    assert.equal(rows.filter((row) => row.id === 's_shared').length, 1);
-    const shared = rows.find((row) => row.id === 's_shared');
-    assert.equal(shared?.engine, 'light');
-    assert.equal(shared?.updatedAt, 100);
+    assert.equal(rows.filter((row) => row.source === 'phone-light').length, 1);
+    assert.equal(rows.filter((row) => row.source === 'computer').length, 1);
   });
 
-  it('另一个引擎没缓存时只返回当前列表', () => {
-    const rows = mergeSessionRows([session('a', 1)], 'full', undefined, 'light');
-    assert.deepEqual(rows.map((row) => [row.id, row.engine]), [['a', 'full']]);
+  it('其他来源没缓存时只返回当前列表', () => {
+    const rows = mergeSessionRows([session('a', 1)], 'phone-proot', []);
+    assert.deepEqual(rows.map((row) => [row.id, row.source]), [['a', 'phone-proot']]);
   });
 });

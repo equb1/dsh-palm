@@ -148,9 +148,25 @@ android {
             keepDebugSymbols += ['**/libproot.so', '**/libprootloader.so']
         }
     }
+    sourceSets {
+        main {
+            // 桌宠 pack/sheet 从 app/assets/pets 自动同步，避免手动复制漏文件
+            assets.srcDir("$buildDir/generated/petAssets")
+        }
+    }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
+}
+
+def petAssetsSrc = file("$rootDir/../assets/pets")
+def petAssetsDst = file("$buildDir/generated/petAssets/pets")
+tasks.register("syncPetAssets", Copy) {
+    from(petAssetsSrc)
+    into(petAssetsDst)
+}
+tasks.named("preBuild").configure {
+    dependsOn("syncPetAssets")
 }
 
 // Apply static values from `gradle.properties` to the `android.packagingOptions`

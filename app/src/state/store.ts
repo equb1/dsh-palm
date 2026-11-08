@@ -53,7 +53,12 @@ import {
   pickAttachments,
 } from '../lib/attachments/intake';
 import { classify, hashPrefix } from '../lib/attachments/classify';
-import { mergeSessionRows, type SessionEngine, type SessionRow } from './sessionList';
+import {
+  mergeSessionRows,
+  sourceToEngine,
+  type SessionRow,
+  type SessionSource,
+} from './sessionList';
 import type { ThemeMode } from '../ui/theme/palette';
 import type { AttachmentEngine, AttachmentKind, IntakeSource } from '../lib/attachments/types';
 import {
@@ -209,8 +214,8 @@ export interface AppState {
   pairCode: string;
   caps: Capabilities | null;
   sessions: SessionSummary[];
-  /** 两个引擎各自的最近会话缓存：统一下拉列表用（M2.6） */
-  sessionCache: Record<SessionEngine, SessionSummary[]>;
+  /** 三个来源各自的最近会话缓存：统一下拉列表用 */
+  sessionCache: Record<SessionSource, SessionSummary[]>;
   currentId: string | null;
   detail: SessionDetail | null;
   /** 详情页已先推入、正文还在后台拉取（转场期间显示骨架） */
@@ -298,7 +303,7 @@ export interface InAppNotice {
   title: string;
   body: string;
   sessionId: string;
-  engine: SessionEngine;
+  engine: 'light' | 'full';
   createdAt: number;
 }
 
@@ -429,7 +434,7 @@ export class Store {
     pairCode: '',
     caps: hostAvailable ? LOCAL_DEFAULT_CAPS : null,
     sessions: [],
-    sessionCache: { light: [], full: [] },
+    sessionCache: { 'phone-light': [], 'phone-proot': [], computer: [] },
     currentId: null,
     detail: null,
     detailLoading: false,
@@ -859,8 +864,9 @@ export class Store {
       const payload = JSON.stringify({
         sessions: this.state.sessions.slice(0, 60),
         sessionCache: {
-          light: this.state.sessionCache.light.slice(0, 60),
-          full: this.state.sessionCache.full.slice(0, 60),
+          'phone-light': this.state.sessionCache['phone-light'].slice(0, 60),
+          'phone-proot': this.state.sessionCache['phone-proot'].slice(0, 60),
+          computer: this.state.sessionCache.computer.slice(0, 60),
         },
         draftPresetId: this.state.draftPresetId,
         defaultModel: this.state.defaultModel,
@@ -889,7 +895,9 @@ export class Store {
       if (rawCache) {
         const parsed = JSON.parse(rawCache) as {
           sessions?: SessionSummary[];
-          sessionCache?: Partial<Record<SessionEngine, SessionSummary[]>>;
+          sessionCache?: Partial<
+            Record<SessionSource | 'light' | 'full', SessionSummary[]>
+          >;
           draftPresetId?: string | null;
           defaultModel?: ModelChoice;
           prewarmTier?: PrewarmTier;
@@ -906,11 +914,20 @@ export class Store {
           nextPatch.sessions = parsed.sessions;
         }
         if (parsed.sessionCache && typeof parsed.sessionCache === 'object') {
-          const light = parsed.sessionCache.light;
-          const full = parsed.sessionCache.full;
+          const cache = parsed.sessionCache;
+          const list = (value: unknown): SessionSummary[] =>
+            Array.isArray(value) ? (value as SessionSummary[]) : [];
+          // 旧版只有 light/full；full 分不清 proot/remote，直接丢弃避免串源
+          const phoneLight = list(cache['phone-light']).length
+            ? list(cache['phone-light'])
+            : list(cache.light);
           nextPatch.sessionCache = {
-            light: Array.isArray(light) && this.state.sessionCache.light.length === 0 ? light : this.state.sessionCache.light,
-            full: Array.isArray(full) && this.state.sessionCache.full.length === 0 ? full : this.state.sessionCache.full,
+            'phone-light':
+              phoneLight.length > 0 && this.state.sessionCache['phone-light'].length === 0
+                ? phoneLight
+                : this.state.sessionCache['phone-light'],
+            'phone-proot': list(cache['phone-proot']),
+            computer: list(cache.computer),
           };
         }
         if (Array.isArray(parsed.links) && this.state.links.length === 0) {
@@ -1330,8 +1347,8 @@ export class Store {
       }
       this.patch({
         sessions: visible,
-        ...(this.sessionEngine()
-          ? { sessionCache: { ...this.state.sessionCache, [this.sessionEngine()!]: visible } }
+        ...(this.sessionSource()
+          ? { sessionCache: { ...this.state.sessionCache, [this.sessionSource()!]: visible } }
           : {}),
         ...(detail ? { detail } : {}),
       });
@@ -1341,22 +1358,20 @@ export class Store {
     }
   }
 
-  private sessionEngine(): SessionEngine | null {
-    if (this.state.engineKind === 'light') return 'light';
-    if (this.state.engineKind === 'remote' || this.state.engineKind === 'proot') return 'full';
+  private sessionSource(): SessionSource | null {
+    if (this.state.engineKind === 'light') return 'phone-light';
+    if (this.state.engineKind === 'proot') return 'phone-proot';
+    if (this.state.engineKind === 'remote') return 'computer';
     return null;
   }
 
-  /** M2.6：当前引擎列表 + 另一个引擎的缓存，合并后给抽屉用 */
+  /** 手机（轻+完整）和电脑三份来源合并，UI 再按「手机 / 电脑」分组 */
   sessionRows(): SessionRow[] {
-    const current = this.sessionEngine() ?? 'light';
-    const other: SessionEngine = current === 'light' ? 'full' : 'light';
-    return mergeSessionRows(
-      this.state.sessions,
-      current,
-      this.state.sessionCache[other],
-      other,
-    );
+    const current = this.sessionSource() ?? 'phone-light';
+    const cached = (Object.keys(this.state.sessionCache) as SessionSource[])
+      .filter((source) => source !== current)
+      .map((source) => ({ source, sessions: this.state.sessionCache[source] }));
+    return mergeSessionRows(this.state.sessions, current, cached);
   }
 
   async disconnectAndSwitchToLight(): Promise<void> {
@@ -1371,18 +1386,35 @@ export class Store {
     await this.connectLightEffect();
   }
 
-  /** M2.6：点另一个引擎的会话先切引擎（完整会起 proot），再按原 id 打开 */
-  async openSessionRow(id: string, engine: SessionEngine): Promise<void> {
-    const current = this.sessionEngine();
-    if (current !== engine) {
-      if (this.state.engineKind === 'remote' && engine === 'light') {
-        // 当前连着电脑，但用户点击了手机本机的轻引擎会话：断开远程并平滑切回轻引擎打开
-        await this.disconnectAndSwitchToLight();
+  /** 点会话行：按来源切到对应引擎（轻 / 本机完整 / 电脑），再打开 */
+  async openSessionRow(id: string, source: SessionSource): Promise<void> {
+    const current = this.sessionSource();
+    if (current !== source) {
+      if (source === 'computer') {
+        const url = this.state.remoteHost?.url;
+        if (!url) {
+          this.setError('还没有连接过电脑宿主；先去连接页扫描或填地址。');
+          this.patch({ connectModalOpen: true });
+          return;
+        }
+        await this.connect(url);
+        if (this.state.engineKind !== 'remote') return;
+      } else if (source === 'phone-light') {
+        if (this.state.engineKind === 'remote') {
+          await this.disconnectAndSwitchToLight();
+        } else if (this.state.engineKind !== 'light') {
+          const ok = await this.switchEngine('light');
+          if (!ok) return;
+        }
       } else {
-        // 本机完整引擎（proot）和远程电脑都走 full；这里只切本机完整，
-        // 不再因为存在 remoteHost 就自动连电脑（否则会把完整会话当成电脑的）。
-        const ok = await this.switchEngine(engine);
-        if (!ok) return;
+        // phone-proot
+        if (this.state.engineKind === 'remote') {
+          await this.disconnectAndSwitchToLight();
+        }
+        if (this.state.engineKind !== 'proot') {
+          const ok = await this.switchEngine('full');
+          if (!ok) return;
+        }
       }
     }
     if (!this.client) return;
@@ -1469,6 +1501,70 @@ export class Store {
     // openSession 只改 detail/currentId；这里成功后才把用户从设置/WebView 带回会话页
     this.patch({ view: 'main', connectModalOpen: false, error: null });
     return { ok: true };
+  }
+
+  /**
+   * 手机会话 → 电脑：在电脑 DSH 里建一条真实会话，并把本机历史压成 seed 发过去。
+   * 不是实时双向同步，是“复制/接管”；电脑侧之后可以独立继续。
+   */
+  async pushSessionToComputer(logicalId: string): Promise<boolean> {
+    const url = this.state.remoteHost?.url;
+    if (!url) {
+      this.setError('还没有连接过电脑宿主；先在连接页扫描或填地址。');
+      this.patch({ connectModalOpen: true });
+      return false;
+    }
+    let detail = this.state.detail?.id === logicalId ? this.state.detail : null;
+    if (!detail && this.client) {
+      try {
+        const res = await this.client.request('sessions.get', {
+          sessionId: this.physicalIdFor(logicalId),
+        });
+        detail = res.session;
+      } catch (error) {
+        this.fail(error);
+        return false;
+      }
+    }
+    if (!detail) {
+      this.setError('找不到要推送的会话内容');
+      return false;
+    }
+
+    const handoff = buildHandoff({
+      conversationId: logicalId,
+      reason: 'cross-device',
+      from: {
+        engine: this.state.engineKind === 'light' ? 'light' : 'full',
+        sessionId: detail.id,
+      },
+      presetId: detail.presetId,
+      history: turnDetailToHistory(detail.turns),
+      turns: detail.turns,
+    });
+    const seed = buildSeedText(handoff);
+
+    if (this.state.engineKind !== 'remote') {
+      await this.connect(url);
+      // connect 会改 store；TS 的控制流收窄不知道这一点，用 string 比较避免误报
+      if ((this.state.engineKind as string) !== 'remote') return false;
+    }
+
+    try {
+      const created = await this.requestFull('sessions.create', {
+        presetId: detail.presetId,
+        title: detail.title,
+      });
+      await this.requestFull('sessions.send', {
+        sessionId: created.session.id,
+        text: seed,
+      });
+      await this.refreshSessions();
+      return true;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
   }
 
   /** M2.6：完整会话 → 轻引擎继续（摘要 + 最近 8 轮 + 工具结果，原完整会话之后只读） */
@@ -3213,7 +3309,7 @@ export class Store {
         this.patch({
           sessionCache: {
             ...this.state.sessionCache,
-            full: res.sessions,
+            'phone-proot': res.sessions,
           },
         });
         this.persistUiCache();
@@ -3569,7 +3665,14 @@ export class Store {
     const notice = this.state.inAppNotice;
     if (!notice) return;
     this.patch({ inAppNotice: null, view: 'main', connectModalOpen: false });
-    void this.openSessionRow(notice.sessionId, notice.engine);
+    void this.openSessionRow(
+      notice.sessionId,
+      notice.engine === 'light'
+        ? 'phone-light'
+        : this.state.engineKind === 'remote'
+          ? 'computer'
+          : 'phone-proot',
+    );
   }
 
   /** App 在前台时若不在该会话则弹顶部通知；不在前台时发系统通知 */
@@ -3578,7 +3681,7 @@ export class Store {
     this.notifiedApprovals.add(approval.id);
     const title = approval.kind === 'question' ? '有个问题等你回答' : '需要你确认操作';
     const body = approval.summary ? `${approval.title}：${approval.summary}` : approval.title;
-    const engine: SessionEngine = this.state.engineKind === 'light' ? 'light' : 'full';
+    const engine: 'light' | 'full' = this.state.engineKind === 'light' ? 'light' : 'full';
 
     if (isAppActive()) {
       if (this.state.currentId !== approval.sessionId || this.state.view !== 'main') {
@@ -3606,7 +3709,7 @@ export class Store {
       this.state.sessions.find((s) => s.id === data.sessionId) ??
       (this.state.detail?.id === data.sessionId ? this.state.detail : undefined);
     const sessionTitle = session?.title ?? '会话';
-    const engine: SessionEngine = this.state.engineKind === 'light' ? 'light' : 'full';
+    const engine: 'light' | 'full' = this.state.engineKind === 'light' ? 'light' : 'full';
 
     if (isAppActive()) {
       // 在前台：只要当前屏幕不是该会话，就弹顶部下滑通知卡片

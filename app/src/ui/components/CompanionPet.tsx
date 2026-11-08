@@ -286,11 +286,13 @@ export function CompanionPet(): React.ReactElement | null {
                 <View>
                   <Text style={styles.hudName}>{role === 'deepy' ? 'Deepy (小蓝鲸)' : '鲸娘'}</Text>
                   <Text style={styles.hudStatus}>
-                    {petState === 'coding'
-                      ? `正在全力敲代码（${activeCount} 个任务执行中）…`
-                      : petState === 'waiting'
-                      ? '有任务在等你确认哦！'
-                      : '目前没有进行中的任务，小憩中 Zzz'}
+                    {petState === 'working' || petState === 'juggling' || petState === 'sweeping'
+                      ? `正在全力干活（${Math.max(1, activeCount)} 个任务执行中）…`
+                      : petState === 'attention'
+                        ? '有任务在等你确认哦！'
+                        : petState === 'thinking'
+                          ? '正在认真思考…'
+                          : '目前没有进行中的任务，小憩中 Zzz'}
                   </Text>
                 </View>
               </View>
@@ -352,7 +354,14 @@ export function CompanionPet(): React.ReactElement | null {
                     key={s.id}
                     onPress={() => {
                       setHudOpen(false);
-                      void store.openSessionRow(s.id, state.engineKind === 'light' ? 'light' : 'full');
+                      void store.openSessionRow(
+                        s.id,
+                        state.engineKind === 'remote'
+                          ? 'computer'
+                          : state.engineKind === 'proot'
+                            ? 'phone-proot'
+                            : 'phone-light',
+                      );
                     }}
                     style={styles.taskRow}
                   >
