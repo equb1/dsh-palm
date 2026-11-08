@@ -1,6 +1,6 @@
 # 锦囊 · AI 维护清单
 
-> 状态：2026-11-08 深夜（会话来源分离 / 构建收口 / 桌宠单实例）。
+> 状态：2026-11-09 凌晨（会话来源分离 / 工作区按 tab / 桌宠单实例 / 构建收口）。
 > **本文件是任务状态、规则和命令的唯一来源**。
 > 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)，
 > 长会话流式见 [STREAMING-FIX](STREAMING-FIX.md)。交接：2026-11-05 见
@@ -11,7 +11,8 @@
 > 2026-11-08 见 [archive/39](archive/39-handoff-2026-11-08.md) /
 > [archive/40](archive/40-handoff-2026-11-08.md) /
 > [archive/41](archive/41-handoff-2026-11-08.md) /
-> [archive/42](archive/42-handoff-2026-11-08.md)。
+> [archive/42](archive/42-handoff-2026-11-08.md)；
+> 2026-11-09 见 [archive/43](archive/43-handoff-2026-11-09.md)。
 > 桌宠方案：[PET-PLAN](PET-PLAN.md)；数据规范：[PET-SPECIFICATION](PET-SPECIFICATION.md)。
 
 ## 1. 当前基线
