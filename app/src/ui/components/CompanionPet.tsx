@@ -1,4 +1,5 @@
 import React from 'react';
+import * as SecureStore from 'expo-secure-store';
 import {
   Alert,
   Animated,
@@ -50,6 +51,21 @@ export function CompanionPet(): React.ReactElement | null {
   const pan = React.useRef(new Animated.ValueXY()).current;
   const dragStart = React.useRef({ x: 0, y: 0 });
   const dragLast = React.useRef({ x: 0, y: 0 });
+
+  // 拖动位置持久化：重启 App 后还在上次的位置
+  React.useEffect(() => {
+    void SecureStore.getItemAsync('dsh-palm.pet.position')
+      .then((raw) => {
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as { x?: number; y?: number };
+        if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') return;
+        const saved = { x: parsed.x, y: parsed.y };
+        dragLast.current = saved;
+        pan.setValue(saved);
+      })
+      .catch(() => undefined);
+  }, [pan]);
+
   const panResponder = React.useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_evt, gesture) =>
@@ -75,6 +91,9 @@ export function CompanionPet(): React.ReactElement | null {
           y: Math.max(-height * 0.42, Math.min(height * 0.42, dragLast.current.y)),
         };
         dragLast.current = clamped;
+        void SecureStore.setItemAsync('dsh-palm.pet.position', JSON.stringify(clamped)).catch(
+          () => undefined,
+        );
         Animated.spring(pan, {
           toValue: clamped,
           useNativeDriver: true,
@@ -340,7 +359,11 @@ export function CompanionPet(): React.ReactElement | null {
                 <View style={styles.usageRow}>
                   <Text style={styles.usageLabel}>当前模型渠道：</Text>
                   <Text style={styles.usageVal}>
-                    {state.engine.mode === 'full' ? '完整引擎 (Proot 本地容器)' : '轻引擎 (云端 API 直连)'}
+                    {state.engineKind === 'remote'
+                      ? '电脑宿主 (远程连接)'
+                      : state.engineKind === 'proot'
+                        ? '完整引擎 (Proot 本地容器)'
+                        : '轻引擎 (云端 API 直连)'}
                   </Text>
                 </View>
                 <View style={styles.usageRow}>
