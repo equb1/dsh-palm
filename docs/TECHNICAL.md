@@ -622,13 +622,32 @@ cd app/android && sh gradlew :app:assembleDebug
 app/                    RN + Expo；App.tsx 入口
   src/lib/              引擎客户端、host/notify/share/platform 封装
   src/protocol/         协议契约
+  src/pet/              桌宠规范（PetPack、状态机、Tiers 调度）
   src/state/store.ts    手写 store
   src/ui/               首页/聊天/抽屉/设置/输入区
   src/engine/           轻引擎：light/ fs/ shell/ docs/
-  android/              Expo prebuild + host/*.kt
+  android/              Expo prebuild + host/*.kt + system/FloatPetService.kt
 engine/                 mock 引擎 + 真 dsh 桥（real/）
 test/                   e2e / 审批卡 / 单元
 scripts/                探针、建桥、构建准备、真机脚本
 runtime/                rootfs 分层与 profile
 docs/                   本目录（archive/ 为旧文档）
 ```
+
+## 12. 电脑真实宿主桥与桌宠规范 (2026-11-08 增补)
+
+### 12.1 电脑真宿主接入与 HMAC Cookie 签名
+- 桌面版 DeepSeek Harness（Electron）在本地运行（如 62708 端口），其 API 需要携带有效签名 Cookie `dsh-auth-<hash>=v1.<payload>.<sig>`。
+- 桥接层从 `~/.dsh/.credentials.yaml` 读取 `client-connection/browser-session` 的 32 字节 base64url secret，使用 HMAC-SHA256 对 `{"version":1, "authority":"127.0.0.1:<port>", "issuedAt", "expiresAt"}` 进行签名，免除 launchToken 交互限制。
+- `detector.ts` 实现了毫秒级自动扫描监听端口并并发验证 `session/list`，自适应发现电脑 DSH。
+- 手机端发出的 `sessions.send` 直连真 DSH 的 `session/prompt`，并通过 WebSocket `session/follow` 多路流实时将思考流、工具调用块、输出文字回传给手机。
+
+### 12.2 局域网双模发现 (Dual-Mode Discovery)
+- **mDNS 硬件组播放行**：Android 原生端在 `LanDiscovery.kt` 中获取 `WifiManager.MulticastLock`，避免芯片省电策略过滤 UDP 5353 组播；
+- **C 段主动探活 (Subnet Probe)**：为应对家用路由器开启 AP 隔离或 IGMP 丢包，原生端并发向本机所在网段探测 8787 端口，实现 100% 局域网宿主识别。
+- **免密直连**：局域网连接默认放行，移除了冗余的 6 位配对码。
+
+### 12.3 数据驱动桌宠体系 (参考 dsh-go)
+- 详细规范见 [docs/PET-SPECIFICATION.md](PET-SPECIFICATION.md)；
+- 遵循 `app/assets/pets/<id>/pack.json` 资产规范：逐帧精灵表、`PetStateMachine` 任务负载阶梯（`tiers: working / juggling / sweeping`）、60 秒无任务自动入睡、边缘物理吸附（`EdgeSnap`）、触觉震动反馈与任务气泡。
+
