@@ -263,8 +263,8 @@ export interface AppState {
   /** 覆盖用的启动命令（空 = 用 Kotlin 里的默认值） */
   hostEngineCmd: string;
   hostBridgeCmd: string;
-  /** 当前连的是哪种引擎：远程宿主 / 本机轻引擎 */
-  engineKind: 'remote' | 'light' | null;
+  /** 当前连的是哪种引擎：另一台电脑 / 本机 proot / 本机轻引擎 */
+  engineKind: 'remote' | 'proot' | 'light' | null;
   /** EngineManager 快照：默认轻引擎，完整引擎按需切换 */
   engine: EngineSnapshot;
   /** 预热档位：触发式（默认）/ 智能 / 常备，持久化在 ui-cache */
@@ -308,7 +308,7 @@ export interface InAppNotice {
  * 这台设备自己能起引擎（原生构建）时，桥就在本机 8788——开机即用的那条路；
  * Expo Go / web 没有本机宿主，退回电脑上跑桥的局域网地址。
  */
-const DEFAULT_URL = hostAvailable ? 'ws://127.0.0.1:8788/ws' : 'ws://192.168.1.3:8788/ws';
+const DEFAULT_URL = '';
 
 /** 完整引擎（proot）固定连本机桥，不能用最近一次远程地址 */
 const LOCAL_WS_URL = 'ws://127.0.0.1:8788/ws';
@@ -957,6 +957,7 @@ export class Store {
         if (
           parsed.remoteHost
           && typeof parsed.remoteHost.url === 'string'
+          && !/^wss?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(parsed.remoteHost.url)
           && typeof parsed.remoteHost.name === 'string'
           && typeof parsed.remoteHost.hostId === 'string'
         ) {
@@ -1007,10 +1008,22 @@ export class Store {
       this.setError('请输入电脑宿主地址');
       return;
     }
+    // 本机 proot 也走 127.0.0.1:8788；如果放进“电脑宿主”表单，会被误标成远程电脑
+    const hostPart = target
+      .replace(/^wss?:\/\//i, '')
+      .split('/')[0]!
+      .replace(/^\[|\]$/g, '')
+      .split(':')[0]!
+      .toLowerCase();
+    if (hostPart === '127.0.0.1' || hostPart === 'localhost' || hostPart === '::1') {
+      this.setError('这是本机完整引擎的地址，不是电脑宿主。请填电脑的局域网 IP（如 ws://192.168.1.3:8788/ws）。');
+      this.patch({ conn: 'closed', connectModalOpen: true });
+      return;
+    }
     this.patch({ url: target, error: null, conn: 'connecting', connectModalOpen: true });
 
     this.closeEngines();
-    const client = new EngineClient({ url: this.authEndpoint(target), autoReconnect: false });
+    const client = new EngineClient({ url: this.authEndpoint(target), autoReconnect: true });
     const ok = await this.attach(client, 'remote', 'remote');
     if (!ok) {
       const errMsg = this.state.error || `连接失败：无法连接到 ${target}。请确认电脑已运行 npm run engine 且手机电脑在同一 Wi-Fi。`;
@@ -1063,8 +1076,7 @@ export class Store {
       this.emitEngine({ type: 'LIGHT_CONNECTING' });
       swapped = true;
       this.closeEngines();
-      this.patch({ url: LOCAL_WS_URL });
-      const attached = await this.attach(client, 'remote', 'proot', caps);
+      const attached = await this.attach(client, 'proot', 'proot', caps);
       this.suppressAutoOpen = false;
       if (!attached) throw new Error(this.state.error ?? '完整引擎握手失败');
       // 切成功之后旧会话才变只读：失败回退时 currentId 还在，用户能继续用
@@ -1157,7 +1169,7 @@ export class Store {
    */
   private async attach(
     client: EngineTransport,
-    kind: 'remote' | 'light',
+    kind: 'remote' | 'proot' | 'light',
     link: EngineLink = kind === 'light' ? 'light' : 'remote',
     preconnectedCaps?: Capabilities,
   ): Promise<boolean> {
@@ -1331,7 +1343,7 @@ export class Store {
 
   private sessionEngine(): SessionEngine | null {
     if (this.state.engineKind === 'light') return 'light';
-    if (this.state.engineKind === 'remote') return 'full';
+    if (this.state.engineKind === 'remote' || this.state.engineKind === 'proot') return 'full';
     return null;
   }
 
@@ -1366,10 +1378,9 @@ export class Store {
       if (this.state.engineKind === 'remote' && engine === 'light') {
         // 当前连着电脑，但用户点击了手机本机的轻引擎会话：断开远程并平滑切回轻引擎打开
         await this.disconnectAndSwitchToLight();
-      } else if (engine === 'full' && this.state.remoteHost?.url) {
-        // 如果点的是电脑上的会话，自动连接电脑
-        await this.connect(this.state.remoteHost.url);
       } else {
+        // 本机完整引擎（proot）和远程电脑都走 full；这里只切本机完整，
+        // 不再因为存在 remoteHost 就自动连电脑（否则会把完整会话当成电脑的）。
         const ok = await this.switchEngine(engine);
         if (!ok) return;
       }
@@ -1391,7 +1402,7 @@ export class Store {
     // 显式传 null = 打开官方前端首页；不传才回落到当前会话
     const requested = 'sessionId' in options ? options.sessionId : this.state.currentId;
     const target = this.webSessionTargetFor(requested);
-    if (this.state.engineKind !== 'remote') {
+    if (this.state.engineKind !== 'remote' && this.state.engineKind !== 'proot') {
       const ok = await this.switchEngine('full');
       if (!ok) {
         throw new Error(this.state.error ?? '完整引擎没起来，打不开官方 Web 界面');
@@ -1413,7 +1424,9 @@ export class Store {
       if (link.activeSide === 'full' && link.fullSessionId) return { id: link.fullSessionId };
       return { note: '当前是轻引擎会话，官方 Web 前端只能打开完整引擎页面；已打开首页。' };
     }
-    if (this.state.engineKind === 'remote') return { id: logicalId };
+    if (this.state.engineKind === 'remote' || this.state.engineKind === 'proot') {
+      return { id: logicalId };
+    }
     return { note: '当前会话不在完整引擎，已打开官方 Web 前端首页。' };
   }
 
@@ -1433,7 +1446,11 @@ export class Store {
     else if (!this.engineStarted) await this.engineStart();
 
     const target: EngineTarget = engine === 'light' ? 'light' : 'full';
-    if (target === 'full' ? this.state.engineKind !== 'remote' : this.state.engineKind !== 'light') {
+    if (
+      target === 'full'
+        ? this.state.engineKind !== 'remote' && this.state.engineKind !== 'proot'
+        : this.state.engineKind !== 'light'
+    ) {
       const ok = await this.switchEngine(target);
       if (!ok) {
         const error =

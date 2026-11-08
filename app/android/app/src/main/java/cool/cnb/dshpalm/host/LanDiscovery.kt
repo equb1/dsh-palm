@@ -26,8 +26,12 @@ import java.util.concurrent.Executors
 class LanDiscovery(private val ctx: Context) {
     companion object {
         const val SERVICE_TYPE = "_dsh-palm._tcp"
-        const val DEFAULT_PORT = 8787
-        private const val TIMEOUT_MS = 3_500L
+        /** 电脑真宿主桥：engine/src/real/server.ts 默认 8788 */
+        const val BRIDGE_PORT = 8788
+        /** mock 引擎：engine/src/server.ts 默认 8787，只做本地调试，不能当电脑宿主 */
+        const val MOCK_PORT = 8787
+        private val PROBE_PORTS = intArrayOf(8788, 8787)
+        private const val TIMEOUT_MS = 4_000L
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -117,42 +121,103 @@ class LanDiscovery(private val ctx: Context) {
 
             for (targetIp in targets) {
                 if (finished) break
-                probePool.execute {
-                    if (finished) return@execute
-                    try {
-                        val socket = Socket()
-                        socket.connect(InetSocketAddress(targetIp, DEFAULT_PORT), 180)
-                        socket.close()
-
-                        main.post {
-                            if (!finished) {
-                                addDirect(targetIp, DEFAULT_PORT, "电脑宿主 ($targetIp)")
+                if (targetIp == localIpv4) continue // 不把手机自己的 proot 桥当成电脑
+                for (port in PROBE_PORTS) {
+                    probePool.execute {
+                        if (finished) return@execute
+                        try {
+                            val socket = Socket()
+                            socket.connect(InetSocketAddress(targetIp, port), 180)
+                            socket.close()
+                            if (!isRealBridge(targetIp, port)) return@execute
+                            main.post {
+                                if (!finished) {
+                                    addDirect(targetIp, port, "电脑宿主 ($targetIp:$port)")
+                                }
                             }
+                        } catch (_: Throwable) {
+                            // 端口未开放 / 不是 dsh 桥
                         }
-                    } catch (_: Throwable) {
-                        // 端口未开放
                     }
                 }
             }
         }
     }
 
+    /**
+     * 只认真正的电脑桥：/health 返回 {"bridge":"real",...}。
+     * 8787 可能是 mock 引擎，不能因为端口开着就当电脑宿主。
+     */
+    private fun isRealBridge(host: String, port: Int): Boolean {
+        var conn: java.net.HttpURLConnection? = null
+        return try {
+            val url = java.net.URL("http://$host:$port/health")
+            conn = url.openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 280
+            conn.readTimeout = 280
+            conn.requestMethod = "GET"
+            if (conn.responseCode !in 200..299) return false
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            body.contains("\"bridge\":\"real\"")
+        } catch (_: Throwable) {
+            false
+        } finally {
+            runCatching { conn?.disconnect() }
+        }
+    }
+
     private fun getLocalIpv4Address(): String? {
+        // 优先 Wi-Fi：VPN/蜂窝接口经常是 10.x / 198.18.x，拿它算网段会永远扫不到电脑
+        val wifi = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        val wifiIp = wifi?.connectionInfo?.ipAddress ?: 0
+        if (wifiIp != 0) {
+            val ip = String.format(
+                "%d.%d.%d.%d",
+                wifiIp and 0xff,
+                (wifiIp shr 8) and 0xff,
+                (wifiIp shr 16) and 0xff,
+                (wifiIp shr 24) and 0xff,
+            )
+            if (isPrivateIpv4(ip)) return ip
+        }
+
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
         val activeNetwork = cm.activeNetwork ?: return null
         val linkProps: LinkProperties = cm.getLinkProperties(activeNetwork) ?: return null
+        var fallback: String? = null
         for (linkAddress in linkProps.linkAddresses) {
             val address = linkAddress.address
             if (address is Inet4Address && !address.isLoopbackAddress) {
-                return address.hostAddress
+                val ip = address.hostAddress ?: continue
+                if (isPrivateIpv4(ip)) {
+                    // 排除常见 VPN 段，优先 192.168/10/172.16-31
+                    if (ip.startsWith("192.168.")) return ip
+                    if (fallback == null && !ip.startsWith("198.18.")) fallback = ip
+                }
             }
         }
-        return null
+        return fallback
+    }
+
+    private fun isPrivateIpv4(ip: String): Boolean {
+        val p = ip.split(".").mapNotNull { it.toIntOrNull() }
+        if (p.size != 4) return false
+        if (p[0] == 10) return true
+        if (p[0] == 192 && p[1] == 168) return true
+        if (p[0] == 172 && p[1] in 16..31) return true
+        return false
     }
 
     private fun addDirect(host: String, port: Int, defaultName: String) {
         val id = "$host:$port"
         if (found.containsKey(id)) return
+        // 同一台电脑可能同时开 8787/8788；优先保留 8788（真桥），避免列表重复
+        val existingKey = found.keys.firstOrNull { found[it]?.getString("host") == host }
+        if (existingKey != null) {
+            val existingPort = found[existingKey]?.getInt("port") ?: 0
+            if (port <= existingPort) return
+            found.remove(existingKey)
+        }
         val map: WritableMap = Arguments.createMap().apply {
             putString("id", id)
             putString("name", defaultName)
