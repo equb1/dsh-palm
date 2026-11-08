@@ -1,16 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/float_pet_root"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:padding="6dp">
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="4dp">
+
+    <!-- 任务/交互轻量气泡 -->
+    <TextView
+        android:id="@+id/float_pet_bubble"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxWidth="160dp"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp"
+        android:layout_marginBottom="2dp"
+        android:background="#DD1E293B"
+        android:textColor="#F8FAFC"
+        android:textSize="10.5sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:elevation="6dp" />
 
     <ImageView
         android:id="@+id/float_pet_img"
-        android:layout_width="60dp"
-        android:layout_height="52dp"
+        android:layout_width="58dp"
+        android:layout_height="50dp"
         android:scaleType="fitCenter"
         android:src="@drawable/deepy_coding"
         android:contentDescription="桌宠" />
-</FrameLayout>
-
+</LinearLayout>

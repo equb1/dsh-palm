@@ -2,8 +2,6 @@ import React from 'react';
 import {
   Alert,
   Animated,
-  Image,
-  type ImageSourcePropType,
   Modal,
   Pressable,
   ScrollView,
@@ -15,6 +13,7 @@ import {
 
 import { store, useStore } from '../useStore';
 import { BrandIcon } from './BrandIcon';
+import { PetCanvas } from './PetCanvas';
 import {
   getFloatingPetStatus,
   isOverlayPermissionGranted,
@@ -22,49 +21,9 @@ import {
   setFloatingPetEnabled,
 } from '../../lib/host';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '../theme';
+import { getPetPack, PetStateMachine, type PetRole, type PetState } from '../../pet';
 
-export type PetRole = 'deepy' | 'maid';
-export type PetState = 'coding' | 'waiting' | 'done' | 'sleeping';
-
-/* ------------------------------------------------------------------ *
- * 高精像素画资产：1:1 使用原版无损透明 PNG 贴图
- * ------------------------------------------------------------------ */
-
-const PET_IMAGES: Record<PetRole, Record<PetState, ImageSourcePropType>> = {
-  deepy: {
-    coding: require('../../../assets/pets/deepy_coding.png'),
-    done: require('../../../assets/pets/deepy_done.png'),
-    waiting: require('../../../assets/pets/deepy_waiting.png'),
-    sleeping: require('../../../assets/pets/deepy_sleeping.png'),
-  },
-  maid: {
-    coding: require('../../../assets/pets/maid_coding.png'),
-    done: require('../../../assets/pets/maid_done.png'),
-    waiting: require('../../../assets/pets/maid_waiting.png'),
-    sleeping: require('../../../assets/pets/maid_sleeping.png'),
-  },
-};
-
-function PetSprite({
-  role,
-  state,
-  size = 46,
-}: {
-  role: PetRole;
-  state: PetState;
-  size?: number;
-}): React.ReactElement {
-  return (
-    <Image
-      source={PET_IMAGES[role][state]}
-      style={{
-        width: role === 'deepy' ? size * 1.25 : size * 0.95,
-        height: size,
-        resizeMode: 'contain',
-      }}
-    />
-  );
-}
+export type { PetRole } from '../../pet';
 
 /* ------------------------------------------------------------------ *
  * 主组件：浮动在 Composer 输入框上方，并支持桌面外置常驻
@@ -77,12 +36,37 @@ export function CompanionPet(): React.ReactElement | null {
   const [role, setRole] = React.useState<PetRole>('deepy');
   const [hudOpen, setHudOpen] = React.useState(false);
   const [floatingActive, setFloatingActive] = React.useState(false);
+  const [petState, setPetState] = React.useState<PetState>('idle');
+  const [currentAnim, setCurrentAnim] = React.useState<string>('idle');
+  const [bubbleText, setBubbleText] = React.useState<string | undefined>(undefined);
 
   // 动画状态：完成时的空翻，或者呼吸微律动
   const flipAnim = React.useRef(new Animated.Value(0)).current;
   const bounceAnim = React.useRef(new Animated.Value(0)).current;
 
-  // 根据当前 App 状态计算伴侣状态
+  // 状态机实例
+  const smRef = React.useRef<PetStateMachine | null>(null);
+  if (!smRef.current) {
+    smRef.current = new PetStateMachine(getPetPack(role));
+  }
+
+  // 订阅状态机变化
+  React.useEffect(() => {
+    const sm = smRef.current;
+    if (!sm) return;
+    return sm.subscribe((st, anim, bubble) => {
+      setPetState(st);
+      setCurrentAnim(anim);
+      setBubbleText(bubble);
+    });
+  }, []);
+
+  // 角色切换同步到状态机
+  React.useEffect(() => {
+    smRef.current?.setPack(getPetPack(role));
+  }, [role]);
+
+  // 根据当前 App 状态计算伴侣状态并推入状态机
   const runningSessions = state.sessions.filter((s) => s.status === 'running');
   const waitingSessions = state.sessions.filter((s) => s.status === 'waiting_approval');
   const activeCount = runningSessions.length + waitingSessions.length;
@@ -90,11 +74,25 @@ export function CompanionPet(): React.ReactElement | null {
   const currentRunning = state.detail?.status === 'running';
   const currentWaiting = state.detail?.status === 'waiting_approval';
 
-  const petState: PetState = React.useMemo(() => {
-    if (waitingSessions.length > 0 || currentWaiting) return 'waiting';
-    if (runningSessions.length > 0 || currentRunning) return 'coding';
-    return 'sleeping';
-  }, [waitingSessions.length, currentWaiting, runningSessions.length, currentRunning]);
+  React.useEffect(() => {
+    const latestTurn = state.detail?.turns?.slice(-1)[0];
+    const isThinking = latestTurn?.blocks?.some((b) => b.kind === 'thinking');
+    smRef.current?.updateContext({
+      runningCount: runningSessions.length + (currentRunning ? 1 : 0),
+      waitingApprovalCount: waitingSessions.length + (currentWaiting ? 1 : 0),
+      hasError: Boolean(state.error),
+      thinking: isThinking,
+      latestTurnTitle: state.detail?.title,
+    });
+  }, [
+    runningSessions.length,
+    waitingSessions.length,
+    currentRunning,
+    currentWaiting,
+    state.error,
+    state.detail?.title,
+    state.detail?.turns,
+  ]);
 
   // 检查系统桌面悬浮窗状态
   React.useEffect(() => {
@@ -103,11 +101,10 @@ export function CompanionPet(): React.ReactElement | null {
     });
   }, []);
 
-  // 当任务从 coding 变为 done 时的空翻动作
+  // 当任务从 working 变为 done 时的空翻动作
   const prevPetState = React.useRef<PetState>(petState);
   React.useEffect(() => {
-    if (prevPetState.current === 'coding' && petState === 'sleeping') {
-      // 触发一次 360 度后空翻动画
+    if ((prevPetState.current === 'working' || prevPetState.current === 'juggling' || prevPetState.current === 'sweeping') && petState === 'idle') {
       flipAnim.setValue(0);
       Animated.sequence([
         Animated.timing(bounceAnim, { toValue: -14, duration: 250, useNativeDriver: true }),
@@ -119,7 +116,6 @@ export function CompanionPet(): React.ReactElement | null {
     }
     prevPetState.current = petState;
 
-    // 同步给桌面常驻悬浮窗
     if (floatingActive) {
       void setFloatingPetEnabled(true, role, petState);
     }
@@ -156,10 +152,23 @@ export function CompanionPet(): React.ReactElement | null {
   return (
     <>
       <View style={styles.container} pointerEvents="box-none">
+        {bubbleText ? (
+          <View style={styles.bubble}>
+            <Text style={styles.bubbleText} numberOfLines={2}>
+              {bubbleText}
+            </Text>
+          </View>
+        ) : null}
+
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="伴侣宠物与任务监控"
-          onPress={() => setHudOpen(true)}
+          onPress={() => {
+            const reactions = ['tapLeft', 'tapRight', 'tickle'] as const;
+            const chosen = reactions[Math.floor(Math.random() * reactions.length)]!;
+            smRef.current?.triggerReaction(chosen);
+          }}
+          onLongPress={() => setHudOpen(true)}
           style={styles.petTouch}
           hitSlop={8}
         >
@@ -168,7 +177,7 @@ export function CompanionPet(): React.ReactElement | null {
               transform: [{ translateY: bounceAnim }, { rotate: spin }],
             }}
           >
-            <PetSprite role={role} state={petState} size={46} />
+            <PetCanvas role={role} animation={currentAnim} size={64} />
           </Animated.View>
 
           {/* 并行任务数角标 */}
@@ -186,7 +195,7 @@ export function CompanionPet(): React.ReactElement | null {
           <Pressable style={styles.hudCard} onPress={(e) => e.stopPropagation()}>
             <View style={styles.hudHeader}>
               <View style={styles.hudTitleRow}>
-                <PetSprite role={role} state={petState} size={42} />
+                <PetCanvas role={role} animation={currentAnim} size={48} />
                 <View>
                   <Text style={styles.hudName}>{role === 'deepy' ? 'Deepy (小蓝鲸)' : '鲸娘'}</Text>
                   <Text style={styles.hudStatus}>
@@ -307,6 +316,29 @@ const createStyles = ({ palette: c }: Theme) =>
       right: 22,
       top: -30,
       zIndex: 35,
+      alignItems: 'flex-end',
+    },
+    bubble: {
+      position: 'absolute',
+      bottom: 50,
+      right: 0,
+      maxWidth: 160,
+      backgroundColor: c.glassStrong,
+      borderColor: c.border,
+      borderWidth: StyleSheet.hairlineWidth,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: radius.md,
+      shadowColor: c.shadow,
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4,
+    },
+    bubbleText: {
+      color: c.text,
+      fontSize: 11,
+      fontWeight: '500',
     },
     petTouch: {
       alignItems: 'center',
