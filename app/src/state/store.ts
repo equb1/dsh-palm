@@ -1583,14 +1583,26 @@ export class Store {
     }
 
     try {
+      // 手机的锦囊 id（light/…）在电脑宿主上不一定存在：有同名就用，没有落到它的第一个预设
+      const hostPresets = this.state.caps?.presets ?? [];
+      const presetId =
+        hostPresets.find((preset) => preset.id === detail.presetId)?.id ??
+        hostPresets[0]?.id ??
+        detail.presetId;
       const created = await this.requestFull('sessions.create', {
-        presetId: detail.presetId,
+        presetId,
         title: detail.title,
       });
       await this.requestFull('sessions.send', {
         sessionId: created.session.id,
         text: seed,
       });
+      // 电脑 DSH 会拿 seed 的第一行自动起标题（`[dsh-handoff:…] 这是一次从…`）：
+      // 发完立刻改回手机这边的标题，电脑 tab 里才认得出是哪条。
+      await this.requestFull('sessions.rename', {
+        sessionId: created.session.id,
+        title: detail.title,
+      }).catch(() => undefined);
       await this.refreshSessions();
       return true;
     } catch (error) {

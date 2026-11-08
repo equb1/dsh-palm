@@ -775,6 +775,17 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
   );
 
   const presets = presetList.presets.map((p) => presetFromId(p.id, p.isDefault));
+  /**
+   * 手机侧的锦囊 id（`light` / 只读 …）和电脑宿主的预设（`standard` / `ptc` …）不是一套。
+   * 建会话时遇到不认识的 id 就落到宿主默认预设，别把手机 id 直接塞给 `session/create`。
+   */
+  const defaultPresetId = presetList.presets.find((p) => p.isDefault)?.id ?? presets[0]?.id ?? '';
+
+  function resolveHostPreset(requested: string | undefined): string {
+    const want = String(requested ?? '').trim();
+    if (want && presets.some((p) => p.id === want)) return want;
+    return defaultPresetId;
+  }
 
   function capabilities(): Capabilities {
     // 桥和引擎都在手机里（baseUrl 是 loopback）时，别把宿主说成"桌面"
@@ -1564,6 +1575,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
     // 真引擎建会话：工作区由客户端指定；没给才回退到默认工作区
     'sessions.create': async ({ presetId, title, workspaceId: requestedWorkspaceId }) => {
+      const agentPreset = resolveHostPreset(presetId);
       let selectedWorkspaceId = String(requestedWorkspaceId ?? '').trim();
       let workspaceTitle = '';
       if (!selectedWorkspaceId) {
@@ -1578,9 +1590,24 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         workspaceTitle = known?.title ?? known?.path ?? '';
       }
       const sessionId = 'session-' + crypto.randomUUID();
-      await client.rpc('session/create', {
-        request: { workspaceId: selectedWorkspaceId, sessionId, agentPreset: presetId },
-      });
+      try {
+        await client.rpc('session/create', {
+          request: {
+            workspaceId: selectedWorkspaceId,
+            sessionId,
+            ...(agentPreset ? { agentPreset } : {}),
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('agent-preset/not-found')) {
+          const known = presets.map((preset) => preset.id).join(' / ') || '（电脑宿主没有预设）';
+          throw Object.assign(new Error(`电脑宿主没有锦囊「${presetId}」，可用：${known}`), {
+            code: 'bad_request' satisfies ProtocolError['code'],
+          });
+        }
+        throw error;
+      }
       workspaceIdBySession.set(sessionId, selectedWorkspaceId);
       const selection = await pickRoutableModel();
       if (selection) {
@@ -1600,7 +1627,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
       const session: SessionSummary = {
         id: sessionId,
         title: title ?? '新会话',
-        presetId,
+        presetId: agentPreset || presetId,
         workspaceId: selectedWorkspaceId,
         hostId,
         status: 'idle',

@@ -1,6 +1,6 @@
 # 锦囊 · AI 维护清单
 
-> 状态：2026-11-09 凌晨（会话来源分离 / 工作区按 tab / 桌宠单实例 / 构建收口）。
+> 状态：2026-11-09 凌晨（会话来源分离 / 「在电脑继续」真机通过 / 工作区按 tab / 桌宠单实例 / 构建收口）。
 > **本文件是任务状态、规则和命令的唯一来源**。
 > 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)，
 > 长会话流式见 [STREAMING-FIX](STREAMING-FIX.md)。交接：2026-11-05 见
@@ -12,7 +12,8 @@
 > [archive/40](archive/40-handoff-2026-11-08.md) /
 > [archive/41](archive/41-handoff-2026-11-08.md) /
 > [archive/42](archive/42-handoff-2026-11-08.md)；
-> 2026-11-09 见 [archive/43](archive/43-handoff-2026-11-09.md)。
+> 2026-11-09 见 [archive/43](archive/43-handoff-2026-11-09.md) /
+> [archive/44](archive/44-handoff-2026-11-09.md)。
 > 桌宠方案：[PET-PLAN](PET-PLAN.md)；数据规范：[PET-SPECIFICATION](PET-SPECIFICATION.md)。
 
 ## 1. 当前基线
@@ -555,6 +556,23 @@ type AttachmentChipsProps = {
   - [x] QS 磁贴、桌面小组件、通知 ACTION_VIEW 直达会话/审批、常驻通知可点回 App
   - [ ] 悬浮球（overlay service）未做，设置里明确标注「暂未接入」
   - [x] 后台分享：`ShareInbox` 已有，冷启动/onNewIntent 都接
+- [x] **3.4 跨设备会话：来源分离 +「在电脑继续（复制历史）」**（2026-11-09）
+  - [x] 抽屉「手机 N / 电脑 M」tab，行标签 `📱 轻` / `📱 完整` / `💻 电脑`；长按菜单只对当前来源开放
+  - [x] 工作区按 tab 缓存（`workspaceCache`）；电脑 caps 没工作区时用电脑会话的 workspace 名回退
+  - [x] 连电脑成功后关连接页；远程 `autoReconnect`；远程表单拒绝 `127.0.0.1/localhost`
+  - [x] `store.pushSessionToComputer`：`buildHandoff` → 电脑 `sessions.create` → `sessions.send(seed)`
+    → `refreshSessions`；发完立刻 `sessions.rename` 改回手机标题（否则电脑 DSH 会拿 seed 首行
+    起名成 `[dsh-handoff:…] 这是一次从…`）
+  - [x] 顶栏角标/运行模式按 `link` 区分：连电脑显示「电脑模式」，不再误标「完整模式」
+  - 真机（2026-11-09 01:22/01:30，release 0.2.0 vc16）：手机轻会话「帮我搜索一下乌克兰…」长按
+    →「在电脑继续」→ 确认，**不再报 `agent-preset/not-found`**（PITFALLS I24），电脑 tab
+    22→23→24，多出会话；第二次推送标题保留为「帮我搜索一下乌克兰游戏地铁三部曲的2…」
+    （不是 `[dsh-handoff:…]`），预设落成 `standard`；电脑 DSH 侧各跑 1 轮后手动 cancel。
+    截图 `push-menu-2026-11-09.png` / `push-confirm-2026-11-09.png` /
+    `push-computer-tab-2026-11-09.png`；连电脑后首页角标「电脑模式」、运行模式页
+    「电脑宿主（已连接）」（`home-remote-badge-2026-11-09.png`、`mode-sheet-remote-2026-11-09.png`）。
+  - 电脑 tab 工作区：`ces-mobile D:\ces-mobile` / `default-workspace C:\Users\chenf\Documents\…`。
+  - 限制：是复制/接管，不是双向同步；电脑侧新增消息不回写手机（要等 DSH import/export API）。
 
 ### M4 · 远期
 

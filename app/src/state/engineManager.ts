@@ -165,6 +165,8 @@ export function badgeFor(state: EngineSnapshot): EngineBadgeInfo {
     if (pct > 0) return { kind: 'remote', label: `完整 ${pct}%` };
     return { kind: 'remote', label: '完整 启动中' };
   }
+  // 连电脑宿主和本机完整引擎都是 mode=full；角标必须按 link 区分，否则电脑被标成「完整」
+  if (state.link === 'remote') return { kind: 'remote', label: '电脑' };
   if (state.mode === 'full') return { kind: 'remote', label: '完整' };
   return { kind: 'light', label: '轻' };
 }

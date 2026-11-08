@@ -780,3 +780,32 @@
   订阅并 `display:none`；点会话先推空壳详情，`sessions.get` 并行。
 - 验证：真机 push/pop 方向正确、返回保留首页滚动；每次 push 约 1 帧小 hitch，
   比原来的闪白大幅改善（见 [ANIMATION](ANIMATION.md)）。
+
+### I24. 「在电脑继续」把手机的锦囊 id 当成电脑预设（2026-11-09）
+
+- 现象：手机轻会话长按 →「在电脑继续」→ 红字
+  `session/create -> agent-preset/not-found | Unknown agent preset: light`，电脑 tab 没多会话。
+- 原因：手机轻引擎的预设 id 是 `light`（`PRESETS` 里还有只读等），电脑宿主是
+  `standard/ptc/minimal/cordis`；`pushSessionToComputer` 把 `detail.presetId` 原样传给
+  `sessions.create`，桥又原样塞进 `session/create`，宿主直接拒绝。
+- 处理：桥 `sessions.create` 先 `resolveHostPreset`——名字存在就透传，不存在落宿主默认预设
+  （`agentPresets/list` 的 `isDefault`）；返回的 `session.presetId` 用解析后的 id。
+  万一宿主仍拒绝，桥抛人话「电脑宿主没有锦囊「x」，可用：…」而不是原始 RPC 串。
+  App 侧 `pushSessionToComputer` 也先按电脑 `caps.presets` 挑同名/第一个。
+- 验证：`test/real-preset-fallback.test.ts`（假 dsh 对未知预设回 `agent-preset/not-found`）；
+  真机手机轻会话推送两次都成功，电脑 tab 新增会话、预设落 `standard`，电脑 DSH 侧各跑 1 轮
+  （测试后 `session/cancel`）。
+- 顺带：电脑 DSH 的 `session/create` 没有 title 参数，会拿第一条消息自动起名；seed 首行是
+  `[dsh-handoff:…]`，所以推送后要立刻 `sessions.rename` 回手机标题（实测立即改名不会被
+  title-llm 覆盖，3/6/12s 复查仍是新名字）。
+
+### I25. adb 模拟长按：`input swipe` 可以，`input motionevent` 会卡住整个面板（2026-11-09）
+
+- 现象：用 `adb shell "input motionevent DOWN x y; sleep 1; input motionevent UP x y"` 长按抽屉行，
+  菜单能弹；但之后抽屉里所有点击（菜单项、tab、行）全部无响应，只有返回键有效。
+- 原因：`motionevent` 分进程注入，DOWN/UP 的 downTime 对不上，RN 侧 responder 收不到完整
+  touch 流，整块面板停在“按下”状态。
+- 处理：长按用 `adb shell input swipe x y x y-4 1200`（同点 + 2–4px、1000–1500ms）；
+  两次 `motionevent` 只用来做单次探测，用完最好 force-stop 重开 App。
+- 备注：`uiautomator dump` 在动画/连续帧（桌宠）时会 `could not get idle state`，
+  失败后返回的是上一次的 `/sdcard/ui.xml`，别把旧 dump 当现状——以截图为准。

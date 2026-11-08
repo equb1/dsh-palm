@@ -162,13 +162,18 @@ export function HomeScreen(): React.ReactElement {
   const bootLabel = bootHost?.phase
     ? bootHost.phase + (bootPct > 0 && bootPct < 100 ? ` ${bootPct}%` : '')
     : '完整引擎启动中';
+  // 连电脑宿主也走 mode=full（REMOTE_ATTACHED），顶栏要按 link 区分「电脑 / 完整」
+  const remoteLink = engine.link === 'remote';
   const modeLabel = booting
     ? bootPct > 0 && bootPct < 100
       ? `启动中 ${bootPct}%`
       : '启动中'
-    : engine.mode === 'full'
-      ? '完整'
-      : '轻';
+    : remoteLink
+      ? '电脑'
+      : engine.mode === 'full'
+        ? '完整'
+        : '轻';
+  const modeIsFull = !remoteLink && engine.mode === 'full';
 
   const connColor =
     state.conn === 'connected' ? palette.ok : state.conn === 'reconnecting' || booting ? palette.warn : palette.danger;
@@ -245,11 +250,11 @@ export function HomeScreen(): React.ReactElement {
           >
             <View style={[styles.modeDot, { backgroundColor: connColor }]} />
             <BrandIcon
-              name={booting ? 'loader' : engine.mode === 'full' ? 'box' : 'zap'}
+              name={booting ? 'loader' : remoteLink ? 'laptop' : modeIsFull ? 'box' : 'zap'}
               size={14}
-              color={engine.mode === 'full' ? palette.text : palette.blue}
+              color={modeIsFull || remoteLink ? palette.text : palette.blue}
             />
-            <Text style={[styles.modeText, engine.mode === 'full' && { color: palette.text }]}>
+            <Text style={[styles.modeText, (modeIsFull || remoteLink) && { color: palette.text }]}>
               {booting ? modeLabel : `${modeLabel}模式`}
             </Text>
           </Pressable>
@@ -343,12 +348,12 @@ export function HomeScreen(): React.ReactElement {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="完整模式"
-          accessibilityState={{ selected: engine.mode === 'full' }}
+          accessibilityState={{ selected: modeIsFull }}
           onPress={() => {
             setModeSheetOpen(false);
-            if (engine.mode !== 'full') void store.switchEngine('full');
+            if (!modeIsFull) void store.switchEngine('full');
           }}
-          style={[styles.modeRow, engine.mode === 'full' && styles.modeRowActive]}
+          style={[styles.modeRow, modeIsFull && styles.modeRowActive]}
         >
           <View style={[styles.modeIcon, { backgroundColor: palette.glassStrong }]}>
             <BrandIcon name="box" size={18} color={palette.textDim} />
@@ -357,28 +362,30 @@ export function HomeScreen(): React.ReactElement {
             <Text style={styles.modeName}>完整模式</Text>
             <Text style={styles.modeHint}>Python / Linux / Office 编辑；首次启动稍慢</Text>
           </View>
-          {engine.mode === 'full' ? <BrandIcon name="check" size={16} color={palette.blue} /> : null}
+          {modeIsFull ? <BrandIcon name="check" size={16} color={palette.blue} /> : null}
         </Pressable>
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="连接电脑宿主"
+          accessibilityLabel={remoteLink ? '已连接电脑宿主' : '连接电脑宿主'}
           onPress={() => {
             setModeSheetOpen(false);
             store.openConnectModal();
           }}
-          style={styles.modeRow}
+          style={[styles.modeRow, remoteLink && styles.modeRowActive]}
         >
           <View style={[styles.modeIcon, { backgroundColor: palette.glassStrong }]}>
             <BrandIcon name="laptop" size={18} color={palette.textDim} />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={styles.modeName}>连接电脑宿主</Text>
-            <Text style={styles.modeHint}>同一 Wi-Fi 扫描或手填地址，用电脑上的 dsh</Text>
+            <Text style={styles.modeName}>{remoteLink ? '电脑宿主（已连接）' : '连接电脑宿主'}</Text>
+            <Text style={styles.modeHint} numberOfLines={2}>
+              {remoteLink
+                ? `${state.remoteHost?.name ?? '电脑'} · ${state.remoteHost?.url ?? ''}`
+                : '同一 Wi-Fi 扫描或手填地址，用电脑上的 dsh'}
+            </Text>
           </View>
-          <View style={{ transform: [{ rotate: '180deg' }] }}>
-            <BrandIcon name="back" size={15} color={palette.textFaint} />
-          </View>
+          {remoteLink ? <BrandIcon name="check" size={16} color={palette.blue} /> : null}
         </Pressable>
       </BottomSheet>
 
