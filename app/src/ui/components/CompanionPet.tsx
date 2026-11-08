@@ -313,14 +313,14 @@ const createStyles = ({ palette: c }: Theme) =>
   StyleSheet.create({
     container: {
       position: 'absolute',
-      right: 22,
-      top: -30,
+      right: 14,
+      top: -78,
       zIndex: 35,
       alignItems: 'flex-end',
     },
     bubble: {
       position: 'absolute',
-      bottom: 50,
+      bottom: 66,
       right: 0,
       maxWidth: 160,
       backgroundColor: c.glassStrong,
