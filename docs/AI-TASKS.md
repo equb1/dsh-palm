@@ -1,6 +1,6 @@
 # 锦囊 · AI 维护清单
 
-> 状态：2026-11-08 夜间（0.2.0 收口 / 桌宠方案待确认 / e2e 5 个回归待修）。
+> 状态：2026-11-08 夜间（e2e 全绿 / 桌宠帧动画初版 / 待真机验收）。
 > **本文件是任务状态、规则和命令的唯一来源**。
 > 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)，
 > 长会话流式见 [STREAMING-FIX](STREAMING-FIX.md)。交接：2026-11-05 见
@@ -8,8 +8,9 @@
 > 2026-11-06 见 [archive/34](archive/34-handoff-2026-11-06.md) / [archive/35](archive/35-handoff-2026-11-06.md) /
 > [archive/36](archive/36-handoff-2026-11-06.md) / [archive/37](archive/37-handoff-2026-11-06.md) /
 > [archive/38](archive/38-handoff-2026-11-06.md)；
-> 2026-11-08 见 [archive/39](archive/39-handoff-2026-11-08.md)。
-> 桌宠方案（待确认）：[PET-PLAN](PET-PLAN.md)；数据规范：[PET-SPECIFICATION](PET-SPECIFICATION.md)。
+> 2026-11-08 见 [archive/39](archive/39-handoff-2026-11-08.md) /
+> [archive/40](archive/40-handoff-2026-11-08.md)。
+> 桌宠方案：[PET-PLAN](PET-PLAN.md)；数据规范：[PET-SPECIFICATION](PET-SPECIFICATION.md)。
 
 ## 1. 当前基线
 
@@ -22,8 +23,9 @@
 - UI token 已对齐官方 DSH 默认浅色（2026-11-04）：`#FFFFFF` 基底、`#F9FAFB` 侧栏、
   deepseek 蓝 `#4176E6`、8/12/16/20/28 圆角。深色 alias 已接（2026-11-06）：
   `theme/palette.ts` + `ThemeProvider`，支持跟随系统/浅色/深色，存 UI cache。
-- 桌宠骨架（2026-11-08，未提交）：`src/pet` 数据驱动 12 态 + pack.json + 气泡/EdgeSnap，
-  但动画仍是 1 帧静态图；完整方案 [PET-PLAN](PET-PLAN.md) 待确认。
+- 桌宠帧动画初版（2026-11-08）：`src/pet` 12 态状态机 + `PetRuntime` 帧时钟 +
+  deepy/maid 16 态 sprite sheet + RN/原生悬浮窗逐帧；真机待验收，详见
+  [archive/40](archive/40-handoff-2026-11-08.md)。
 - 输入区按 dsh-go 几何（2026-11-04）：单行 56 / 28 圆角、40 圆键；权限与锦囊在输入框上方，
   模型回顶栏，`+` 走附件面板；B3 前先把 Chat 的回合/思考/工具渲染拆到 `ui/chat/*`。
 - 流式主链路已修（2026-11-04）：canonical run/block id、chunk 缓冲、稳定块 memo、FlatList 和 follow
