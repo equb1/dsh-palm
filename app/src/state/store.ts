@@ -1003,14 +1003,20 @@ export class Store {
 
   async connect(url?: string): Promise<void> {
     const target = (url ?? this.state.url).trim();
-    this.patch({ url: target, error: null, conn: 'connecting' });
+    if (!target) {
+      this.setError('请输入电脑宿主地址');
+      return;
+    }
+    this.patch({ url: target, error: null, conn: 'connecting', connectModalOpen: true });
 
     this.closeEngines();
-    const client = new EngineClient({ url: this.authEndpoint(target), autoReconnect: true });
+    const client = new EngineClient({ url: this.authEndpoint(target), autoReconnect: false });
     const ok = await this.attach(client, 'remote', 'remote');
     if (!ok) {
-      // 远程没连上：把轻引擎接回来，别让界面停在"无引擎"状态
-      await this.runEngineEffects(this.emitEngine({ type: 'LINK_LOST', error: this.state.error ?? '远程宿主没连上', now: this.now() }));
+      const errMsg = this.state.error || `连接失败：无法连接到 ${target}。请确认电脑已运行 npm run engine 且手机电脑在同一 Wi-Fi。`;
+      // 远程没连上：把轻引擎接回作为底层待命，但绝不关闭连接弹窗与错误提示
+      await this.runEngineEffects(this.emitEngine({ type: 'LINK_LOST', error: errMsg, now: this.now() }));
+      this.patch({ error: errMsg, conn: 'closed', connectModalOpen: true });
     }
   }
 
@@ -1107,7 +1113,8 @@ export class Store {
    * 但 store 以上（含所有界面）看到的仍是一模一样的协议。
    */
   async connectLight(setup: LightEngineSetup): Promise<void> {
-    this.patch({ conn: 'connecting', error: null });
+    const keepModalOpen = this.state.connectModalOpen;
+    this.patch({ conn: 'connecting', ...(keepModalOpen ? {} : { error: null }) });
     this.lightSetup = setup;
     this.emitEngine({ type: 'LIGHT_CONNECTING' });
     let host: LightHost | null = null;
@@ -1165,11 +1172,13 @@ export class Store {
 
     try {
       const caps = preconnectedCaps ?? (await client.connect());
+      const keepModalOpen = this.state.connectModalOpen;
+      const keepError = keepModalOpen && Boolean(this.state.error);
       this.patch({
         caps,
         conn: 'connected',
-        connectModalOpen: false,
-        error: null,
+        connectModalOpen: keepModalOpen,
+        error: keepError ? this.state.error : null,
         draftPresetId: this.state.draftPresetId ?? caps.presets[0]?.id ?? null,
       });
       await this.refreshSessions();

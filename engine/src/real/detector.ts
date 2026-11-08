@@ -16,7 +16,7 @@ export interface DetectedDsh {
  * 2. 扫描本机处于 LISTEN 状态的 127.0.0.1 端口
  * 3. 快速并发验证 session/list，锁定真实 DSH
  */
-export async function detectRealDsh(timeoutMs = 1500): Promise<DetectedDsh | null> {
+export async function detectRealDsh(timeoutMs = 600): Promise<DetectedDsh | null> {
   const credPath = join(homedir(), '.dsh', '.credentials.yaml');
   if (!existsSync(credPath)) {
     return null;
@@ -47,43 +47,49 @@ export async function detectRealDsh(timeoutMs = 1500): Promise<DetectedDsh | nul
       }
     }
   } catch {
-    // 默认常见备选端口
-    ports.push(62708, 8899, 8788);
+    ports.push(57497, 62708, 8899, 8788);
   }
 
-  const results = await Promise.all(
-    ports.map(async (port) => {
-      const host = `127.0.0.1:${port}`;
-      const cookie = generateDshCookie(host, secretStr);
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), timeoutMs);
-        const res = await fetch(`http://${host}/api/session/list`, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            host,
-            cookie,
-          },
-          body: JSON.stringify({
-            type: 'client-request',
-            rpcId: 'probe-' + port,
-            method: 'session/list',
-            payload: { args: { _request: {} } },
-          }),
-          signal: controller.signal as never,
-        });
-        clearTimeout(timer);
-        if (res.ok) {
-          const json = (await res.json()) as { result?: { ok?: boolean } };
-          if (json.result?.ok) {
-            return { port, baseUrl: `http://${host}`, token: secretStr };
-          }
+  // 探测单个端口
+  async function probePort(port: number): Promise<DetectedDsh | null> {
+    const host = `127.0.0.1:${port}`;
+    const cookie = generateDshCookie(host, secretStr);
+    try {
+      const res = await fetch(`http://${host}/api/session/list`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          host,
+          cookie,
+        },
+        body: JSON.stringify({
+          type: 'client-request',
+          rpcId: 'probe-' + port,
+          method: 'session/list',
+          payload: { args: { _request: {} } },
+        }),
+        signal: AbortSignal.timeout(timeoutMs) as never,
+      });
+      if (res.ok) {
+        const json = (await res.json()) as { result?: { ok?: boolean } };
+        if (json.result?.ok) {
+          return { port, baseUrl: `http://${host}`, token: secretStr };
         }
-      } catch {}
-      return null;
-    }),
-  );
+      }
+    } catch {}
+    return null;
+  }
 
-  return results.find((r): r is DetectedDsh => r !== null) ?? null;
+  // 分批并发探测，每批 20 个端口，一旦命中立即返回
+  const batchSize = 20;
+  for (let i = 0; i < ports.length; i += batchSize) {
+    const chunk = ports.slice(i, i + batchSize);
+    const results = await Promise.all(chunk.map((p) => probePort(p)));
+    const found = results.find((r): r is DetectedDsh => r !== null);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
 }

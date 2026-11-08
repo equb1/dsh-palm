@@ -122,13 +122,13 @@ export function ConnectScreen(): React.ReactElement {
               </View>
             ) : null}
 
-            <Text style={styles.label}>引擎地址</Text>
+            <Text style={styles.label}>电脑引擎地址 (WebSocket)</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
                 value={state.url}
                 onChangeText={(t) => store.setUrl(t)}
-                placeholder="ws://192.168.1.10:8787/ws"
+                placeholder="ws://192.168.1.3:8787/ws"
                 placeholderTextColor={palette.textFaint}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -137,37 +137,23 @@ export function ConnectScreen(): React.ReactElement {
               />
             </View>
 
-            <Text style={styles.label}>配对码</Text>
-            {state.deviceKey ? (
-              <View style={styles.pairedRow}>
-                <Text style={styles.pairedText}>这台设备已配对，不用再输配对码</Text>
-                <Pressable accessibilityRole="button" onPress={() => void store.forgetDevice()}>
-                  <Text style={styles.pairedAction}>忘记这台设备</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View style={styles.inputWrap}>
-                <TextInput
-                  style={styles.input}
-                  value={state.pairCode}
-                  onChangeText={(t) => store.setPairCode(t)}
-                  placeholder="6 位数字，宿主启动时会打印"
-                  placeholderTextColor={palette.textFaint}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  accessibilityLabel="配对码"
-                />
-              </View>
-            )}
-
             {Boolean(state.error) ? (
-              <Pressable onPress={() => store.clearError()}>
-                <Text style={styles.error}>{state.error}</Text>
-              </Pressable>
+              <View style={styles.errorCard}>
+                <View style={styles.errorHeader}>
+                  <Text style={styles.errorTitle}>连接遇到问题</Text>
+                  <Pressable onPress={() => store.clearError()} hitSlop={8}>
+                    <Text style={styles.errorDismiss}>✕</Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.errorBody}>{state.error}</Text>
+                <Text style={styles.errorHint}>
+                  💡 检查指南：请确认电脑端已启动引擎（npm run engine），且手机和电脑连接在同一个 Wi-Fi 网络下。
+                </Text>
+              </View>
             ) : null}
 
             <Btn
-              label={state.conn === 'connecting' ? '连接中…' : '连接'}
+              label={state.conn === 'connecting' ? '正在连接电脑宿主…' : '连接电脑宿主'}
               onPress={() => void store.connect()}
               disabled={state.conn === 'connecting'}
               style={styles.submit}
@@ -311,9 +297,41 @@ const createStyles = ({ palette: c }: Theme) =>
     paddingVertical: 6,
   },
   reconnectText: { color: c.blue, fontSize: 12, fontWeight: '600' },
-  pairedRow: { gap: 6, paddingVertical: 4 },
-  pairedText: { color: c.textDim, fontSize: 13 },
-  pairedAction: { color: c.blue, fontSize: 13 },
+  errorCard: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    padding: space.md,
+    marginBottom: space.md,
+    gap: 6,
+  },
+  errorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  errorTitle: {
+    color: c.danger,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  errorDismiss: {
+    color: c.textDim,
+    fontSize: 14,
+    paddingHorizontal: 4,
+  },
+  errorBody: {
+    color: c.text,
+    fontSize: 12.5,
+    lineHeight: 18,
+  },
+  errorHint: {
+    color: c.textDim,
+    fontSize: 11.5,
+    lineHeight: 16,
+    marginTop: 2,
+  },
 
   label: { color: c.textDim, fontSize: 12, marginBottom: 6, letterSpacing: 0.5 },
   inputWrap: {
