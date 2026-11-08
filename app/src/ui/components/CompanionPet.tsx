@@ -2,7 +2,9 @@ import React from 'react';
 import {
   Alert,
   Animated,
+  Dimensions,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -43,6 +45,48 @@ export function CompanionPet(): React.ReactElement | null {
   // 动画状态：完成时的空翻，或者呼吸微律动
   const flipAnim = React.useRef(new Animated.Value(0)).current;
   const bounceAnim = React.useRef(new Animated.Value(0)).current;
+
+  // 自由拖动：记录松手时的位移，限制在屏幕范围内，不改变状态机
+  const pan = React.useRef(new Animated.ValueXY()).current;
+  const dragStart = React.useRef({ x: 0, y: 0 });
+  const dragLast = React.useRef({ x: 0, y: 0 });
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_evt, gesture) =>
+        Math.abs(gesture.dx) > 6 || Math.abs(gesture.dy) > 6,
+      onMoveShouldSetPanResponderCapture: (_evt, gesture) =>
+        Math.abs(gesture.dx) > 6 || Math.abs(gesture.dy) > 6,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        dragStart.current = dragLast.current;
+      },
+      onPanResponderMove: (_evt, gesture) => {
+        const next = {
+          x: dragStart.current.x + gesture.dx,
+          y: dragStart.current.y + gesture.dy,
+        };
+        dragLast.current = next;
+        pan.setValue(next);
+      },
+      onPanResponderRelease: () => {
+        const { width, height } = Dimensions.get('window');
+        const clamped = {
+          x: Math.max(-width * 0.42, Math.min(width * 0.42, dragLast.current.x)),
+          y: Math.max(-height * 0.42, Math.min(height * 0.42, dragLast.current.y)),
+        };
+        dragLast.current = clamped;
+        Animated.spring(pan, {
+          toValue: clamped,
+          useNativeDriver: true,
+          friction: 7,
+          tension: 90,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        pan.setValue(dragLast.current);
+      },
+    }),
+  ).current;
 
   // 状态机实例
   const smRef = React.useRef<PetStateMachine | null>(null);
@@ -151,7 +195,14 @@ export function CompanionPet(): React.ReactElement | null {
 
   return (
     <>
-      <View style={styles.container} pointerEvents="box-none">
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[
+          styles.container,
+          { transform: [{ translateX: pan.x }, { translateY: pan.y }] },
+        ]}
+        pointerEvents="box-none"
+      >
         {bubbleText ? (
           <View style={styles.bubble}>
             <Text style={styles.bubbleText} numberOfLines={2}>
@@ -187,7 +238,7 @@ export function CompanionPet(): React.ReactElement | null {
             </View>
           ) : null}
         </Pressable>
-      </View>
+      </Animated.View>
 
       {/* 工作汇报与用量面板 (HUD) */}
       <Modal visible={hudOpen} transparent animationType="fade" onRequestClose={() => setHudOpen(false)}>
