@@ -577,7 +577,8 @@ const handlers: { [M in Method]: Handler<M> } = {
   },
 
   'sessions.list': ({ limit }) => {
-    loadRealDshSessions();
+    // 真实电脑会话只在启动时载入一次；不要在处理请求时 clear/reload，
+    // 否则刚创建/正在跑的 mock 会话会被清掉（e2e: 会话不存在）。
     const list = [...sessions.values()]
       .map((s) => s.summary)
       .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -586,7 +587,6 @@ const handlers: { [M in Method]: Handler<M> } = {
   },
 
   'sessions.get': ({ sessionId }) => {
-    loadRealDshSessions();
     const s = requireSession(sessionId);
     const detail: SessionDetail = {
       ...s.summary,
