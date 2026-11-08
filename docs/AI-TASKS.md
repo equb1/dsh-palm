@@ -564,6 +564,9 @@ type AttachmentChipsProps = {
     → `refreshSessions`；发完立刻 `sessions.rename` 改回手机标题（否则电脑 DSH 会拿 seed 首行
     起名成 `[dsh-handoff:…] 这是一次从…`）
   - [x] 顶栏角标/运行模式按 `link` 区分：连电脑显示「电脑模式」，不再误标「完整模式」
+  - [x] 桥整机重启恢复（2026-11-09 01:32）：连电脑时杀掉 8787 桥 → 角标仍「电脑模式」、
+    状态点变橙、不掉回轻引擎；重启桥后约 12s 自动回绿，打开推送会话能正常拉快照
+    （`remote-bridge-down-2026-11-09.png` / `remote-bridge-restored-2026-11-09.png`）
   - 真机（2026-11-09 01:22/01:30，release 0.2.0 vc16）：手机轻会话「帮我搜索一下乌克兰…」长按
     →「在电脑继续」→ 确认，**不再报 `agent-preset/not-found`**（PITFALLS I24），电脑 tab
     22→23→24，多出会话；第二次推送标题保留为「帮我搜索一下乌克兰游戏地铁三部曲的2…」
