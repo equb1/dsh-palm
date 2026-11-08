@@ -841,3 +841,15 @@
   PSS 223→168MB（峰值 273MB，锁屏后回落到 17xMB）。
 - 产物：`scratch/soak-remote-2026-11-09.jsonl`、`scratch/soak-shots/`、
   驱动 `scratch/soak-remote.ts`、汇总 `scratch/soak-summary.ts`。
+
+### I29. Wi-Fi 断开后服务端留半开连接，要发心跳清理（2026-11-09）
+
+- 现象：手机切掉 Wi-Fi，App 约 6s 变橙（client 收到 socket 关闭、开始退避重连），但电脑侧
+  `Get-NetTCPConnection -LocalPort 8787` 里那条 `192.168.1.2:xxxx` 一直 `ESTABLISHED`——
+  手机发不出 FIN，桥不知道对端没了；反复切网会堆半开 socket。
+- 处理：桥每 20s `ws.ping()`，上一轮没回 pong 就 `terminate()`（`aliveClients` Map）。
+  RN/OkHttp 会自动回 pong：实测连续 3 个心跳周期同一条连接（remote port 不变）没被误杀。
+- 验证：Wi-Fi 断开后 **t+35s** 半开连接消失（加心跳前一直挂着）；Wi-Fi 回来后 App
+  **4.9s / 9.8s** 用新 remote port 重连，首页角标橙→绿。
+- 产物：`scratch/wifi-outage-2026-11-09.jsonl`、`scratch/wifi-shots/`、`scratch/wifi-outage.ts`，
+  截图 `scratch/shots/wifi-off-orange-2026-11-09.png` / `wifi-recovered-2026-11-09.png`。

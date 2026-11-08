@@ -2304,6 +2304,31 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
 
   const wss = new WebSocketServer({ server: http, path: '/ws' });
 
+  /**
+   * 客户端保活：手机 Wi-Fi 断掉时发不出 FIN，服务端会留下半开连接（ESTABLISHED 且永远不关）。
+   * 每 20s ping 一次，上一轮没回 pong 就 terminate；RN/OkHttp 会自动回 pong。
+   */
+  const aliveClients = new Map<WebSocket, boolean>();
+  const heartbeat = setInterval(() => {
+    for (const ws of clients) {
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      if (aliveClients.get(ws) === false) {
+        ws.terminate();
+        clients.delete(ws);
+        aliveClients.delete(ws);
+        continue;
+      }
+      aliveClients.set(ws, false);
+      try {
+        ws.ping();
+      } catch {
+        /* 发不出去就等下一轮 terminate */
+      }
+    }
+  }, 20_000);
+  // RN/DOM 类型下 setInterval 返回 number（Node 下是 Timeout）；有 unref 就 unref
+  (heartbeat as unknown as { unref?: () => void }).unref?.();
+
   // 注意：只有配了配对码才启用设备密钥。否则 DSH_PALM_NO_PAIR=1 会形同虚设——
   // 设备存储一存在，下面的鉴权分支就会强制要求密钥。
   const deviceStore =
@@ -2330,7 +2355,12 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
     }
 
     clients.add(ws);
-    ws.on('close', () => clients.delete(ws));
+    aliveClients.set(ws, true);
+    ws.on('pong', () => aliveClients.set(ws, true));
+    ws.on('close', () => {
+      clients.delete(ws);
+      aliveClients.delete(ws);
+    });
     if (issuedKey) {
       // 客户端收到后自己存起来，下次用 ?key= 连
       if (ws.readyState === WebSocket.OPEN) {
@@ -2413,6 +2443,7 @@ export async function startRealBridge(options: RealBridgeOptions): Promise<RealB
         followDispose = null;
         void signInRelay?.close();
         signInRelay = null;
+        clearInterval(heartbeat);
         for (const ws of clients) ws.close();
         wss.close();
         http.close(() => resolve());
