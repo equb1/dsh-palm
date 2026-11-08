@@ -17,7 +17,6 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.Settings
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -62,10 +61,7 @@ class FloatPetService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            stopSelf()
-            return
-        }
+        // 权限检查交给 addView：部分 ROM Settings.canDrawOverlays 为 false 但 AppOps 已放行
         initVibrator()
         initFloatingWindow()
     }
@@ -92,6 +88,14 @@ class FloatPetService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_VISIBLE) {
+            floatView?.visibility = if (intent.getBooleanExtra(EXTRA_VISIBLE, true)) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            return START_STICKY
+        }
         val role = intent?.getStringExtra(EXTRA_ROLE) ?: currentRole
         val state = intent?.getStringExtra(EXTRA_STATE) ?: currentState
         currentRole = role
@@ -202,6 +206,8 @@ class FloatPetService : Service() {
         try {
             windowManager?.addView(floatView, params)
             isShowing = true
+            // 默认可见；App 前台的隐藏由 JS 的 setFloatingPetVisible(false) 负责
+            floatView?.visibility = View.VISIBLE
             applyState(currentRole, currentState)
         } catch (_: Throwable) {
             stopSelf()
@@ -377,17 +383,23 @@ class FloatPetService : Service() {
     companion object {
         const val EXTRA_ROLE = "extra_role"
         const val EXTRA_STATE = "extra_state"
+        const val ACTION_VISIBLE = "cool.cnb.dshpalm.pet.VISIBLE"
+        const val EXTRA_VISIBLE = "extra_visible"
 
         var isShowing: Boolean = false
             private set
         var currentRole: String = "deepy"
         var currentState: String = "sleeping"
 
-        fun start(context: Context, role: String = "deepy", state: String = "sleeping") {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
-                return
-            }
+        fun setVisible(context: Context, visible: Boolean) {
             val intent = Intent(context, FloatPetService::class.java).apply {
+                action = ACTION_VISIBLE
+                putExtra(EXTRA_VISIBLE, visible)
+            }
+            context.startService(intent)
+        }
+
+        fun start(context: Context, role: String = "deepy", state: String = "sleeping") {            val intent = Intent(context, FloatPetService::class.java).apply {
                 putExtra(EXTRA_ROLE, role)
                 putExtra(EXTRA_STATE, state)
             }

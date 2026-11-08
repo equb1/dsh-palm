@@ -60,6 +60,7 @@ interface HostNativeModule {
   isOverlayPermissionGranted?(): Promise<boolean>;
   requestOverlayPermission?(): Promise<boolean>;
   setFloatingPetEnabled?(enabled: boolean, role: string | null, state: string | null): Promise<boolean>;
+  setFloatingPetVisible?(visible: boolean): Promise<boolean>;
   getFloatingPetStatus?(): Promise<{ isShowing: boolean; allowed: boolean; role: string; state: string } | null>;
   captureAndShareView?(reactTag: number, title: string | null): Promise<boolean>;
   captureAndSaveView?(reactTag: number, title: string | null): Promise<string>;
@@ -202,6 +203,15 @@ export async function setFloatingPetEnabled(
   if (!native?.setFloatingPetEnabled) return false;
   try {
     return await native.setFloatingPetEnabled(enabled, role ?? null, state ?? null);
+  } catch {
+    return false;
+  }
+}
+
+export async function setFloatingPetVisible(visible: boolean): Promise<boolean> {
+  if (!native?.setFloatingPetVisible) return false;
+  try {
+    return await native.setFloatingPetVisible(visible);
   } catch {
     return false;
   }

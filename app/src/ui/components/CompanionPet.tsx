@@ -19,8 +19,6 @@ import { BrandIcon } from './BrandIcon';
 import { PetCanvas } from './PetCanvas';
 import {
   getFloatingPetStatus,
-  isOverlayPermissionGranted,
-  requestOverlayPermission,
   setFloatingPetEnabled,
 } from '../../lib/host';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '../theme';
@@ -49,6 +47,7 @@ export function CompanionPet(): React.ReactElement | null {
 
   // 自由拖动：记录松手时的位移，限制在屏幕范围内，不改变状态机
   const pan = React.useRef(new Animated.ValueXY()).current;
+  const lastTapRef = React.useRef(0);
   const dragStart = React.useRef({ x: 0, y: 0 });
   const dragLast = React.useRef({ x: 0, y: 0 });
 
@@ -192,20 +191,16 @@ export function CompanionPet(): React.ReactElement | null {
   // 开启 / 关闭「App 外显示」系统桌面悬浮窗
   const handleToggleFloating = async (val: boolean) => {
     if (val) {
-      const granted = await isOverlayPermissionGranted();
-      if (!granted) {
-        Alert.alert(
-          '开启「App 外显示」权限',
-          '需要开启「悬浮窗 / 在其他应用上层显示」权限，桌宠才能跟您到桌面。',
-          [
-            { text: '去设置开启', onPress: () => void requestOverlayPermission() },
-            { text: '取消', style: 'cancel' },
-          ],
-        );
-        return;
-      }
+      // 原生服务自己判断 App 是否在前台：前台隐藏、后台显示；
+      // 所以这里可以立即启动，不会和 App 内宠物同时出现。
       const ok = await setFloatingPetEnabled(true, role, petState);
       if (ok) setFloatingActive(true);
+      else {
+        Alert.alert(
+          '开启「App 外显示」失败',
+          '请到系统设置里允许「悬浮窗 / 在其他应用上层显示」，再试一次。',
+        );
+      }
     } else {
       const ok = await setFloatingPetEnabled(false);
       if (ok) setFloatingActive(false);
@@ -222,18 +217,27 @@ export function CompanionPet(): React.ReactElement | null {
         ]}
         pointerEvents="box-none"
       >
-        {bubbleText ? (
-          <View style={styles.bubble}>
-            <Text style={styles.bubbleText} numberOfLines={2}>
-              {bubbleText}
-            </Text>
-          </View>
-        ) : null}
+        {!floatingActive ? (
+          <>
+            {bubbleText ? (
+              <View style={styles.bubble}>
+                <Text style={styles.bubbleText} numberOfLines={2}>
+                  {bubbleText}
+                </Text>
+              </View>
+            ) : null}
 
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="伴侣宠物与任务监控"
           onPress={() => {
+            const now = Date.now();
+            if (now - lastTapRef.current < 320) {
+              lastTapRef.current = 0;
+              setHudOpen(true);
+              return;
+            }
+            lastTapRef.current = now;
             const reactions = ['tapLeft', 'tapRight', 'tickle'] as const;
             const chosen = reactions[Math.floor(Math.random() * reactions.length)]!;
             smRef.current?.triggerReaction(chosen);
@@ -256,6 +260,19 @@ export function CompanionPet(): React.ReactElement | null {
               <Text style={styles.badgeText}>{activeCount}</Text>
             </View>
           ) : null}
+        </Pressable>
+          </>
+        ) : null}
+
+        {/* 小齿轮：点击打开 HUD（长按被拖动/滚动干扰时的兜底入口） */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="打开桌宠面板"
+          onPress={() => setHudOpen(true)}
+          style={styles.hudOpen}
+          hitSlop={6}
+        >
+          <BrandIcon name="settings" size={11} color={palette.textFaint} />
         </Pressable>
       </Animated.View>
 
@@ -417,6 +434,19 @@ const createStyles = ({ palette: c }: Theme) =>
     petTouch: {
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    hudOpen: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: c.glassStrong,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
     },
     badge: {
       position: 'absolute',

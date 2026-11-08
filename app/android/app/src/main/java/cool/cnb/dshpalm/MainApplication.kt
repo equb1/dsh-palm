@@ -1,6 +1,8 @@
 package cool.cnb.dshpalm
 
 import android.app.Application
+import android.app.Activity
+import android.os.Bundle
 import android.content.res.Configuration
 
 import com.facebook.react.PackageList
@@ -36,6 +38,15 @@ class MainApplication : Application(), ReactApplication {
     }
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
+    registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+      override fun onActivityResumed(activity: Activity) = AppVisibility.onActivityResumed()
+      override fun onActivityPaused(activity: Activity) = AppVisibility.onActivityPaused()
+      override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+      override fun onActivityStarted(activity: Activity) = Unit
+      override fun onActivityStopped(activity: Activity) = Unit
+      override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+      override fun onActivityDestroyed(activity: Activity) = Unit
+    })
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {

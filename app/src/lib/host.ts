@@ -96,6 +96,10 @@ export async function setFloatingPetEnabled(
   return false;
 }
 
+export async function setFloatingPetVisible(_visible: boolean): Promise<boolean> {
+  return false;
+}
+
 export async function getFloatingPetStatus(): Promise<{
   isShowing: boolean;
   allowed: boolean;

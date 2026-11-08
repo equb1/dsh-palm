@@ -1,6 +1,7 @@
 package cool.cnb.dshpalm.host
 
 import android.app.Activity
+import android.app.AppOpsManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,6 +11,7 @@ import android.appwidget.AppWidgetManager
 import android.content.ClipData
 import android.content.ComponentName
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
@@ -30,6 +32,7 @@ import java.io.File
 import java.io.FileOutputStream
 import android.net.Uri
 import android.os.Build
+import android.os.Process
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.BaseActivityEventListener
@@ -340,7 +343,7 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
             val manager = AppWidgetManager.getInstance(ctx)
             val widgetCount =
                 manager.getAppWidgetIds(ComponentName(ctx, cool.cnb.dshpalm.system.DshWidgetProvider::class.java)).size
-            val overlay = android.provider.Settings.canDrawOverlays(ctx)
+            val overlay = canDrawOverlays(ctx)
             promise.resolve(
                 Arguments.createMap().apply {
                     putInt("widgetCount", widgetCount)
@@ -355,10 +358,35 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
 
     @ReactMethod
     fun isOverlayPermissionGranted(promise: Promise) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            promise.resolve(android.provider.Settings.canDrawOverlays(ctx))
-        } else {
-            promise.resolve(true)
+        promise.resolve(canDrawOverlays(ctx))
+    }
+
+    /**
+     * 部分 ROM（ColorOS）Settings.canDrawOverlays 仍返回 false，
+     * 但 AppOps 已经 allow；以 AppOps 兜底，避免用户开了权限还被拦。
+     */
+    private fun canDrawOverlays(context: android.content.Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        if (android.provider.Settings.canDrawOverlays(context)) return true
+        return try {
+            val ops = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ops.unsafeCheckOpNoThrow(
+                    AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                    Process.myUid(),
+                    context.packageName,
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                ops.checkOpNoThrow(
+                    AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                    Process.myUid(),
+                    context.packageName,
+                )
+            }
+            mode == AppOpsManager.MODE_ALLOWED
+        } catch (_: Throwable) {
+            false
         }
     }
 
@@ -393,10 +421,8 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         activity.runOnUiThread {
             try {
                 if (enabled) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(activity)) {
-                        promise.resolve(false)
-                        return@runOnUiThread
-                    }
+                    // 不在这里硬拦权限：部分 ROM Settings/AppOps 查询会误报；
+                    // 真正 addView 失败时服务会自己 stopSelf，JS 侧再提示。
                     cool.cnb.dshpalm.system.FloatPetService.start(activity, role ?: "deepy", state ?: "sleeping")
                     promise.resolve(true)
                 } else {
@@ -410,12 +436,18 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     }
 
     @ReactMethod
-    fun getFloatingPetStatus(promise: Promise) {
-        val allowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            android.provider.Settings.canDrawOverlays(ctx)
-        } else {
-            true
+    fun setFloatingPetVisible(visible: Boolean, promise: Promise) {
+        try {
+            cool.cnb.dshpalm.system.FloatPetService.setVisible(ctx, visible)
+            promise.resolve(true)
+        } catch (_: Throwable) {
+            promise.resolve(false)
         }
+    }
+
+    @ReactMethod
+    fun getFloatingPetStatus(promise: Promise) {
+        val allowed = canDrawOverlays(ctx)
         promise.resolve(
             Arguments.createMap().apply {
                 putBoolean("isShowing", cool.cnb.dshpalm.system.FloatPetService.isShowing)
