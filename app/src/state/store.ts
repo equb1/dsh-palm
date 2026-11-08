@@ -243,8 +243,10 @@ export interface AppState {
   deviceKey: string | null;
   /** 最近一次远程宿主（M3.2）：用于断线后重连和离线提示 */
   remoteHost: { url: string; name: string; hostId: string; lastSeenAt: number } | null;
-  /** 宿主注册过的工作区 */
+  /** 宿主注册过的工作区（当前连接源） */
   workspaces: Workspace[];
+  /** 三个来源各自的工作区缓存，抽屉按 tab 展示 */
+  workspaceCache: Record<SessionSource, Workspace[]>;
   /** 已上传或暂存、等着跟下一条消息一起发的附件 */
   pendingAttachments: PendingAttachment[];
   /** 是否打开连接/诊断面板（本机模式下默认不挡首屏，直接进主页） */
@@ -451,6 +453,7 @@ export class Store {
     deviceKey: null,
     remoteHost: null,
     workspaces: [],
+    workspaceCache: { 'phone-light': [], 'phone-proot': [], computer: [] },
     pendingAttachments: [],
     connectModalOpen: false,
     inAppBrowserUrl: null,
@@ -868,6 +871,7 @@ export class Store {
           'phone-proot': this.state.sessionCache['phone-proot'].slice(0, 60),
           computer: this.state.sessionCache.computer.slice(0, 60),
         },
+        workspaceCache: this.state.workspaceCache,
         draftPresetId: this.state.draftPresetId,
         defaultModel: this.state.defaultModel,
         prewarmTier: this.state.prewarmTier,
@@ -898,6 +902,7 @@ export class Store {
           sessionCache?: Partial<
             Record<SessionSource | 'light' | 'full', SessionSummary[]>
           >;
+          workspaceCache?: Partial<Record<SessionSource, Workspace[]>>;
           draftPresetId?: string | null;
           defaultModel?: ModelChoice;
           prewarmTier?: PrewarmTier;
@@ -926,6 +931,16 @@ export class Store {
               phoneLight.length > 0 && this.state.sessionCache['phone-light'].length === 0
                 ? phoneLight
                 : this.state.sessionCache['phone-light'],
+            'phone-proot': list(cache['phone-proot']),
+            computer: list(cache.computer),
+          };
+        }
+        if (parsed.workspaceCache && typeof parsed.workspaceCache === 'object') {
+          const cache = parsed.workspaceCache;
+          const list = (value: unknown): Workspace[] =>
+            Array.isArray(value) ? (value as Workspace[]) : [];
+          nextPatch.workspaceCache = {
+            'phone-light': list(cache['phone-light']),
             'phone-proot': list(cache['phone-proot']),
             computer: list(cache.computer),
           };
@@ -1047,6 +1062,9 @@ export class Store {
       // 远程没连上：把轻引擎接回作为底层待命，但绝不关闭连接弹窗与错误提示
       await this.runEngineEffects(this.emitEngine({ type: 'LINK_LOST', error: errMsg, now: this.now() }));
       this.patch({ error: errMsg, conn: 'closed', connectModalOpen: true });
+    } else {
+      // 已经连上就不要再把连接页盖在会话上
+      this.patch({ connectModalOpen: false });
     }
   }
 
@@ -1201,6 +1219,9 @@ export class Store {
 
     try {
       const caps = preconnectedCaps ?? (await client.connect());
+      const capsWorkspaces = (caps as Capabilities & { workspaces?: Workspace[] }).workspaces ?? [];
+      const source =
+        kind === 'light' ? 'phone-light' : kind === 'proot' ? 'phone-proot' : 'computer';
       const keepModalOpen = this.state.connectModalOpen;
       const keepError = keepModalOpen && Boolean(this.state.error);
       this.patch({
@@ -1208,6 +1229,16 @@ export class Store {
         conn: 'connected',
         connectModalOpen: keepModalOpen,
         error: keepError ? this.state.error : null,
+        workspaces:
+          capsWorkspaces.length > 0 ? capsWorkspaces : this.state.workspaceCache[source],
+        ...(capsWorkspaces.length > 0
+          ? {
+              workspaceCache: {
+                ...this.state.workspaceCache,
+                [source]: capsWorkspaces,
+              },
+            }
+          : {}),
         draftPresetId: this.state.draftPresetId ?? caps.presets[0]?.id ?? null,
       });
       await this.refreshSessions();
@@ -1399,6 +1430,7 @@ export class Store {
         }
         await this.connect(url);
         if (this.state.engineKind !== 'remote') return;
+        this.patch({ connectModalOpen: false });
       } else if (source === 'phone-light') {
         if (this.state.engineKind === 'remote') {
           await this.disconnectAndSwitchToLight();
@@ -2925,7 +2957,13 @@ export class Store {
     if (!this.client) return;
     try {
       const { workspaces } = await this.client.request('workspaces.list', {});
-      this.patch({ workspaces });
+      const source = this.sessionSource();
+      this.patch({
+        workspaces,
+        ...(source
+          ? { workspaceCache: { ...this.state.workspaceCache, [source]: workspaces } }
+          : {}),
+      });
     } catch {
       /* ignore */
     }

@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 
-import type { SessionSummary } from '../protocol';
+import type { SessionSummary, Workspace } from '../protocol';
 import type { SessionRow, SessionSource } from '../state/sessionList';
 import { store, useStore } from './useStore';
 import { IconButton } from './parts';
@@ -259,6 +259,33 @@ export function SessionDrawer({
       ),
     [allSessions, scope],
   );
+  const visibleWorkspaces = React.useMemo(() => {
+    const fromSessions = (sources: SessionSource[]): Workspace[] => {
+      const seen = new Set<string>();
+      return allSessions
+        .filter((s) => sources.includes(s.source))
+        .map((s) => s.workspaceId)
+        .filter((id) => {
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        })
+        .map((id) => ({ id, name: id, root: '（电脑工作区）', presetIds: [] }));
+    };
+    if (scope === 'computer') {
+      const cached = state.workspaceCache.computer;
+      if (cached.length > 0) return cached;
+      if (currentSource === 'computer' && state.workspaces.length > 0) return state.workspaces;
+      return fromSessions(['computer']);
+    }
+    const cached = [...state.workspaceCache['phone-light'], ...state.workspaceCache['phone-proot']];
+    if (cached.length > 0) {
+      const seen = new Set<string>();
+      return cached.filter((ws) => (seen.has(ws.id) ? false : (seen.add(ws.id), true)));
+    }
+    if (currentSource !== 'computer' && state.workspaces.length > 0) return state.workspaces;
+    return fromSessions(['phone-light', 'phone-proot']);
+  }, [scope, state.workspaceCache, state.workspaces, currentSource, allSessions]);
   const keyword = q.trim().toLowerCase();
   const matched = React.useMemo(
     () =>
@@ -692,10 +719,10 @@ export function SessionDrawer({
 
         <View style={styles.workspaceBlock}>
           <Text style={styles.workspaceLabel}>工作区</Text>
-          {state.workspaces.length === 0 ? (
+          {visibleWorkspaces.length === 0 ? (
             <Text style={styles.workspaceEmpty}>宿主没有报告工作区</Text>
           ) : (
-            state.workspaces.map((ws) => (
+            visibleWorkspaces.map((ws) => (
               <View key={ws.id} style={styles.workspaceRow}>
                 <Text style={styles.workspaceGlyph}>▢</Text>
                 <View style={styles.workspaceTexts}>
