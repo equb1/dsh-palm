@@ -553,16 +553,18 @@ type AttachmentChipsProps = {
   - [ ] E2E WS（X25519 + 加密帧）未做；当前仍是明文 `ws://`
   - [ ] 多宿主索引/密钥分仓未做（目前只有一个 active remote host + 全局设备密钥）
   - [ ] 完整离线状态机（在线/重连/离线/配对失效 + 最后同步时间）只做了「上次宿主重连」
-  - [x] 远程重连 soak（2026-11-09，12 轮）：电脑侧每 ~100s 推一条，手机跟随渲染；
-    完成延迟 1.556–1.595s（median 1.576s）；桥重启 2 次恢复 **3.1s / 2.6s**；
-    锁屏 40s 后 PSS 209→177MB，电脑侧推送仍成功（手机端渲染要等解锁，PITFALLS I26）。
-    产物 `scratch/soak-remote-2026-11-09.jsonl`、`scratch/soak-shots/`，驱动 `scratch/soak-remote.ts`。
+  - [x] 远程重连 soak（2026-11-09，**30 轮 / 合计约 50 分钟；其中 18 轮连续 30 分钟**）：
+    电脑侧每 ~100s 推一条，手机跟随渲染；完成延迟 **1.556–1.595s（median 1.575s）**，30 轮 0 失败；
+    桥重启 4 次恢复 **3.09s / 2.57s / 3.07s / 2.54s**；PSS 223 起、峰值 294MB、30 分钟段
+    247→251MB（无 OOM/崩溃）；锁屏 40s 后 PSS 209→177MB、电脑侧推送仍成功（PITFALLS I26）。
+    产物 `scratch/soak-remote-2026-11-09.jsonl`、`scratch/soak-shots/`、`scratch/soak-summary.ts`；
+    收尾截图 `soak30-final-2026-11-09.png`（round 28–30）。
   - [x] Wi-Fi 切换恢复（2026-11-09，USB adb 控制）：关 Wi-Fi 后 App ~6s 首页角标变橙
     （client 收到 socket 关闭、按 0.8s→8s 退避重连）；开 Wi-Fi 后 **4.9s / 9.8s** 用新 TCP
     连接回绿。桥加 20s WS ping 心跳后，断开留下的半开连接 **35s** 被清掉（之前一直挂着，PITFALLS I29）。
     截图 `wifi-off-orange-2026-11-09.png` / `wifi-recovered-2026-11-09.png`、
     `heartbeat-stable-2026-11-09.png`；日志 `scratch/wifi-outage-2026-11-09.jsonl`。
-  - [ ] 30 分钟整段 soak 仍可补（本轮 12 轮 ≈ 20 分钟）；蜂窝切换等同「断 Wi-Fi」——电脑只在
+  - [x] 30 分钟整段已补：round 13–30 连续 18 轮（见上）；蜂窝切换等同「断 Wi-Fi」——电脑只在
     LAN 里可达，没有第二条路径可测。
 - [ ] **3.3 系统入口**（小组件、悬浮球、QS、通知直达、后台分享）
   - [x] QS 磁贴、桌面小组件、通知 ACTION_VIEW 直达会话/审批、常驻通知可点回 App
