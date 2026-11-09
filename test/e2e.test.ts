@@ -77,12 +77,15 @@ test('能力契约：每个预设都声明了工具白名单', () => {
 });
 
 test('会话列表与创建', async () => {
-  const { sessions } = await client.request('sessions.list', {});
-  assert.ok(sessions.length >= 2, '预置了历史会话');
+  // mock 引擎不再预置假会话（只加载本机 ~/.dsh）；CI 上列表可能为空。
+  const first = await client.request('sessions.list', {});
+  assert.ok(Array.isArray(first.sessions), '会话列表应当是数组');
 
   const { session } = await client.request('sessions.create', { presetId: 'doc' });
   assert.equal(session.presetId, 'doc');
   assert.equal(session.status, 'idle');
+  const after = await client.request('sessions.list', {});
+  assert.ok(after.sessions.some((item) => item.id === session.id), '新建会话应出现在列表里');
 
   const { session: detail } = await client.request('sessions.get', { sessionId: session.id });
   assert.equal(detail.turns.length, 0);
