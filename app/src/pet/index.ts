@@ -13,6 +13,6 @@ export const BUILTIN_PACKS: Record<string, PetPack> = {
 };
 
 export function getPetPack(role: 'deepy' | 'maid' = 'deepy'): PetPack {
-  return BUILTIN_PACKS[role] || BUILTIN_PACKS.deepy;
+  return BUILTIN_PACKS[role] ?? BUILTIN_PACKS.deepy!;
 }
 

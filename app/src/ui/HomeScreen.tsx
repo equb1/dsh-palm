@@ -26,7 +26,8 @@ import { SessionDrawer } from './SessionDrawer';
 import { ModelSheet } from './ModelSheet';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
-import { radius, space, topInset, useTheme, useThemedStyles, type Palette, type Theme } from './theme';
+import { motion, radius, space, topInset, useTheme, useThemedStyles, type Palette, type Theme } from './theme';
+import { DRAWER_WIDTH, drawerProgress, shouldOpenDrawer } from './drawerGeometry';
 
 const HOME_HINTS = [
   '帮我把刚才的会议要点整理成一份周报…',
@@ -90,39 +91,44 @@ export function HomeScreen(): React.ReactElement {
           drawerAnim.stopAnimation();
         },
         onPanResponderMove: (_evt, gesture) => {
-          const next = Math.max(0, Math.min(1, gesture.dx / 302));
-          drawerAnim.setValue(next);
+          drawerAnim.setValue(drawerProgress(gesture.dx, DRAWER_WIDTH));
         },
         onPanResponderRelease: (_evt, gesture) => {
-          const next = Math.max(0, Math.min(1, gesture.dx / 302));
-          if (next > 0.25 || gesture.vx > 0.3) {
+          const next = drawerProgress(gesture.dx, DRAWER_WIDTH);
+          if (shouldOpenDrawer(next, gesture.vx)) {
+            // 打开动画由下面 drawer 状态 effect 统一驱动，避免双 spring 抢值
             setDrawer(true);
-            Animated.spring(drawerAnim, {
-              toValue: 1,
-              friction: 8,
-              tension: 65,
-              useNativeDriver: true,
-            }).start();
           } else {
+            setDrawer(false);
             Animated.spring(drawerAnim, {
               toValue: 0,
-              friction: 8,
-              tension: 65,
+              ...motion.spring.sheet,
               useNativeDriver: true,
             }).start();
           }
         },
         onPanResponderTerminate: () => {
+          setDrawer(false);
           Animated.spring(drawerAnim, {
             toValue: 0,
-            friction: 8,
-            tension: 65,
+            ...motion.spring.sheet,
             useNativeDriver: true,
           }).start();
         },
       }),
     [drawer, drawerAnim],
   );
+
+  // 抽屉 0/1 的唯一动画 owner；SessionDrawer 只消费这个 progress。
+  React.useEffect(() => {
+    const animation = Animated.spring(drawerAnim, {
+      toValue: drawer ? 1 : 0,
+      ...motion.spring.sheet,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [drawer, drawerAnim]);
 
   // 从系统分享菜单进来的文字：填进输入框（只填一次；回前台再分享也生效）
   React.useEffect(() => {

@@ -413,7 +413,7 @@ web `colorScheme` 一起切换。深色对比度按正文 ≥ 4.5:1 选值。
 |---|---|
 | 启动层 `LaunchOverlay` | 品牌 + 进度，覆盖首屏，就绪后淡出；跟随主题 |
 | 首页 `HomeScreen` | BrandMark + 模型胶囊 + 单一运行模式胶囊；打字机问候/循环提示；最近会话、Composer（权限/锦囊在输入框上方）；模式弹层走 BottomSheet |
-| 抽屉 `SessionDrawer` | 工作区、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
+| 抽屉 `SessionDrawer` | 工作区入口、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
 | 全部功能 `FeaturesScreen` | 卡片网格：对话/设置/引擎/实验室 + 文件/工作区/终端（可用）+ 插件/社区（未接入标灰） |
 | 文件 `FilesScreen` | `fs.list` 列 `/workspace`、面包屑、文件名过滤、目录/文件行、`fs.rename`/`fs.delete`、分享（轻引擎） |
 | 搜索 `SearchScreen` | `sessions.search` 全文搜索（标题/历史/思考），命中片段，点开进会话 |
@@ -484,6 +484,10 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 - 外观：主题进 `ThemeScreen`（跟随系统/浅色/深色，`themeMode` 存 UI cache）；对话字号
   标准/大/特大（`chatFontScale`）；「完成后收起过程」开关（`collapseProcess`）。
 - 通用：通知由系统管理；后台保活进引擎页。
+- 抽屉手势：`HomeScreen` 持有 `drawerAnim` 唯一动画；`SessionDrawer` 有 `progress` 时只消费，
+  不再起第二个 spring；左滑关闭只跟手 + 回弹。宽度/阈值在 `ui/drawerGeometry.ts`（302dp，
+  开 25%/vx>0.3，关 72%/vx<-0.35）。
+- 抽屉里工作区只保留一行「工作区 ›」入口（点开 WorkspaceScreen），不再列只读工作区列表。
 - 抽屉分组：置顶 / 运行中 / 今天 / 更早；筛选胶囊「全部 / 运行中 / 待确认 / 未读」；文件夹胶囊
   「全部文件夹 + 自定义文件夹」（长按「移到文件夹…」，UI cache 的 `sessionFolders`）；行尾最多一个状态标记；
   长按出「置顶/取消置顶/归档/改名/删除」；搜索框右侧「全文」进 SearchScreen；标题右侧 ⊞ 进「全部功能」；

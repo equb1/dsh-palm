@@ -853,3 +853,13 @@
   **4.9s / 9.8s** 用新 remote port 重连，首页角标橙→绿。
 - 产物：`scratch/wifi-outage-2026-11-09.jsonl`、`scratch/wifi-shots/`、`scratch/wifi-outage.ts`，
   截图 `scratch/shots/wifi-off-orange-2026-11-09.png` / `wifi-recovered-2026-11-09.png`。
+
+
+### I30. 抽屉手势偶发只滑出一半（2026-11-09）
+
+- 现象：从左侧滑出会话抽屉时，偶发停在半开，需要再滑一次或点按钮。
+- 原因：`HomeScreen` 松手后启动一个 spring，`SessionDrawer` 的 `visible` effect 又对同一个
+  `Animated.Value` 启动第二个 spring；两套配置不同，native driver 下互相抢值。
+- 处理：抽屉动画只留 Home 一个 owner（`drawer` 状态 effect）；`SessionDrawer` 收到 `progress`
+  时只消费、不再 spring；打开/关闭阈值与面板宽度抽到 `ui/drawerGeometry.ts`，两边共用。
+- 验证：`test/drawer-geometry.test.ts` 覆盖 clamp/阈值；`npm run verify` 337 pass。

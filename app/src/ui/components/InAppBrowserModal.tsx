@@ -29,7 +29,7 @@ export function InAppBrowserModal(): React.ReactElement | null {
   const [loading, setLoading] = React.useState(false);
   const [progress, setProgress] = React.useState(0);
 
-  const webViewRef = React.useRef<WebView>(null);
+  const webViewRef = React.useRef<React.ComponentRef<typeof WebView>>(null);
 
   if (!url || !/^https?:\/\//i.test(url)) return null;
 
@@ -37,7 +37,7 @@ export function InAppBrowserModal(): React.ReactElement | null {
   let domain = '';
   try {
     const match = url.match(/^https?:\/\/([^/?#]+)(?:[/?#]|$)/i);
-    domain = match ? match[1] : url;
+    domain = match?.[1] ?? url;
   } catch {
     domain = url;
   }
@@ -289,7 +289,7 @@ const createStyles = ({ palette: c }: Theme) =>
       backgroundColor: '#FFFFFF',
     },
     loadingWrap: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: c.bg,
       alignItems: 'center',
       justifyContent: 'center',

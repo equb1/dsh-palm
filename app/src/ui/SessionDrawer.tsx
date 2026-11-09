@@ -19,8 +19,7 @@ import { EmptyState, BrandIcon } from './components';
 import { loadAccountPhone } from '../lib/accountPhone';
 import type { ConversationLink } from '../lib/handoff';
 import { motion, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
-
-const PANEL_WIDTH = 302;
+import { DRAWER_WIDTH, drawerProgress, shouldCloseDrawer } from './drawerGeometry';
 
 /** U6：抽屉筛选胶囊（文件夹/整页搜索还没做） */
 type SessionFilter = 'all' | 'running' | 'waiting' | 'unread';
@@ -175,6 +174,7 @@ export function SessionDrawer({
 
   React.useEffect(() => {
     if (visible) setMounted(true);
+    if (progress) return; // Home 统一驱动；本地不再起第二个动画
     const animation = Animated.spring(anim, {
       toValue: visible ? 1 : 0,
       ...motion.spring.sheet,
@@ -190,7 +190,7 @@ export function SessionDrawer({
     }
     animation.start();
     return () => animation.stop();
-  }, [visible, anim]);
+  }, [visible, anim, progress]);
 
   // 打开状态下手势左滑关闭：采用 Capture 阶段优先拦截，防止被列表 ScrollView 抢事件
   const panResponder = React.useMemo(
@@ -204,12 +204,11 @@ export function SessionDrawer({
           anim.stopAnimation();
         },
         onPanResponderMove: (_event, gesture) => {
-          const next = Math.max(0, Math.min(1, 1 + gesture.dx / PANEL_WIDTH));
-          anim.setValue(next);
+          anim.setValue(drawerProgress(DRAWER_WIDTH + gesture.dx, DRAWER_WIDTH));
         },
         onPanResponderRelease: (_event, gesture) => {
-          const next = Math.max(0, Math.min(1, 1 + gesture.dx / PANEL_WIDTH));
-          if (next < 0.72 || gesture.vx < -0.35) {
+          const next = drawerProgress(DRAWER_WIDTH + gesture.dx, DRAWER_WIDTH);
+          if (shouldCloseDrawer(next, gesture.vx)) {
             onClose();
           } else {
             Animated.spring(anim, {
@@ -500,7 +499,7 @@ export function SessionDrawer({
           {
             transform: [
               {
-                translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [-PANEL_WIDTH, 0] }),
+                translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [-DRAWER_WIDTH, 0] }),
               },
             ],
           },
@@ -738,27 +737,28 @@ export function SessionDrawer({
           </View>
         ) : null}
 
-        <View style={styles.workspaceBlock}>
-          <Text style={styles.workspaceLabel}>工作区</Text>
-          {visibleWorkspaces.length === 0 ? (
-            <Text style={styles.workspaceEmpty}>宿主没有报告工作区</Text>
-          ) : (
-            visibleWorkspaces.map((ws) => (
-              <View key={ws.id} style={styles.workspaceRow}>
-                <Text style={styles.workspaceGlyph}>▢</Text>
-                <View style={styles.workspaceTexts}>
-                  <Text style={styles.workspaceName} numberOfLines={1}>
-                    {ws.name}
-                  </Text>
-                  <Text style={styles.workspacePath} numberOfLines={1}>
-                    {ws.root}
-                  </Text>
-                </View>
-              </View>
-            ))
-          )}
-          <Text style={styles.workspaceHint}>工作区限制可访问目录与可用锦囊</Text>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="打开工作区"
+          onPress={() => {
+            onClose();
+            store.openWorkspace();
+          }}
+          style={({ pressed }) => [styles.workspaceEntry, pressed && styles.workspaceEntryPressed]}
+        >
+          <Text style={styles.workspaceGlyph}>▢</Text>
+          <View style={styles.workspaceTexts}>
+            <Text style={styles.workspaceName}>工作区</Text>
+            <Text style={styles.workspacePath} numberOfLines={1}>
+              {visibleWorkspaces.length === 0
+                ? '宿主未报告'
+                : visibleWorkspaces.length === 1
+                  ? visibleWorkspaces[0]?.name
+                  : `${visibleWorkspaces.length} 个工作区`}
+            </Text>
+          </View>
+          <Text style={styles.workspaceChevron}>›</Text>
+        </Pressable>
 
         <Pressable
           accessibilityRole="switch"
@@ -849,7 +849,7 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
       backgroundColor: c.backdrop,
     },
     panel: {
-      width: PANEL_WIDTH,
+      width: DRAWER_WIDTH,
       height: '100%',
       backgroundColor: s.sidebar,
       borderRightWidth: StyleSheet.hairlineWidth,
@@ -1017,24 +1017,25 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
     folderTagText: { color: c.textDim, fontSize: 10 },
     listScroll: { flex: 1 },
     list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
-    workspaceBlock: {
+    workspaceEntry: {
       marginTop: space.md,
       marginHorizontal: space.md,
-      padding: space.md,
+      paddingHorizontal: space.md,
+      paddingVertical: space.sm,
       borderRadius: radius.sm,
       backgroundColor: c.glass,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: c.border,
-      gap: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
-    workspaceLabel: { color: s.textSecondary, fontSize: 12, lineHeight: 18, fontWeight: '500' },
-    workspaceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    workspaceEntryPressed: { backgroundColor: c.glassStrong },
     workspaceGlyph: { color: c.textFaint, fontSize: 14 },
     workspaceTexts: { flex: 1 },
     workspaceName: { color: c.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
     workspacePath: { color: c.textFaint, fontSize: 11, lineHeight: 16 },
-    workspaceHint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
-    workspaceEmpty: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
+    workspaceChevron: { color: c.textFaint, fontSize: 16 },
     autoRouteRow: {
       flexDirection: 'row',
       alignItems: 'center',
