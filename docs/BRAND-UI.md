@@ -72,3 +72,21 @@
 - 长按用户气泡/AI 段落能拉出系统选择手柄；复制按钮有反馈。
 - 打字机/循环提示在进聊天后停止；返回首页不重排布局。
 - 新增依赖：`react-native-svg`（Expo 58 兼容版本）、`lucide-react-native`。
+
+## 8. 应用图标、落地页与展示资产（2026-11-09）
+
+- **应用图标**：`scripts/build-icons.mjs` 生成一套「锦囊袋 + 金色抽绳 + 四芒星」图标。
+  - 落地页：`site/assets/icon.svg`、`icon-512.png`、`icon-192.png`、`apple-touch-icon.png`、`favicon-32.png`。
+  - Android 自适应图标：`mipmap-*/ic_launcher_foreground.png` + `ic_launcher_monochrome.png`，
+    `mipmap-anydpi-v26/ic_launcher.xml` 使用 `@color/ic_launcher_background`（`#141C31`）。
+  - 旧版桌面图标与启动屏：同步替换 `mipmap-*/ic_launcher*.webp`、`drawable-*/splashscreen_logo.png`；
+    启动屏改用 `drawable/splash_background.xml` 居中显示，避免 bitmap 被拉伸。
+  - 脚本依赖按需安装：`npm install --no-save --no-package-lock sharp qrcode`。
+- **README / 落地页展示图**：`scripts/build-site-assets.mjs` 生成明暗双版 Hero（中/英）与三张功能展示图，
+  同时把桌宠 sprite sheet 复制到 `site/assets/pets/` 并裁出 README 用的静态预览帧。
+  GitHub 仓库 Social preview 使用 `site/assets/social-preview.png`（1280×640），在仓库 Settings → General 上传。
+- **落地页**：Material Design 3 风格，支持 4 套 Material You 种子色、明暗主题、可交互手机演示
+  （轻引擎 / proot / 桌宠 / 连电脑）、可点击审批卡与桌宠 12 态互动展台。
+- **发布元数据**：`scripts/release-android.ps1` 构建完成后把 APK 复制到 `dist/`，
+  并由 `scripts/write-release-meta.mjs` 生成 `site/assets/release.json`（版本、大小、SHA-256、直链）。
+  落地页读取该文件展示下载信息；APK 仍需手动上传到 GitHub Releases。

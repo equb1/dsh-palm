@@ -104,8 +104,8 @@ android {
         applicationId 'cool.cnb.dshpalm'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode envVersionCode ? envVersionCode.toInteger() : 17
-        versionName envVersionName ?: "0.2.1"
+        versionCode envVersionCode ? envVersionCode.toInteger() : 18
+        versionName envVersionName ?: "0.2.2"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

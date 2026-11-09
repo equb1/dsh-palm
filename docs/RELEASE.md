@@ -7,8 +7,8 @@
 - 最新 APK：<https://github.com/equb1/dsh-palm/releases/latest>
 - 构建运行时：GitHub Release `runtime-v1`（pre-release）包含 `rootfs.bin` / `payload.bin` / `python.bin`；
   `scripts/setup-android.sh` 默认从这里下载，`DSH_PALM_RUNTIME_BASE` 可覆盖，失败回退 cnb。
-- 当前 `main` 源码是 0.2.1（versionCode 17）；已上传的 APK 资产是 0.2.0（versionCode 16），
-  0.2.1 APK 需要在有 release keystore 的机器上重建后替换。
+- 当前 `main` 源码是 0.2.2（versionCode 18）；已上传的 APK 资产以 Releases 页面为准。
+  0.2.2 重新生成了应用图标并改写了落地页，APK 需要在有 release keystore 的机器上重建后上传。
 
 > 状态：2026-11-06 夜间。当前设备装的是 **release** 包（签名 `55df28b9`），
 > 新版 `0.2.0 (2)` 正在用同签名覆盖升级（`adb install -r`，保留数据）。
@@ -18,16 +18,26 @@
 
 | 项 | 值 |
 |---|---|
-| APK | `app/android/app/build/outputs/apk/release/app-release.apk` |
-| 大小 / sha256 | 247.5 MiB（259,551,203 B）/ `235CB1DA3F18C2A22650C1688897C6B99113BDF1AC29C3994DD0DB155E1C9721` |
+| APK | `dist/dsh-palm-0.2.2-arm64.apk`（构建产物在 `app/android/app/build/outputs/apk/release/app-release.apk`） |
+| 大小 / sha256 | 248.4 MiB（260,473,021 B）/ `e82483d99415f2324fe07a0cfacd399579b5fc13fe024d37630478da67edccf1` |
 | applicationId | `cool.cnb.dshpalm` |
-| versionName / versionCode | `0.2.0` / `2` |
+| versionName / versionCode | `0.2.2` / `18` |
 | 签名 | V2，`CN=DSH Palm`，证书 SHA-256 `50de0609c1f781651301906c0781fe0dd039288bd5efc32883d03b9dac86628c` |
 | keystore | `app/android/keystore/release.jks` + `app/android/keystore.properties`（gitignore） |
 | 签名备份 | `D:\dsh-palm-backup\keystore-2026-11-05\`、`C:\Users\chenf\Desktop\dsh-palm-keystore-backup-2026-11-05\` |
 
-构建：`cd app/android && sh gradlew :app:assembleRelease`；版本号用
+构建：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-android.ps1`；脚本会清 Metro 缓存、
+递增版本、把 APK 复制到 `dist/dsh-palm-<version>-arm64.apk`，并写出 `site/assets/release.json`
+（落地页读取版本、大小、SHA-256 与直链）。版本号也可用
 `DSH_PALM_VERSION_CODE` / `DSH_PALM_VERSION_NAME` 覆盖（升级 release 必须递增 versionCode）。
+
+> 2026-11-09：新图标（锦囊袋 + 抽绳 + 四芒星）、Material Design 3 落地页、明暗双语 README 展示图；
+> versionCode `18` / versionName `0.2.2`，APK 需上传到同一个 GitHub Release 后落地页直链才会生效。
+>
+> 2026-11-09 已用 `scripts/upload-release.ps1 -Draft` 创建 `v0.2.2` **draft** release 并上传
+> `dsh-palm-0.2.2-arm64.apk`（260,473,021 B，GitHub 侧 SHA-256 校验一致）。推送代码触发 Pages
+> 部署后，到 GitHub Releases 点 **Publish**；发布后
+> `/releases/latest/download/dsh-palm-0.2.2-arm64.apk` 直链生效。
 
 > 2026-11-06 05:05 用合并后的 `feat/settings-pages`（含 U2/U4/U5/U6/U8/E2/E3/E5）重新构建，
 > 新 sha256 见上表；versionCode 仍是 1，首装可用，覆盖升级前必须 bump。

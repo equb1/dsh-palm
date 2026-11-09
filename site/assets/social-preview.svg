@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="t d">
+  <title id="t">锦囊 · dsh-palm — 把 DeepSeek Harness 装进口袋</title>
+  <desc id="d">Android 本机宿主：轻引擎 300ms 秒开，需要真 Linux 时按需 proot。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#182139"/><stop offset="1" stop-color="#0B101C"/></linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#8FA2D6" stroke-opacity=".07"/></pattern>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#4B67B4" stop-opacity=".55"/><stop offset="1" stop-color="#4B67B4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#414A63"/><stop offset="1" stop-color="#161B26"/></linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+  <circle cx="1120" cy="40" r="300" fill="url(#glow)"/>
+  <circle cx="900" cy="640" r="240" fill="url(#glow)" opacity=".5"/>
+
+  <g transform="translate(80 92) scale(0.23046875)">
+    <defs>
+      <linearGradient id="icbg8092" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#1E2A4A"/><stop offset="1" stop-color="#0B101C"/>
+      </linearGradient>
+      <linearGradient id="icp8092" x1=".22" y1=".02" x2=".78" y2=".98">
+        <stop offset="0" stop-color="#A6BCFF"/><stop offset=".38" stop-color="#6785EC"/>
+        <stop offset=".78" stop-color="#4A63BE"/><stop offset="1" stop-color="#35488C"/>
+      </linearGradient>
+    </defs>
+    <rect width="512" height="512" rx="116" fill="url(#icbg8092)"/>
+    <rect width="512" height="512" rx="116" fill="none" stroke="#4B67B4" stroke-opacity=".28" stroke-width="4"/>
+    <path d="M208 158
+  C 206 146, 219 138, 230 143
+  C 238 131, 252 133, 256 141
+  C 260 133, 274 131, 282 143
+  C 293 138, 306 146, 304 158
+  C 309 168, 316 172, 322 176
+  C 364 202, 384 252, 382 306
+  C 379 376, 328 424, 256 424
+  C 184 424, 133 376, 130 306
+  C 128 252, 148 202, 190 176
+  C 196 172, 203 168, 208 158 Z" fill="url(#icp8092)"/>
+    <path d="M186 185 C 214 206, 298 206, 326 185" fill="none" stroke="#F0C979" stroke-width="13" stroke-linecap="round"/>
+    <path d="M250 198 C 241 216, 234 226, 226 236" fill="none" stroke="#F0C979" stroke-width="8.5" stroke-linecap="round"/>
+    <path d="M266 198 C 275 216, 282 226, 290 236" fill="none" stroke="#F0C979" stroke-width="8.5" stroke-linecap="round"/>
+    <circle cx="258" cy="196" r="9" fill="#F6D68F" stroke="#B98A33" stroke-width="2.5"/>
+    <path d="M256 222
+  C 262 264, 270 274, 313 282
+  C 270 290, 262 300, 256 342
+  C 250 300, 242 290, 199 282
+  C 242 274, 250 264, 256 222 Z" fill="#FFFFFF"/>
+    <path d="M182 240 C 186 257, 191 262, 208 266 C 191 270, 186 275, 182 292 C 178 275, 173 270, 156 266 C 173 262, 178 257, 182 240 Z" fill="#FFFFFF" opacity=".72"/>
+    <path d="M336 320 C 339 332, 342 336, 355 339 C 342 342, 339 346, 336 359 C 333 346, 330 342, 317 339 C 330 336, 333 332, 336 320 Z" fill="#FFFFFF" opacity=".55"/>
+  </g>
+  <text x="222" y="166" fill="#F2F5FF" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="66" font-weight="700" letter-spacing="2">锦囊</text>
+  <text x="226" y="198" fill="#7C89A8" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="15" letter-spacing="8">DSH PALM</text>
+
+  <text x="82" y="300" fill="#F2F5FF" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="40" font-weight="650">把 DeepSeek Harness</text>
+  <text x="82" y="352" fill="#F2F5FF" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="40" font-weight="650">装进口袋</text>
+  <text x="84" y="408" fill="#A8B4D2" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="19">轻引擎 300ms 秒开 · 需要真 Linux 时按需 proot</text>
+
+  <g transform="translate(82 458)">
+    <rect width="126" height="32" rx="16" fill="#1B2338" stroke="#2A3552"/>
+    <text x="63" y="21" text-anchor="middle" fill="#BFD0FF" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12">Android arm64</text>
+    <rect x="138" width="92" height="32" rx="16" fill="#1B2338" stroke="#2A3552"/>
+    <text x="184" y="21" text-anchor="middle" fill="#BFD0FF" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12">双引擎</text>
+    <rect x="242" width="96" height="32" rx="16" fill="#1B2338" stroke="#2A3552"/>
+    <text x="290" y="21" text-anchor="middle" fill="#BFD0FF" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12">AGPL-3.0</text>
+  </g>
+
+  <g transform="translate(906 62)">
+    <rect width="272" height="516" rx="46" fill="url(#frame)"/>
+    <rect x="8" y="8" width="256" height="500" rx="38" fill="#11161F"/>
+    <rect x="98" y="18" width="84" height="9" rx="4.5" fill="#0A0D14"/>
+
+    <g transform="translate(30 52)">
+      <rect width="34" height="34" rx="10" fill="#4B67B4"/>
+      <path d="M17 7c.9 6.2 2.1 7.4 8.3 8.3-6.2.9-7.4 2.1-8.3 8.3-.9-6.2-2.1-7.4-8.3-8.3 6.2-.9 7.4-2.1 8.3-8.3Z" fill="#FFFFFF"/>
+      <text x="46" y="22" fill="#E6E8EB" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="15" font-weight="650">锦囊</text>
+      <rect x="160" y="4" width="66" height="26" rx="13" fill="#1B2A44"/>
+      <circle cx="174" cy="17" r="4" fill="#1F9D63"/>
+      <text x="183" y="22" fill="#4B67B4" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="11">轻引擎</text>
+    </g>
+
+    <g transform="translate(30 114)">
+      <rect width="212" height="52" rx="16" fill="#1A2A44"/>
+      <text x="14" y="22" fill="#E6E8EB" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="12">把会议纪要整理成周报，</text>
+      <text x="14" y="40" fill="#E6E8EB" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="12">并生成 docx。</text>
+    </g>
+
+    <g transform="translate(30 186)">
+      <rect width="236" height="64" rx="15" fill="#151B26" stroke="#2A3552"/>
+      <text x="14" y="24" fill="#A8B4D2" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="12">已生成周报，包含本周进展、</text>
+      <text x="14" y="43" fill="#A8B4D2" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="12">风险与下周计划。</text>
+      <rect x="14" y="50" width="86" height="8" rx="4" fill="#1D2B45"/>
+    </g>
+
+    <g transform="translate(30 270)">
+      <rect width="236" height="64" rx="15" fill="#2A2318" stroke="#5D4A28"/>
+      <text x="14" y="22" fill="#E2C07E" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="11" font-weight="600">需要确认 · 写入工作区文件</text>
+      <rect x="14" y="32" width="112" height="9" rx="4.5" fill="#3A3326"/>
+      <rect x="14" y="47" width="46" height="12" rx="6" fill="#4B67B4"/>
+      <rect x="66" y="47" width="38" height="12" rx="6" fill="none" stroke="#5D4A28"/>
+    </g>
+
+    <g transform="translate(30 358)">
+      <rect width="236" height="64" rx="15" fill="#151B26" stroke="#2A3552"/>
+      <text x="14" y="24" fill="#A8B4D2" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="12">完整引擎按需就绪：</text>
+      <text x="14" y="44" fill="#4B67B4" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11">$ dsh web :8787</text>
+    </g>
+
+    <g transform="translate(30 452)">
+      <rect width="236" height="38" rx="19" fill="#1A2233" stroke="#2A3552"/>
+      <text x="18" y="24" fill="#A8B4D2" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="11">给锦囊发消息…</text>
+      <circle cx="212" cy="19" r="12" fill="#4B67B4"/>
+      <path d="M207 19h10m-4-4 4 4-4 4" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <g transform="translate(780 34) scale(1.35)">
+    <path d="M0 26C0 10 14 0 32 0c20 0 34 12 34 27 0 16-14 25-34 25C14 52 0 42 0 26Z" fill="#5B7CE6"/>
+    <path d="M66 12c6-8 14-11 22-10-2 8-8 14-16 17Z" fill="#5B7CE6"/>
+    <path d="M66 40c7 7 15 9 23 7-4-8-10-13-18-15Z" fill="#5B7CE6"/>
+    <path d="M8 34c4 10 13 16 25 17 12 1 23-4 29-12-10 4-21 6-32 4-9-2-16-5-22-9Z" fill="#C9D8FF"/>
+    <circle cx="22" cy="20" r="3" fill="#121826"/>
+    <path d="M14 14c2-4 5-6 9-6" fill="none" stroke="#FFFFFF" stroke-opacity=".5" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M30 1c0-2 0-4 1-5M34 1c1-3 3-5 5-6" fill="none" stroke="#5B7CE6" stroke-width="2.6" stroke-linecap="round"/>
+  </g>
+</svg>

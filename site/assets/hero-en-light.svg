@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="t d">
+  <title id="t">Jinang · dsh-palm — Put DeepSeek Harness in your pocket</title>
+  <desc id="d">Instant in-process engine · on-demand proot when needed</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FBFCFE"/><stop offset="1" stop-color="#EDF1FA"/></linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#8FA2D6" stroke-opacity=".10"/></pattern>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#4B67B4" stop-opacity=".26"/><stop offset="1" stop-color="#4B67B4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#414A63"/><stop offset="1" stop-color="#161B26"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4B67B4"/><stop offset="1" stop-color="#B8741A"/></linearGradient>
+  </defs>
+
+  <rect width="1200" height="360" rx="30" fill="url(#bg)"/>
+  <rect width="1200" height="360" rx="30" fill="url(#grid)"/>
+  <circle cx="1060" cy="20" r="220" fill="url(#glow)"/>
+  <circle cx="860" cy="360" r="160" fill="url(#glow)" opacity=".5"/>
+
+  <g transform="translate(80 52) scale(0.1796875)">
+    <defs>
+      <linearGradient id="icbg8052" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#F4F6FE"/><stop offset="1" stop-color="#E3E8F6"/>
+      </linearGradient>
+      <linearGradient id="icp8052" x1=".22" y1=".02" x2=".78" y2=".98">
+        <stop offset="0" stop-color="#A6BCFF"/><stop offset=".38" stop-color="#6785EC"/>
+        <stop offset=".78" stop-color="#4A63BE"/><stop offset="1" stop-color="#35488C"/>
+      </linearGradient>
+    </defs>
+    <rect width="512" height="512" rx="116" fill="url(#icbg8052)"/>
+    <rect width="512" height="512" rx="116" fill="none" stroke="#4B67B4" stroke-opacity=".28" stroke-width="4"/>
+    <path d="M208 158
+  C 206 146, 219 138, 230 143
+  C 238 131, 252 133, 256 141
+  C 260 133, 274 131, 282 143
+  C 293 138, 306 146, 304 158
+  C 309 168, 316 172, 322 176
+  C 364 202, 384 252, 382 306
+  C 379 376, 328 424, 256 424
+  C 184 424, 133 376, 130 306
+  C 128 252, 148 202, 190 176
+  C 196 172, 203 168, 208 158 Z" fill="url(#icp8052)"/>
+    <path d="M186 185 C 214 206, 298 206, 326 185" fill="none" stroke="#F0C979" stroke-width="13" stroke-linecap="round"/>
+    <path d="M250 198 C 241 216, 234 226, 226 236" fill="none" stroke="#F0C979" stroke-width="8.5" stroke-linecap="round"/>
+    <path d="M266 198 C 275 216, 282 226, 290 236" fill="none" stroke="#F0C979" stroke-width="8.5" stroke-linecap="round"/>
+    <circle cx="258" cy="196" r="9" fill="#F6D68F" stroke="#B98A33" stroke-width="2.5"/>
+    <path d="M256 222
+  C 262 264, 270 274, 313 282
+  C 270 290, 262 300, 256 342
+  C 250 300, 242 290, 199 282
+  C 242 274, 250 264, 256 222 Z" fill="#FFFFFF"/>
+    <path d="M182 240 C 186 257, 191 262, 208 266 C 191 270, 186 275, 182 292 C 178 275, 173 270, 156 266 C 173 262, 178 257, 182 240 Z" fill="#FFFFFF" opacity=".72"/>
+    <path d="M336 320 C 339 332, 342 336, 355 339 C 342 342, 339 346, 336 359 C 333 346, 330 342, 317 339 C 330 336, 333 332, 336 320 Z" fill="#FFFFFF" opacity=".55"/>
+  </g>
+
+  <text x="196" y="112" fill="#14182A" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="54" font-weight="700" letter-spacing="2">Jinang</text>
+  <text x="200" y="140" fill="#7A8194" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" letter-spacing="6">DSH PALM</text>
+
+  <text x="82" y="212" fill="#14182A" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="27" font-weight="600">DeepSeek Harness, in your pocket</text>
+  <text x="84" y="250" fill="#555D72" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="14">Instant in-process engine · on-demand proot when needed</text>
+
+  <g transform="translate(82 300)">
+      <rect width="112" height="26" rx="13" fill="#FFFFFF" stroke="#DFE4F2"/>
+      <text x="56" y="18" text-anchor="middle" fill="#4B67B4" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="11">Android arm64</text>
+    </g><g transform="translate(202 300)">
+      <rect width="88" height="26" rx="13" fill="#FFFFFF" stroke="#DFE4F2"/>
+      <text x="44" y="18" text-anchor="middle" fill="#4B67B4" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="11">Dual engine</text>
+    </g><g transform="translate(298 300)">
+      <rect width="72" height="26" rx="13" fill="#FFFFFF" stroke="#DFE4F2"/>
+      <text x="36" y="18" text-anchor="middle" fill="#4B67B4" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="11">AGPL-3.0</text>
+    </g>
+
+  <g>
+    <rect x="948" y="18" width="196" height="324" rx="34" fill="url(#frame)"/>
+    <rect x="954" y="24" width="184" height="312" rx="29" fill="#F8F9FD"/>
+    <rect x="1007" y="29" width="78" height="8" rx="4" fill="#0A0D14"/>
+
+    <g transform="translate(968 52)">
+      <rect width="24" height="24" rx="7" fill="#4B67B4"/>
+      <path d="M12 5c.6 4.1 1.4 4.9 5.5 5.5-4.1.6-4.9 1.4-5.5 5.5-.6-4.1-1.4-4.9-5.5-5.5 4.1-.6 4.9-1.4 5.5-5.5Z" fill="#FFFFFF"/>
+      <text x="31" y="17" fill="#161B2A" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="11" font-weight="650">Jinang</text>
+      <rect x="108" y="2" width="52" height="19" rx="9.5" fill="#EDF3FE"/>
+      <circle cx="118" cy="11.5" r="3" fill="#1F9D63"/>
+      <text x="125" y="15" fill="#4B67B4" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">Light</text>
+    </g>
+
+    <g transform="translate(968 90)">
+      <rect width="150" height="34" rx="12" fill="#EDF3FE"/>
+      <text x="10" y="15" fill="#161B2A" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">Turn these notes into a weekly</text>
+      <text x="10" y="27" fill="#161B2A" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">report and make a docx.</text>
+    </g>
+
+    <g transform="translate(968 134)">
+      <rect width="168" height="42" rx="11" fill="#F7F8FC" stroke="#DDE3F1"/>
+      <text x="10" y="16" fill="#5E667C" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">Weekly report ready with progress,</text>
+      <text x="10" y="28" fill="#5E667C" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">risks and next-week plan.</text>
+      <rect x="10" y="32" width="62" height="7" rx="3.5" fill="#E4EDFD"/>
+    </g>
+
+    <g transform="translate(968 186)">
+      <rect width="168" height="42" rx="10" fill="#FFF8E8" stroke="#EBCF98"/>
+      <text x="9" y="15" fill="#7A5200" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8" font-weight="600">Approval · write into workspace</text>
+      <rect x="9" y="21" width="76" height="7" rx="3.5" fill="#F3E2BE"/>
+      <rect x="9" y="31" width="34" height="9" rx="4.5" fill="#4B67B4"/>
+      <rect x="47" y="31" width="28" height="9" rx="4.5" fill="none" stroke="#EBCF98"/>
+    </g>
+
+    <g transform="translate(962 252)">
+      <rect width="168" height="36" rx="10" fill="#FFFFFF" stroke="#DDE3F1"/>
+      <text x="10" y="15" fill="#5E667C" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="7.5">$ dsh web :8787</text>
+      <circle cx="12" cy="26" r="3" fill="#4ADE80"/>
+      <text x="20" y="29" fill="#5E667C" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="7.5">Full engine ready on demand</text>
+    </g>
+
+    <g transform="translate(966 300)">
+      <rect width="162" height="26" rx="13" fill="#F1F4FA" stroke="#DDE3F1"/>
+      <circle cx="14" cy="13" r="8" fill="none" stroke="#4B67B4" opacity=".45"/>
+      <text x="28" y="16" fill="#5E667C" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8">Message Jinang…</text>
+      <circle cx="147" cy="13" r="8" fill="#4B67B4"/>
+      <path d="M144 13h6m-2.4-2.4 2.4 2.4-2.4 2.4" fill="none" stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <g transform="translate(852 20) scale(1.05)">
+    <path d="M0 26C0 10 14 0 32 0c20 0 34 12 34 27 0 16-14 25-34 25C14 52 0 42 0 26Z" fill="#5B7CE6"/>
+    <path d="M66 12c6-8 14-11 22-10-2 8-8 14-16 17Z" fill="#5B7CE6"/>
+    <path d="M66 40c7 7 15 9 23 7-4-8-10-13-18-15Z" fill="#5B7CE6"/>
+    <path d="M8 34c4 10 13 16 25 17 12 1 23-4 29-12-10 4-21 6-32 4-9-2-16-5-22-9Z" fill="#C9D8FF"/>
+    <circle cx="22" cy="20" r="3" fill="#121826"/>
+    <path d="M14 14c2-4 5-6 9-6" fill="none" stroke="#FFFFFF" stroke-opacity=".5" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M30 1c0-2 0-4 1-5M34 1c1-3 3-5 5-6" fill="none" stroke="#5B7CE6" stroke-width="2.6" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(838 300)">
+    <rect width="94" height="26" rx="13" fill="#FFFFFF" stroke="#DFE4F2"/>
+    <text x="47" y="17" text-anchor="middle" fill="#4B67B4" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10">300ms ready</text>
+  </g>
+</svg>

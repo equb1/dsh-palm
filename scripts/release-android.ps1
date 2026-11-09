@@ -1,6 +1,6 @@
 param(
-  [string]$VersionName = "0.2.0",
-  [int]$VersionCode = 16
+  [string]$VersionName = "0.2.2",
+  [int]$VersionCode = 18
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,3 +22,20 @@ try {
 } finally {
   Pop-Location
 }
+
+$apk = Join-Path $repo "app/android/app/build/outputs/apk/release/app-release.apk"
+if (-not (Test-Path $apk)) { throw "APK not found: $apk" }
+
+$dist = Join-Path $repo "dist"
+New-Item -ItemType Directory -Force -Path $dist | Out-Null
+$target = Join-Path $dist ("dsh-palm-{0}-arm64.apk" -f $VersionName)
+Copy-Item -Path $apk -Destination $target -Force
+
+Push-Location $repo
+try {
+  node scripts/write-release-meta.mjs $VersionName $target
+} finally {
+  Pop-Location
+}
+
+Write-Host "APK: $target"

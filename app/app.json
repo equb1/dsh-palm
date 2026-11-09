@@ -2,8 +2,9 @@
   "expo": {
     "name": "锦囊",
     "slug": "dsh-palm",
-    "version": "0.1.0",
+    "version": "0.2.2",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "scheme": "dshpalm",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#0B0D10",
@@ -17,7 +18,9 @@
     "android": {
       "package": "cool.cnb.dshpalm",
       "adaptiveIcon": {
-        "backgroundColor": "#0B0D10"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
+        "backgroundColor": "#141C31"
       },
       "softwareKeyboardLayoutMode": "resize"
     },
