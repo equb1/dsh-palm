@@ -42,6 +42,17 @@
 
 <br>
 
+<a id="demo"></a>
+<h3 align="center">Six seconds, end to end</h3>
+
+<p align="center">
+  <img src="site/assets/demo.gif" width="360" alt="Demo: the light engine writes a weekly report, approval, proot runs Python, and the pet keeps working">
+</p>
+
+<p align="center"><sub>Light engine writes a report → approval → proot runs Python → the pet keeps working</sub></p>
+
+<br>
+
 <h3 align="center">Deepy and Whale girl keep you company</h3>
 
 <p align="center">They code, flip, wave and nap along with DSH, and can follow you to the home screen.</p>

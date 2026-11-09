@@ -42,6 +42,17 @@
 
 <br>
 
+<a id="demo"></a>
+<h3 align="center">六秒看懂</h3>
+
+<p align="center">
+  <img src="site/assets/demo.gif" width="360" alt="演示：轻引擎生成周报、审批写入、切换 proot 跑 Python、桌宠陪跑">
+</p>
+
+<p align="center"><sub>轻引擎生成周报 → 审批写入 → 切到 proot 跑 Python → 桌宠陪跑</sub></p>
+
+<br>
+
 <h3 align="center">Deepy 和鲸娘，陪你干活</h3>
 
 <p align="center">干活时敲代码，做完来个空翻，等你确认会举手。打开「App 外显示」，它们还会跟你到桌面。</p>
