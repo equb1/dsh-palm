@@ -225,6 +225,10 @@
   - 文件夹是 UI 层标签，不改宿主/工作区；协议没有 folder 字段。
   - 2026-11-06 验收：筛选/全部功能/正文搜索/置顶/自定义文件夹全部通过
     （`ACCEPTANCE-2026-11-06`）；完整引擎正文搜索与多工作区仍属后续项。
+  - 2026-11-06 抽屉收尾：Home/SessionDrawer 共用 `drawerGeometry`（宽度/阈值），抽屉动画改由
+    Home 单一 owner，SessionDrawer 只消费 `progress`，修手势滑出偶发半开；工作区从多行只读块
+    改成一行「工作区 ›」入口，点开 `WorkspaceScreen`。单测 `test/drawer-geometry.test.ts` 3 条；
+    `npm run verify` 243 pass。真机手势复验待补。
 - [x] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
   - 2026-11-06 前置：外观组加了「完成后收起过程」开关（`collapseProcess`，默认开，
     持久化在 UI cache）；关掉后完成的回合默认展开思考/工具过程，收起/展开仍可手动点。

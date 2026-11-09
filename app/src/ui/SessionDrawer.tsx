@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { SessionSummary } from '../protocol';
 import type { SessionRow } from '../state/sessionList';
@@ -9,8 +9,11 @@ import { EmptyState } from './components';
 import { loadAccountPhone } from '../lib/accountPhone';
 import type { ConversationLink } from '../lib/handoff';
 import { motion, radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
-
-const PANEL_WIDTH = 302;
+import {
+  DRAWER_WIDTH,
+  drawerProgress,
+  shouldCloseDrawer,
+} from './drawerGeometry';
 
 /** U6：抽屉筛选胶囊（文件夹/整页搜索还没做） */
 type SessionFilter = 'all' | 'running' | 'waiting' | 'unread';
@@ -109,9 +112,12 @@ function StatusTag({ s }: { s: SessionSummary }): React.ReactElement | null {
 export function SessionDrawer({
   visible,
   onClose,
+  progress,
 }: {
   visible: boolean;
   onClose: () => void;
+  /** 父级（Home）持有的 0→1 进度；有值时由父级独占动画 */
+  progress?: Animated.Value;
 }): React.ReactElement | null {
   const state = useStore();
   const { palette } = useTheme();
@@ -135,22 +141,70 @@ export function SessionDrawer({
   const [folderFilter, setFolderFilter] = React.useState<string | null>(null);
   const [folderPromptFor, setFolderPromptFor] = React.useState<string | null>(null);
   const [folderText, setFolderText] = React.useState('');
-  const anim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const localAnim = React.useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const anim = progress ?? localAnim;
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [renameText, setRenameText] = React.useState('');
   const [searchFocused, setSearchFocused] = React.useState(false);
 
+  // 预挂载：避免首次展开时整棵会话树 layout 和动画抢帧。
+  React.useEffect(() => {
+    if (visible || mounted) return;
+    const timer = setTimeout(() => setMounted(true), 350);
+    return () => clearTimeout(timer);
+  }, [visible, mounted]);
+
   React.useEffect(() => {
     if (visible) setMounted(true);
-    Animated.timing(anim, {
+    if (progress) return; // Home 统一驱动；本地不再起第二个动画
+    const animation = Animated.timing(localAnim, {
       toValue: visible ? 1 : 0,
       duration: motion.duration.base,
       easing: motion.easing.standard,
       useNativeDriver: true,
-    }).start(({ finished }) => {
+    });
+    animation.start(({ finished }) => {
       if (finished && !visible) setMounted(false);
     });
-  }, [visible, anim]);
+    return () => animation.stop();
+  }, [visible, anim, localAnim, progress]);
+
+  // 打开状态左滑关闭；只负责跟手和“松手回弹”，关闭动画由 Home 的 visible effect 完成。
+  const panResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_event, gesture) =>
+          visible && gesture.dx < -10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          visible && gesture.dx < -10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
+        onPanResponderGrant: () => {
+          anim.stopAnimation();
+        },
+        onPanResponderMove: (_event, gesture) => {
+          anim.setValue(drawerProgress(DRAWER_WIDTH + gesture.dx, DRAWER_WIDTH));
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          const next = drawerProgress(DRAWER_WIDTH + gesture.dx, DRAWER_WIDTH);
+          if (shouldCloseDrawer(next, gesture.vx)) {
+            onClose();
+          } else {
+            Animated.spring(anim, {
+              toValue: 1,
+              ...motion.spring.sheet,
+              useNativeDriver: true,
+            }).start();
+          }
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(anim, {
+            toValue: 1,
+            ...motion.spring.sheet,
+            useNativeDriver: true,
+          }).start();
+        },
+      }),
+    [anim, onClose, visible],
+  );
 
   React.useEffect(() => {
     if (!visible) return;
@@ -312,13 +366,14 @@ export function SessionDrawer({
       </Animated.View>
 
       <Animated.View
+        {...panResponder.panHandlers}
         renderToHardwareTextureAndroid
         style={[
           styles.panel,
           {
             transform: [
               {
-                translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [-PANEL_WIDTH, 0] }),
+                translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [-DRAWER_WIDTH, 0] }),
               },
             ],
           },
@@ -472,27 +527,28 @@ export function SessionDrawer({
           </View>
         ) : null}
 
-        <View style={styles.workspaceBlock}>
-          <Text style={styles.workspaceLabel}>工作区</Text>
-          {state.workspaces.length === 0 ? (
-            <Text style={styles.workspaceEmpty}>宿主没有报告工作区</Text>
-          ) : (
-            state.workspaces.map((ws) => (
-              <View key={ws.id} style={styles.workspaceRow}>
-                <Text style={styles.workspaceGlyph}>▢</Text>
-                <View style={styles.workspaceTexts}>
-                  <Text style={styles.workspaceName} numberOfLines={1}>
-                    {ws.name}
-                  </Text>
-                  <Text style={styles.workspacePath} numberOfLines={1}>
-                    {ws.root}
-                  </Text>
-                </View>
-              </View>
-            ))
-          )}
-          <Text style={styles.workspaceHint}>工作区限制可访问目录与可用锦囊</Text>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="打开工作区"
+          onPress={() => {
+            onClose();
+            store.openWorkspace();
+          }}
+          style={({ pressed }) => [styles.workspaceEntry, pressed && styles.workspaceEntryPressed]}
+        >
+          <Text style={styles.workspaceGlyph}>▢</Text>
+          <View style={styles.workspaceTexts}>
+            <Text style={styles.workspaceName}>工作区</Text>
+            <Text style={styles.workspacePath} numberOfLines={1}>
+              {state.workspaces.length === 0
+                ? '宿主未报告'
+                : state.workspaces.length === 1
+                  ? state.workspaces[0]?.name
+                  : `${state.workspaces.length} 个工作区`}
+            </Text>
+          </View>
+          <Text style={styles.workspaceChevron}>›</Text>
+        </Pressable>
 
         <Pressable
           accessibilityRole="switch"
@@ -584,7 +640,7 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
       backgroundColor: c.backdrop,
     },
     panel: {
-      width: PANEL_WIDTH,
+      width: DRAWER_WIDTH,
       height: '100%',
       backgroundColor: s.sidebar,
       borderRightWidth: StyleSheet.hairlineWidth,
@@ -684,24 +740,25 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
     folderTagText: { color: c.textDim, fontSize: 10 },
     listScroll: { flex: 1 },
     list: { padding: space.md, gap: space.lg, paddingBottom: space.xl },
-    workspaceBlock: {
+    workspaceEntry: {
       marginTop: space.md,
       marginHorizontal: space.md,
-      padding: space.md,
+      paddingHorizontal: space.md,
+      paddingVertical: space.sm,
       borderRadius: radius.sm,
       backgroundColor: c.glass,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: c.border,
-      gap: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
-    workspaceLabel: { color: s.textSecondary, fontSize: 12, lineHeight: 18, fontWeight: '500' },
-    workspaceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    workspaceEntryPressed: { backgroundColor: c.glassStrong },
     workspaceGlyph: { color: c.textFaint, fontSize: 14 },
     workspaceTexts: { flex: 1 },
     workspaceName: { color: c.text, fontSize: 13, lineHeight: 20, fontWeight: '500' },
     workspacePath: { color: c.textFaint, fontSize: 11, lineHeight: 16 },
-    workspaceHint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
-    workspaceEmpty: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
+    workspaceChevron: { color: c.textFaint, fontSize: 16 },
     autoRouteRow: {
       flexDirection: 'row',
       alignItems: 'center',

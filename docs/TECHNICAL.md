@@ -466,6 +466,10 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 - 外观：主题进 `ThemeScreen`（跟随系统/浅色/深色，`themeMode` 存 UI cache）；对话字号
   标准/大/特大（`chatFontScale`）；「完成后收起过程」开关（`collapseProcess`）。
 - 通用：通知由系统管理；后台保活进引擎页。
+- 抽屉手势：左侧滑出，`HomeScreen` 持有 `drawerAnim` 唯一动画；`SessionDrawer` 有 `progress` 时
+  只消费不再起 spring；左滑关闭只跟手 + 回弹，关闭动画由 Home 完成。几何/阈值在
+  `ui/drawerGeometry.ts`（302dp，开 25%/vx>0.3，关 72%/vx<-0.35）。
+- 抽屉工作区只保留一行「工作区 ›」入口（点开 WorkspaceScreen），不再列只读工作区列表。
 - 抽屉分组：置顶 / 运行中 / 今天 / 更早；筛选胶囊「全部 / 运行中 / 待确认 / 未读」；文件夹胶囊
   「全部文件夹 + 自定义文件夹」（长按「移到文件夹…」，UI cache 的 `sessionFolders`）；行尾最多一个状态标记；
   长按出「置顶/取消置顶/归档/改名/删除」；搜索框右侧「全文」进 SearchScreen；标题右侧 ⊞ 进「全部功能」；

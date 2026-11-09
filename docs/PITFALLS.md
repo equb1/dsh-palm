@@ -682,3 +682,13 @@
 - 处理：`scripts/device-ui.ts` 的 `dumpNodes` 已加 3 次重试（250ms）；`device:regression`
   支持 `DSH_PALM_PKG` 覆盖包名、显式用 `cool.cnb.dshpalm.MainActivity` 启动测试包。
 - 验证：深色测试包跑到 9/10，剩余失败为 IME 候选和上述 flake；设备恢复后复跑。
+
+
+### H9. 抽屉手势偶发只滑出一半（2026-11-06）
+
+- 现象：从左侧滑出会话抽屉时，偶发停在半开状态，需要再滑一次或点按钮。
+- 原因：`HomeScreen` 松手后启动一个 spring，`SessionDrawer` 的 `visible` effect 又对同一个
+  `Animated.Value` 启动第二个 spring；两套配置不同，native driver 下互相抢值。
+- 处理：抽屉动画只留 Home 一个 owner（`drawer` 状态 effect）；`SessionDrawer` 收到 `progress`
+  时只消费、不再 spring；打开/关闭阈值与面板宽度抽到 `ui/drawerGeometry.ts`，两边共用。
+- 验证：`test/drawer-geometry.test.ts` 覆盖 clamp/阈值；真机反复快滑/慢滑/半拉松手待复验。

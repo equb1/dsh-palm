@@ -1,6 +1,8 @@
 import React from 'react';
 import {
+  Animated,
   BackHandler,
+  PanResponder,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -20,7 +22,8 @@ import { SessionDrawer } from './SessionDrawer';
 import { ModelSheet } from './ModelSheet';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
-import { radius, space, topInset, useTheme, useThemedStyles, type Palette, type Theme } from './theme';
+import { motion, radius, space, topInset, useTheme, useThemedStyles, type Palette, type Theme } from './theme';
+import { DRAWER_WIDTH, drawerProgress, shouldOpenDrawer } from './drawerGeometry';
 
 function relTime(ts: number): string {
   const min = Math.round((Date.now() - ts) / 60_000);
@@ -62,6 +65,7 @@ export function HomeScreen(): React.ReactElement {
   const [draft, setDraft] = React.useState('');
   const [refreshing, setRefreshing] = React.useState(false);
   const [drawer, setDrawer] = React.useState(false);
+  const drawerAnim = React.useRef(new Animated.Value(0)).current;
 
   // 从系统分享菜单进来的文字：填进输入框（只填一次；回前台再分享也生效）
   React.useEffect(() => {
@@ -78,6 +82,55 @@ export function HomeScreen(): React.ReactElement {
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
   }, [drawer]);
+
+  // 左侧滑动手势唤出抽屉；动画的唯一 owner 是下面的 drawer effect
+  const homePanResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_evt, gesture) =>
+          !drawer && gesture.dx > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
+        onMoveShouldSetPanResponder: (_evt, gesture) =>
+          !drawer && gesture.dx > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
+        onPanResponderGrant: () => {
+          drawerAnim.stopAnimation();
+        },
+        onPanResponderMove: (_evt, gesture) => {
+          drawerAnim.setValue(drawerProgress(gesture.dx, DRAWER_WIDTH));
+        },
+        onPanResponderRelease: (_evt, gesture) => {
+          const next = drawerProgress(gesture.dx, DRAWER_WIDTH);
+          if (shouldOpenDrawer(next, gesture.vx)) {
+            setDrawer(true);
+          } else {
+            setDrawer(false);
+            Animated.spring(drawerAnim, {
+              toValue: 0,
+              ...motion.spring.sheet,
+              useNativeDriver: true,
+            }).start();
+          }
+        },
+        onPanResponderTerminate: () => {
+          setDrawer(false);
+          Animated.spring(drawerAnim, {
+            toValue: 0,
+            ...motion.spring.sheet,
+            useNativeDriver: true,
+          }).start();
+        },
+      }),
+    [drawer, drawerAnim],
+  );
+
+  React.useEffect(() => {
+    const animation = Animated.spring(drawerAnim, {
+      toValue: drawer ? 1 : 0,
+      ...motion.spring.sheet,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [drawer, drawerAnim]);
 
   const presets = state.caps?.presets ?? [];
   const preset = presets.find((p) => p.id === state.draftPresetId) ?? presets[0];
@@ -133,7 +186,15 @@ export function HomeScreen(): React.ReactElement {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} {...homePanResponder.panHandlers}>
+      <Animated.View
+        style={{
+          flex: 1,
+          transform: [
+            { translateX: drawerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 42] }) },
+          ],
+        }}
+      >
       <View style={styles.header}>
         <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
         <View style={styles.brandMark}>
@@ -280,8 +341,9 @@ export function HomeScreen(): React.ReactElement {
           onRemoveAttachment={(id) => store.removeAttachment(id)}
         />
       </SmoothKeyboardAvoid>
+      </Animated.View>
 
-      <SessionDrawer visible={drawer} onClose={() => setDrawer(false)} />
+      <SessionDrawer visible={drawer} onClose={() => setDrawer(false)} progress={drawerAnim} />
       <ModelSheet />
     </View>
   );
