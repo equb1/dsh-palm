@@ -16,7 +16,7 @@ jobs:
       - name: 根依赖
         run: npm install
       - name: App 依赖
-        run: npm --prefix app install
+        run: npm --prefix app install --registry=https://registry.npmjs.org/ --replace-registry-host=always
       - name: App 类型检查
         run: npm --prefix app run typecheck
       - name: 协议层验证（typecheck + 测试）
