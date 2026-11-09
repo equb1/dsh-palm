@@ -1,5 +1,15 @@
 # 发布、首装与升级（E8）
 
+## 0. GitHub 镜像 / Pages / Release
+
+- 仓库：<https://github.com/equb1/dsh-palm>（默认分支 `main`，AGPL-3.0）
+- 落地页：<https://equb1.github.io/dsh-palm/>（GitHub Actions 部署 `site/`）
+- 最新 APK：<https://github.com/equb1/dsh-palm/releases/latest>
+- 构建运行时：GitHub Release `runtime-v1`（pre-release）包含 `rootfs.bin` / `payload.bin` / `python.bin`；
+  `scripts/setup-android.sh` 默认从这里下载，`DSH_PALM_RUNTIME_BASE` 可覆盖，失败回退 cnb。
+- 当前 `main` 源码是 0.2.1（versionCode 17）；已上传的 APK 资产是 0.2.0（versionCode 16），
+  0.2.1 APK 需要在有 release keystore 的机器上重建后替换。
+
 > 状态：2026-11-06 夜间。当前设备装的是 **release** 包（签名 `55df28b9`），
 > 新版 `0.2.0 (2)` 正在用同签名覆盖升级（`adb install -r`，保留数据）。
 > 本文只写发布流程和已确认的签名/数据迁移事实；**卸载/安装前必须让用户确认**。
