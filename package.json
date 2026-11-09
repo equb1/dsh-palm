@@ -28,5 +28,13 @@
   },
   "dependencies": {
     "multicast-dns": "^7.2.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/equb1/dsh-palm.git"
+  },
+  "homepage": "https://equb1.github.io/dsh-palm/",
+  "bugs": {
+    "url": "https://github.com/equb1/dsh-palm/issues"
   }
 }

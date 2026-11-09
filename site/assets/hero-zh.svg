@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="heroTitle heroDesc">
+  <title id="heroTitle">锦囊 · dsh-palm</title>
+  <desc id="heroDesc">把 DeepSeek Harness 装进口袋。Android 本机宿主，轻引擎秒开，按需 proot。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#232B40"/>
+      <stop offset="1" stop-color="#141A29"/>
+    </linearGradient>
+    <linearGradient id="pouch" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6E8AE0"/>
+      <stop offset="1" stop-color="#4B67B4"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#4B67B4" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#4B67B4" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+      <path d="M34 0H0V34" fill="none" stroke="#8FA2D6" stroke-opacity=".09"/>
+    </pattern>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="360" rx="30" fill="url(#bg)"/>
+  <rect width="1200" height="360" rx="30" fill="url(#grid)"/>
+  <circle cx="1030" cy="34" r="190" fill="url(#glow)" filter="url(#blur)"/>
+  <circle cx="735" cy="330" r="150" fill="url(#glow)" opacity=".35" filter="url(#blur)"/>
+
+  <g transform="translate(80 58)">
+    <rect width="92" height="92" rx="25" fill="#202840" stroke="#4B67B4" stroke-width="1.5"/>
+    <path d="M31 40c0-11 30-11 30 0l4 27c1.4 9.5-5.4 15.5-19 15.5S26.6 76.5 28 67z" fill="url(#pouch)"/>
+    <path d="M27 40c0-13 38-13 38 0" fill="none" stroke="#E4EBFF" stroke-width="3" stroke-linecap="round"/>
+    <path d="M31 40c5 8 25 8 30 0" fill="none" stroke="#E4EBFF" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M46 55l2.6 7.4L56 65l-7.4 2.6L46 75l-2.6-7.4L36 65l7.4-2.6z" fill="#E4EBFF"/>
+  </g>
+
+  <text x="80" y="216" fill="#FFFFFF" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="64" font-weight="700" letter-spacing="4">锦囊</text>
+  <text x="246" y="216" fill="#8FA2D6" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="20" letter-spacing="7">DSH PALM</text>
+  <text x="82" y="264" fill="#DDE5FA" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="27" font-weight="500">把 DeepSeek Harness 装进口袋</text>
+  <text x="82" y="298" fill="#94A2C4" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="17">Android 本机宿主 · 轻引擎秒开 · 需要真 Linux 时按需 proot</text>
+
+  <g transform="translate(82 316)">
+    <rect width="86" height="26" rx="13" fill="#4B67B4" fill-opacity=".2" stroke="#4B67B4" stroke-opacity=".55"/>
+    <text x="43" y="18" text-anchor="middle" fill="#BFD0FF" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="12">轻引擎</text>
+    <rect x="94" width="96" height="26" rx="13" fill="#4B67B4" fill-opacity=".2" stroke="#4B67B4" stroke-opacity=".55"/>
+    <text x="142" y="18" text-anchor="middle" fill="#BFD0FF" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="12">完整引擎</text>
+    <rect x="198" width="90" height="26" rx="13" fill="#4B67B4" fill-opacity=".2" stroke="#4B67B4" stroke-opacity=".55"/>
+    <text x="243" y="18" text-anchor="middle" fill="#BFD0FF" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">AGPL-3.0</text>
+  </g>
+
+  <g transform="translate(928 34)">
+    <rect width="220" height="292" rx="38" fill="#0C111D" stroke="#5D6F9F" stroke-width="1.5"/>
+    <rect x="8" y="8" width="204" height="276" rx="31" fill="#121926"/>
+    <rect x="82" y="15" width="56" height="9" rx="4.5" fill="#080B12"/>
+
+    <g transform="translate(24 42)">
+      <circle cx="10" cy="10" r="10" fill="#4B67B4"/>
+      <path d="M6.5 8.8c0-3.6 7-3.6 7 0l1 6.2c.3 2.2-1.3 3.6-4.5 3.6s-4.8-1.4-4.5-3.6z" fill="#E4EBFF"/>
+      <text x="26" y="14" fill="#E8EDFA" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="11" font-weight="600">锦囊</text>
+      <rect x="112" y="1" width="52" height="18" rx="9" fill="#1C2A44"/>
+      <circle cx="123" cy="10" r="3" fill="#58C08B"/>
+      <text x="130" y="13.5" fill="#9DB4E2" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">轻引擎</text>
+    </g>
+
+    <g transform="translate(24 82)">
+      <rect width="128" height="34" rx="12" fill="#1A2A44"/>
+      <text x="10" y="15" fill="#C9D7F5" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">把会议纪要整理成周报</text>
+      <text x="10" y="27" fill="#8FA6D4" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">并生成 docx。</text>
+    </g>
+
+    <g transform="translate(24 128)">
+      <rect width="172" height="54" rx="12" fill="#192234" stroke="#28344B"/>
+      <text x="10" y="15" fill="#8FA6D4" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">已生成周报，包含本周进展、</text>
+      <text x="10" y="27" fill="#8FA6D4" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8.5">风险与下周计划。</text>
+      <rect x="10" y="34" width="68" height="12" rx="6" fill="#1D2B45"/>
+      <text x="17" y="43" fill="#8FB0F0" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="7">周报.docx</text>
+    </g>
+
+    <g transform="translate(24 192)">
+      <rect width="172" height="26" rx="9" fill="#161E2D" stroke="#25324A"/>
+      <circle cx="12" cy="13" r="5" fill="#2E3C5B"/>
+      <path d="M9.5 10.5l5 5M14.5 10.5l-5 5" stroke="#8FB0F0" stroke-width="1.2" stroke-linecap="round"/>
+      <text x="23" y="16" fill="#B7C6E8" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="7.5">write_file</text>
+      <text x="158" y="16" text-anchor="end" fill="#58C08B" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="8">完成</text>
+    </g>
+
+    <g transform="translate(24 228)">
+      <rect width="172" height="30" rx="8" fill="#2A2318" stroke="#5D4A28"/>
+      <text x="8" y="12" fill="#E2C07E" font-family="'PingFang SC','Noto Sans SC','Microsoft YaHei',sans-serif" font-size="7.5">需要确认 · 写入工作区文件</text>
+      <text x="8" y="23" fill="#A7926D" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="6.5">/workspace/docs/周报.docx</text>
+    </g>
+
+    <g transform="translate(18 269)">
+      <rect width="184" height="9" rx="4.5" fill="#1A2233"/>
+      <circle cx="177" cy="4.5" r="4.5" fill="#4B67B4"/>
+    </g>
+  </g>
+</svg>

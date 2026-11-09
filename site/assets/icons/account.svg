@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="官方账号 OAuth">
+  <rect width="48" height="48" rx="14" fill="#4B67B4"/>
+  <circle cx="24" cy="18" r="6" fill="none" stroke="#F4F7FF" stroke-width="2.2"/>
+  <path d="M13 36c1.5-6 5.5-9 11-9s9.5 3 11 9" fill="none" stroke="#F4F7FF" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="33" cy="31" r="5" fill="#4B67B4" stroke="#BFD0FF" stroke-width="1.8"/>
+  <path d="M31 31l1.5 1.5 3-3" fill="none" stroke="#BFD0FF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

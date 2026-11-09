@@ -60,8 +60,10 @@ fi
 # ---------------------------------------------------------------- 3. 镜像
 
 say "3/3 运行时镜像（约 225MB）"
-BASE="https://cnb.cool/debaox3.0/test-new-technology/dsh-palm/-/releases/download/runtime-v1"
-# 与 docs/18 保持一致；换镜像时两边一起改
+GITHUB_BASE="https://github.com/equb1/dsh-palm/releases/download/runtime-v1"
+CNB_BASE="https://cnb.cool/debaox3.0/test-new-technology/dsh-palm/-/releases/download/runtime-v1"
+# 默认 GitHub Releases；可用 DSH_PALM_RUNTIME_BASE 覆盖，GitHub 失败时回退 cnb
+BASE="${DSH_PALM_RUNTIME_BASE:-$GITHUB_BASE}"
 fetch() {
   local name="$1" want="$2"
   local dest="$ASSETS/$name"
@@ -73,7 +75,11 @@ fetch() {
     rm -f "$dest"
   fi
   echo "  下载 $name …"
-  curl -fL --retry 3 -o "$dest.part" "$BASE/$name"
+  if ! curl -fL --retry 3 -o "$dest.part" "$BASE/$name"; then
+    if [ "$BASE" = "$CNB_BASE" ]; then exit 1; fi
+    echo "  GitHub 下载失败，回退 cnb …"
+    curl -fL --retry 3 -o "$dest.part" "$CNB_BASE/$name"
+  fi
   local got
   got="$(shasum -a 256 "$dest.part" 2>/dev/null | cut -d' ' -f1 || sha256sum "$dest.part" | cut -d' ' -f1)"
   if [ "$got" != "$want" ]; then

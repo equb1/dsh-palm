@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="Python 与 Office">
+  <rect width="48" height="48" rx="14" fill="#4B67B4"/>
+  <path d="M15 10h12l7 7v21H15z" fill="none" stroke="#F4F7FF" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M27 10v8h7" fill="none" stroke="#F4F7FF" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M20 25h8M20 30h8" stroke="#F4F7FF" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M12 32l3 3-3 3" fill="none" stroke="#BFD0FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
