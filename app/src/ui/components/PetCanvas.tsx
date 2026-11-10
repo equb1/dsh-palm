@@ -34,6 +34,9 @@ export function PetCanvas({
     rt.play(anim, { restart: true });
     setCell(anim.frames[0]?.i ?? 0);
 
+    // 单帧状态图（如小寄）：不需要逐帧时钟，省掉常驻 RAF
+    if (anim.frames.length <= 1) return;
+
     let raf = 0;
     let last = Date.now();
     const tick = (now: number): void => {

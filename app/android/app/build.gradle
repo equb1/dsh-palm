@@ -104,7 +104,7 @@ android {
         applicationId 'cool.cnb.dshpalm'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode envVersionCode ? envVersionCode.toInteger() : 20
+        versionCode envVersionCode ? envVersionCode.toInteger() : 21
         versionName envVersionName ?: "0.2.3"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
@@ -167,6 +167,15 @@ tasks.register("syncPetAssets", Copy) {
 }
 tasks.named("preBuild").configure {
     dependsOn("syncPetAssets")
+}
+
+// expo-updates 的 createReleaseUpdatesResources / createDebugUpdatesResources 任务的 inputs
+// 只有 projectRoot / entryFile / node 参数，JS 或图片变化时 Gradle 会判定 UP-TO-DATE，
+// 嵌入包里的 asset hash 清单（app.manifest）就会一直停留在旧版本：
+// 新加的图片在 release 包里 Image.resolveAssetSource 会解析成空 uri（渲染空白）。
+// 这里强制它每次构建都重新生成。
+tasks.matching { it.name.startsWith("create") && it.name.endsWith("UpdatesResources") }.configureEach {
+    outputs.upToDateWhen { false }
 }
 
 // Apply static values from `gradle.properties` to the `android.packagingOptions`

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "锦囊",
+    "name": "Crabstack",
     "slug": "dsh-palm",
     "version": "0.2.3",
     "runtimeVersion": "0.2.3",
@@ -29,8 +29,8 @@
       "package": "cool.cnb.dshpalm",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
-        "backgroundColor": "#141C31"
+        "monochromeImage": "./assets/monochrome-icon.png",
+        "backgroundColor": "#F7F3EA"
       },
       "softwareKeyboardLayoutMode": "resize"
     },

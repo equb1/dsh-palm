@@ -1,0 +1,225 @@
+{
+  "schema": 2,
+  "id": "xiaoji",
+  "name": "小寄",
+  "version": "1.0.0",
+  "canvas": {
+    "width": 512,
+    "height": 512
+  },
+  "anchor": {
+    "x": 0.5,
+    "y": 1.0
+  },
+  "contentBox": {
+    "x": 26,
+    "y": 26,
+    "width": 460,
+    "height": 460
+  },
+  "hitBoxes": {
+    "head": {
+      "x": 150,
+      "y": 110,
+      "width": 220,
+      "height": 180
+    },
+    "body": {
+      "x": 90,
+      "y": 290,
+      "width": 340,
+      "height": 190
+    }
+  },
+  "animations": {
+    "idle": {
+      "sheet": "idle.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "thinking": {
+      "sheet": "thinking.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "working": {
+      "sheet": "working.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "success": {
+      "sheet": "success.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "error": {
+      "sheet": "error.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "sleeping": {
+      "sheet": "sleeping.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "attention": {
+      "sheet": "thinking.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "notification": {
+      "sheet": "success.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "carrying": {
+      "sheet": "working.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "juggling": {
+      "sheet": "working.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "sweeping": {
+      "sheet": "working.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "waking": {
+      "sheet": "idle.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "roam": {
+      "sheet": "idle.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "react-left": {
+      "sheet": "thinking.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "react-right": {
+      "sheet": "success.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "react-tickle": {
+      "sheet": "success.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    },
+    "react-drag": {
+      "sheet": "working.png",
+      "frameW": 512,
+      "frameH": 512,
+      "cols": 1,
+      "frames": [{ "i": 0, "ms": 1600 }],
+      "loop": false
+    }
+  },
+  "states": {
+    "idle": "idle",
+    "thinking": "thinking",
+    "working": "working",
+    "juggling": "juggling",
+    "sweeping": "sweeping",
+    "notification": "notification",
+    "attention": "attention",
+    "error": "error",
+    "carrying": "carrying",
+    "sleeping": "sleeping",
+    "waking": "waking",
+    "roam": "roam"
+  },
+  "tiers": {
+    "working": { "minTasks": 1, "maxTasks": 1, "anim": "working" },
+    "juggling": { "minTasks": 2, "maxTasks": 2, "anim": "juggling" },
+    "sweeping": { "minTasks": 3, "maxTasks": 99, "anim": "sweeping" }
+  },
+  "idlePool": [
+    {
+      "anim": "thinking",
+      "weight": 1,
+      "intervalMinMs": 15000,
+      "intervalMaxMs": 30000
+    }
+  ],
+  "bubbles": {
+    "idle": ["背着整套工具，随时开工", "合上就走，打开就干"],
+    "thinking": ["正在认真思考…", "让我想想…"],
+    "working": ["正在执行任务…", "工具已就位，开工"],
+    "done": ["这一轮搞定了", "搞定，收工！"],
+    "error": ["出错了，我检查一下", "壳有点歪，先修一下"],
+    "attention": ["等你确认哦", "有个操作需要你点一下"],
+    "sleeping": ["Zzz…", "先眯一会儿"],
+    "waking": ["醒啦，随时开工", "睡醒了！"],
+    "tapLeft": ["戳我左边啦~"],
+    "tapRight": ["戳我右边啦~"],
+    "tickle": ["哈哈，好痒 (≧∇≦)"],
+    "drag": ["起飞咯~"]
+  },
+  "reactions": {
+    "tapLeft": "react-left",
+    "tapRight": "react-right",
+    "tickle": "react-tickle",
+    "drag": "react-drag"
+  },
+  "timings": {
+    "minDisplayMs": 900,
+    "autoReturnMs": 1400,
+    "wakeMs": 1200,
+    "sleepAfterMs": 60000
+  }
+}

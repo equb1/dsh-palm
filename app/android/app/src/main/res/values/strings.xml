@@ -1,5 +1,5 @@
 <resources>
-  <string name="app_name">锦囊</string>
+  <string name="app_name">Crabstack</string>
   <string name="dsh_widget_desc">锦囊宿主状态与快捷入口</string>
   <string name="dsh_widget_status">轻引擎</string>
   <string name="expo_runtime_version">0.2.3</string>

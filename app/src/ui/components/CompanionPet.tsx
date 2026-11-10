@@ -34,7 +34,7 @@ export function CompanionPet(): React.ReactElement | null {
   const state = useStore();
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const [role, setRole] = React.useState<PetRole>('deepy');
+  const [role, setRole] = React.useState<PetRole>('xiaoji');
   const [hudOpen, setHudOpen] = React.useState(false);
   const [floatingActive, setFloatingActive] = React.useState(false);
   const [petState, setPetState] = React.useState<PetState>('idle');
@@ -284,7 +284,9 @@ export function CompanionPet(): React.ReactElement | null {
               <View style={styles.hudTitleRow}>
                 <PetCanvas role={role} animation={currentAnim} size={48} />
                 <View>
-                  <Text style={styles.hudName}>{role === 'deepy' ? 'Deepy (小蓝鲸)' : '鲸娘'}</Text>
+                  <Text style={styles.hudName}>
+                    {role === 'xiaoji' ? '小寄（寄居蟹）' : role === 'deepy' ? 'Deepy (小蓝鲸)' : '鲸娘'}
+                  </Text>
                   <Text style={styles.hudStatus}>
                     {petState === 'working' || petState === 'juggling' || petState === 'sweeping'
                       ? `正在全力干活（${Math.max(1, activeCount)} 个任务执行中）…`
@@ -303,6 +305,17 @@ export function CompanionPet(): React.ReactElement | null {
 
             {/* 切换角色按钮 */}
             <View style={styles.roleSwitchRow}>
+              <Pressable
+                onPress={() => {
+                  setRole('xiaoji');
+                  if (floatingActive) void setFloatingPetEnabled(true, 'xiaoji', petState);
+                }}
+                style={[styles.roleBtn, role === 'xiaoji' && styles.roleBtnActive]}
+              >
+                <Text style={[styles.roleBtnText, role === 'xiaoji' && styles.roleBtnTextActive]}>
+                  小寄
+                </Text>
+              </Pressable>
               <Pressable
                 onPress={() => {
                   setRole('deepy');
