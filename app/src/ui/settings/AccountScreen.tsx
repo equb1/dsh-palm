@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { store, useStore } from '../useStore';
 import { Btn, IconButton, Pill } from '../parts';
@@ -141,7 +141,7 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
                       kind="ghost"
                       onPress={() => {
                         const url = account?.links.usageUrl;
-                        if (url) void Linking.openURL(url).catch(() => undefined);
+                        if (url) store.openInAppBrowser(url);
                       }}
                       style={{ flex: 1 }}
                     />

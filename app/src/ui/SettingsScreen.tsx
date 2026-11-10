@@ -15,6 +15,7 @@ import {
   requestPinWidget,
   systemEntryStatus,
 } from '../lib/host';
+import { modelReadiness } from '../lib/readiness';
 import { EngineScreen } from './EngineScreen';
 import { LightEngineScreen } from './LightEngineScreen';
 import { AccountScreen } from './settings/AccountScreen';
@@ -23,6 +24,7 @@ import { HostScreen } from './settings/HostScreen';
 import { LabScreen } from './settings/LabScreen';
 import { ProvidersScreen } from './settings/ProvidersScreen';
 import { ThemeScreen } from './settings/ThemeScreen';
+import { UpdateScreen } from './settings/UpdateScreen';
 import { SettingsGroup, type SettingsRow } from './settings/SettingsTile';
 import { ScreenStack } from './components/ScreenStack';
 
@@ -35,7 +37,8 @@ type SettingsRoute =
   | 'lab'
   | 'engine'
   | 'light'
-  | 'theme';
+  | 'theme'
+  | 'updates';
 
 /**
  * 设置首页。
@@ -93,6 +96,13 @@ export function SettingsScreen(): React.ReactElement {
   const signedIn = account?.status === 'credential-stored';
   const waiting =
     account?.attempt?.phase === 'waiting-browser' || account?.attempt?.phase === 'initializing';
+  const readiness = modelReadiness({
+    accountStatus: account?.status,
+    credentials: state.credentials,
+    providers: state.providers,
+    engineKind: state.engineKind,
+    lightReady: state.engine.lightReady,
+  });
 
   // 首页也要读一次账号（账号页的 refresh 只在进账号页时跑，tile 不能一直是旧值）
   React.useEffect(() => {
@@ -102,13 +112,14 @@ export function SettingsScreen(): React.ReactElement {
 
   // 二级页打开时接管安卓返回键：先回设置首页，而不是整页关掉设置
   React.useEffect(() => {
-    if (!route) return;
+    if (!route && !state.settingsRoute && !state.lightSetupOpen) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       setRoute(null);
+      store.closeSettingsPage();
       return true;
     });
     return () => sub.remove();
-  }, [route]);
+  }, [route, state.settingsRoute, state.lightSetupOpen]);
 
   const flash = (message: string): void => {
     setNotice(message);
@@ -134,10 +145,16 @@ export function SettingsScreen(): React.ReactElement {
         {
           id: 'account',
           title: 'DeepSeek 账号',
-          value: signedIn ? '已登录' : waiting ? '登录中' : '未登录',
+          value: signedIn
+            ? '已登录'
+            : waiting
+              ? '登录中'
+              : readiness.modelReady
+                ? '已配置模型渠道'
+                : '未登录',
           icon: '人',
           tone: 'blue',
-          warn: !signedIn,
+          warn: !signedIn && !readiness.modelReady,
           onPress: () => setRoute('account'),
         },
         {
@@ -361,6 +378,15 @@ export function SettingsScreen(): React.ReactElement {
       title: '帮助与关于',
       rows: [
         {
+          id: 'updates',
+          title: '软件更新',
+          value: '热更新',
+          icon: '⇅',
+          tone: 'slate',
+          hint: '检查并安装 OTA 更新',
+          onPress: () => setRoute('updates'),
+        },
+        {
           id: 'version',
           title: '版本',
           value: state.caps?.host.engineVersion ?? '—',
@@ -392,33 +418,30 @@ export function SettingsScreen(): React.ReactElement {
     .filter((group) => group.rows.length > 0);
 
   // 二级页也走页面栈：设置首页保留挂载/滚动位置，二级页从右侧推入。
-  const subKey = state.lightSetupOpen ? 'light-setup' : route;
+  const subKey = state.lightSetupOpen ? 'light-setup' : (state.settingsRoute ?? route);
+  const closeSub = (): void => {
+    setRoute(null);
+    store.closeSettingsPage();
+  };
   let subScreen: React.ReactNode = null;
-  if (subKey === 'light-setup') {
-    subScreen = (
-      <LightEngineScreen
-        onClose={() => {
-          store.closeLightSetup();
-          store.closeSettings();
-        }}
-      />
-    );
+  if (subKey === 'light-setup' || subKey === 'light') {
+    subScreen = <LightEngineScreen onClose={subKey === 'light-setup' ? () => { store.closeLightSetup(); store.closeSettings(); } : closeSub} />;
   } else if (subKey === 'theme') {
-    subScreen = <ThemeScreen onClose={() => setRoute(null)} />;
+    subScreen = <ThemeScreen onClose={closeSub} />;
   } else if (subKey === 'engine') {
-    subScreen = <EngineScreen onClose={() => setRoute(null)} />;
-  } else if (subKey === 'light') {
-    subScreen = <LightEngineScreen onClose={() => setRoute(null)} />;
+    subScreen = <EngineScreen onClose={closeSub} />;
   } else if (subKey === 'account') {
-    subScreen = <AccountScreen onClose={() => setRoute(null)} />;
+    subScreen = <AccountScreen onClose={closeSub} />;
   } else if (subKey === 'credentials') {
-    subScreen = <CredentialsScreen onClose={() => setRoute(null)} />;
+    subScreen = <CredentialsScreen onClose={closeSub} />;
   } else if (subKey === 'providers') {
-    subScreen = <ProvidersScreen onClose={() => setRoute(null)} />;
+    subScreen = <ProvidersScreen onClose={closeSub} />;
   } else if (subKey === 'host') {
-    subScreen = <HostScreen onClose={() => setRoute(null)} />;
+    subScreen = <HostScreen onClose={closeSub} />;
   } else if (subKey === 'lab') {
-    subScreen = <LabScreen onClose={() => setRoute(null)} />;
+    subScreen = <LabScreen onClose={closeSub} />;
+  } else if (subKey === 'updates') {
+    subScreen = <UpdateScreen onClose={closeSub} />;
   }
 
   const homeScreen = (

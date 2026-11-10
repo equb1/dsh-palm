@@ -192,7 +192,7 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         }
     }
 
-    /** 扫描 `_dsh-palm._tcp`；4 秒后返回当前发现的列表。 */
+    /** 扫描 `_dsh-palm._tcp`；超时后返回当前发现的列表（JS 传 10 秒）。 */
     @ReactMethod
     fun discoverLanHosts(timeoutMs: Double, promise: Promise) {
         try {

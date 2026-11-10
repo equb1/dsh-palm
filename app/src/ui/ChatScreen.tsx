@@ -68,7 +68,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   const needsAuthRecovery =
     state.engineKind === 'light' &&
     Boolean(state.error) &&
-    /(401|登录|API Key|凭据|token)/i.test(state.error ?? '');
+    /(401|登录|API Key|凭据|token|模型|渠道)/i.test(state.error ?? '');
   // 逻辑会话按 activeSide 判断只读：完整侧链路断了就只读，绝不在轻引擎里重放
   const link = state.links.find(
     (item) =>
@@ -76,15 +76,36 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       item.lightSessionId === session.id ||
       item.fullSessionId === session.id,
   );
-  const readOnly = link ? isConversationReadOnly(link, state.engine.mode) : !state.currentId;
+  // 打开“另一个引擎”的会话时只读展示缓存正文，但当前引擎不切换
+  const storedReadOnlyEngine = state.detailReadOnlyEngine;
+  const foreignEngine =
+    !link && storedReadOnlyEngine && storedReadOnlyEngine !== state.engine.mode
+      ? storedReadOnlyEngine
+      : null;
+  const readOnly = link ? isConversationReadOnly(link, state.engine.mode) : foreignEngine !== null;
   const readOnlyText =
     link?.activeSide === 'full' && state.engine.mode !== 'full'
       ? '完整引擎已停止，这个会话只读；点这里切到完整模式继续 ›'
-      : '已切换引擎，这个会话只读；点这里切回原引擎继续 ›';
+      : foreignEngine === 'light'
+        ? '这个会话在轻引擎里，完整引擎只能只读查看；点这里切回轻引擎，或点下方「用完整模式继续」 ›'
+        : foreignEngine === 'full'
+          ? '这个会话在完整引擎里，当前轻引擎只能只读查看；点这里切回完整引擎继续 ›'
+          : '已切换引擎，这个会话只读；点这里切回原引擎继续 ›';
   // M2.6：只读横幅一键回到会话所在的引擎并重开（完整侧会先起 proot）
   const resumeOnActiveSide = React.useCallback((): void => {
     if (!link) {
-      store.closeSession();
+      if (!foreignEngine) {
+        store.closeSession();
+        return;
+      }
+      const target = foreignEngine;
+      if (target === state.engine.mode) {
+        void store.openSession(session.id);
+        return;
+      }
+      void store.switchEngine(target).then((ok) => {
+        if (ok) void store.openSession(session.id);
+      });
       return;
     }
     const target = link.activeSide === 'full' ? 'full' : 'light';
@@ -95,7 +116,11 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     void store.switchEngine(target).then((ok) => {
       if (ok) void store.openSession(link.id);
     });
-  }, [link, state.engine.mode]);
+  }, [link, foreignEngine, state.engine.mode, session.id]);
+  /** 轻引擎会话 → 完整引擎：交接上下文后就在完整模式里继续，不再只读 */
+  const continueInFull = React.useCallback((): void => {
+    void store.continueCurrentInFull();
+  }, []);
   // 完整引擎在切 approval policy 时会写一条 user 角色提示，原生完整会话也不显示（I9）
   const turns = React.useMemo(
     () => (state.engineKind === 'remote' ? stripEngineNoticeTurns(session.turns) : session.turns),
@@ -295,7 +320,19 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
       return;
     }
     if (!hasText && !hasAttachments) return;
+    const text = draft.trim();
     if (readOnly) {
+      // 轻引擎会话在完整引擎里只读：直接交接过去再发，不让用户卡在提示上
+      if (!link && foreignEngine === 'light') {
+        void store.continueCurrentInFull().then((ok) => {
+          if (!ok) return;
+          void store.send(text).then((sent) => {
+            if (sent) setDraft((current) => (current === draft ? '' : current));
+            else setDraft((current) => (current.trim().length > 0 ? current : text));
+          });
+        });
+        return;
+      }
       if (link) {
         const target = link.activeSide === 'full' ? 'full' : 'light';
         void store.switchEngine(target).then((ok) => {
@@ -307,10 +344,9 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
         });
         return;
       }
-      store.setError('已切换引擎，这个会话只读；回首页新建会话继续。');
+      store.setError('这个会话属于另一个引擎；点横幅切换后继续。');
       return;
     }
-    const text = draft.trim();
     const rewind = pendingRewind.current;
     if (rewind) {
       // 有回填标记：这一次发送先回退到该回合之前，再带上（可编辑的）文本重试
@@ -422,7 +458,13 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
             onPress={
               engineSwitch.ok
                 ? () => {
-                    void store.switchEngine(state.engine.mode === 'light' ? 'full' : 'light');
+                    // 轻引擎里切完整：把当前会话交接过去继续用完整功能；
+                    // 没有会话时才做普通引擎切换。
+                    if (state.engine.mode === 'light' && state.currentId) {
+                      void store.continueCurrentInFull();
+                    } else {
+                      void store.switchEngine(state.engine.mode === 'light' ? 'full' : 'light');
+                    }
                   }
                 : undefined
             }
@@ -433,9 +475,31 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
 
       <SmoothKeyboardAvoid style={[styles.bodyWrap, { marginTop: headerH }]}>
         {readOnly ? (
-          <Pressable onPress={resumeOnActiveSide}>
-            <Text style={styles.readOnly}>{readOnlyText}</Text>
-          </Pressable>
+          <View style={styles.readOnlyWrap}>
+            <Pressable onPress={resumeOnActiveSide}>
+              <Text style={styles.readOnly}>{readOnlyText}</Text>
+            </Pressable>
+            {!link && foreignEngine === 'light' ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="用完整模式继续这个会话"
+                onPress={continueInFull}
+                style={({ pressed }) => [styles.readOnlyAction, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.readOnlyActionText}>用完整模式继续这个会话 ›</Text>
+              </Pressable>
+            ) : null}
+            {link?.activeSide === 'full' && state.engine.mode === 'light' ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="用轻引擎继续这个会话"
+                onPress={() => void store.continueFullInLight(link.id)}
+                style={({ pressed }) => [styles.readOnlyAction, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.readOnlyActionText}>用轻引擎继续这个会话（复制上下文）›</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
         <View style={styles.listWrap}>
           {!transitionReady ? (
@@ -610,13 +674,24 @@ const createStyles = ({ palette: c }: Theme) =>
   titleText: { color: c.text, fontSize: 14.5, fontWeight: '600' },
   presetPill: { flexShrink: 1 },
   presetText: { color: c.textDim, fontSize: 11.5 },
+  readOnlyWrap: {
+    paddingHorizontal: space.lg,
+    paddingBottom: 4,
+    gap: 4,
+  },
   readOnly: {
     color: c.warn,
     fontSize: 11.5,
     lineHeight: 17,
-    paddingHorizontal: space.lg,
-    paddingBottom: 4,
   },
+  readOnlyAction: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: c.blueSoft,
+  },
+  readOnlyActionText: { color: c.blue, fontSize: 11.5, fontWeight: '600' },
 
   listWrap: { flex: 1 },
   list: { flex: 1 },

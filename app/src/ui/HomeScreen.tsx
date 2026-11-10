@@ -26,6 +26,7 @@ import { SessionDrawer } from './SessionDrawer';
 import { ModelSheet } from './ModelSheet';
 import { Composer } from './Composer';
 import { SmoothKeyboardAvoid } from './SmoothKeyboardAvoid';
+import { modelReadiness } from '../lib/readiness';
 import { motion, radius, space, topInset, useTheme, useThemedStyles, type Palette, type Theme } from './theme';
 import { DRAWER_WIDTH, drawerProgress, shouldOpenDrawer } from './drawerGeometry';
 
@@ -79,6 +80,40 @@ export function HomeScreen(): React.ReactElement {
   // 抽屉 0→1 进度；首页主体同步轻微右移，形成“推开”而不是一张死板的面板。
   const drawerAnim = React.useRef(new Animated.Value(0)).current;
 
+  // 抽屉 0/1 的唯一动画 owner；SessionDrawer 只消费这个 progress。
+  //
+  // 不要用 stopAnimation(callback) 再起 spring：某些 RN/Android 组合下回调
+  // 不触发，抽屉会正好停在松手时的宽度。这里直接起 spring，并挂一个兜底：
+  // 700ms 后无条件 stopAnimation + setValue 到端点，保证绝不停在半开位置。
+  const drawerWatchdog = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawerAnimation = React.useRef<Animated.CompositeAnimation | null>(null);
+
+  const animateDrawer = React.useCallback(
+    (open: boolean) => {
+      const target = open ? 1 : 0;
+      if (drawerWatchdog.current) clearTimeout(drawerWatchdog.current);
+      drawerAnimation.current?.stop();
+      const animation = Animated.spring(drawerAnim, {
+        toValue: target,
+        ...motion.spring.sheet,
+        useNativeDriver: true,
+      });
+      drawerAnimation.current = animation;
+      animation.start();
+      drawerWatchdog.current = setTimeout(() => {
+        drawerWatchdog.current = null;
+        // 硬收敛：即使 spring 被手势/子视图/原生驱动异常打断，也落到 0 或 1。
+        drawerAnim.stopAnimation();
+        drawerAnim.setValue(target);
+      }, 700);
+    },
+    [drawerAnim],
+  );
+
+  // 松手/手势中断时无条件把抽屉送到 0 或 1：drawer 状态没翻转时 effect 不会
+  // 重跑，只改状态会让面板停在任意宽度。
+  const settleDrawer = animateDrawer;
+
   // 左侧滑动手势唤出抽屉（采用 Capture 阶段优先拦截，不受 ScrollView 抢事件影响）
   const homePanResponder = React.useMemo(
     () =>
@@ -87,6 +122,8 @@ export function HomeScreen(): React.ReactElement {
           !drawer && gesture.dx > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
         onMoveShouldSetPanResponder: (evt, gesture) =>
           !drawer && gesture.dx > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.3,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
         onPanResponderGrant: () => {
           drawerAnim.stopAnimation();
         },
@@ -95,40 +132,30 @@ export function HomeScreen(): React.ReactElement {
         },
         onPanResponderRelease: (_evt, gesture) => {
           const next = drawerProgress(gesture.dx, DRAWER_WIDTH);
-          if (shouldOpenDrawer(next, gesture.vx)) {
-            // 打开动画由下面 drawer 状态 effect 统一驱动，避免双 spring 抢值
-            setDrawer(true);
-          } else {
-            setDrawer(false);
-            Animated.spring(drawerAnim, {
-              toValue: 0,
-              ...motion.spring.sheet,
-              useNativeDriver: true,
-            }).start();
-          }
+          const open = shouldOpenDrawer(next, gesture.vx);
+          setDrawer(open);
+          settleDrawer(open);
         },
         onPanResponderTerminate: () => {
           setDrawer(false);
-          Animated.spring(drawerAnim, {
-            toValue: 0,
-            ...motion.spring.sheet,
-            useNativeDriver: true,
-          }).start();
+          settleDrawer(false);
         },
       }),
-    [drawer, drawerAnim],
+    [drawer, drawerAnim, settleDrawer],
   );
 
-  // 抽屉 0/1 的唯一动画 owner；SessionDrawer 只消费这个 progress。
+  // 抽屉开/关状态变化时驱动同一个动画函数（含 700ms 硬收敛兜底）。
   React.useEffect(() => {
-    const animation = Animated.spring(drawerAnim, {
-      toValue: drawer ? 1 : 0,
-      ...motion.spring.sheet,
-      useNativeDriver: true,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [drawer, drawerAnim]);
+    animateDrawer(drawer);
+  }, [drawer, animateDrawer]);
+
+  React.useEffect(
+    () => () => {
+      if (drawerWatchdog.current) clearTimeout(drawerWatchdog.current);
+      drawerAnimation.current?.stop();
+    },
+    [],
+  );
 
   // 从系统分享菜单进来的文字：填进输入框（只填一次；回前台再分享也生效）
   React.useEffect(() => {
@@ -180,14 +207,41 @@ export function HomeScreen(): React.ReactElement {
         ? '完整'
         : '轻';
   const modeIsFull = !remoteLink && engine.mode === 'full';
+  const readiness = modelReadiness({
+    accountStatus: state.account?.status,
+    credentials: state.credentials,
+    providers: state.providers,
+    engineKind: state.engineKind,
+    lightReady: engine.lightReady,
+  });
+  /** 连上了但没有可用模型：状态点必须是橙的，不能假绿 */
+  const connectedWithoutModel =
+    state.conn === 'connected' && !readiness.modelReady && state.engineKind !== 'remote';
+  const showModelSetup =
+    !readiness.modelReady &&
+    state.engineKind !== 'remote' &&
+    (state.conn === 'connected' || Boolean(engine.error) || !engine.lightReady);
+  const modelSetupText = readiness.providerName
+    ? `当前渠道 ${readiness.providerName} 还没配好 · 点这里检查 ›`
+    : state.conn === 'connected'
+      ? '还没有可用模型：登录 DeepSeek 账号或配置第三方模型 · 点此设置 ›'
+      : '尚未登录账号或配置模型 · 点此设置 ›';
 
   const connColor =
-    state.conn === 'connected' ? palette.ok : state.conn === 'reconnecting' || booting ? palette.warn : palette.danger;
+    state.conn === 'connected'
+      ? connectedWithoutModel
+        ? palette.warn
+        : palette.ok
+      : state.conn === 'reconnecting' || booting
+        ? palette.warn
+        : palette.danger;
   const connLabel =
     booting
       ? bootLabel
       : state.conn === 'connected'
-        ? (state.caps?.host.name ?? '已连接')
+        ? connectedWithoutModel
+          ? `${state.caps?.host.name ?? '已连接'} · 未配置模型`
+          : (state.caps?.host.name ?? '已连接')
         : state.conn === 'reconnecting'
           ? '重连中'
           : state.conn === 'connecting'
@@ -267,9 +321,14 @@ export function HomeScreen(): React.ReactElement {
         </View>
       </View>
 
-      {engine.mode === 'light' && !engine.lightReady && Boolean(engine.error) ? (
-        <Pressable accessibilityRole="button" onPress={() => store.openLightSetup()} style={styles.lightSetup}>
-          <Text style={styles.lightSetupText}>轻引擎未就绪 · 点这里配置模型渠道 ›</Text>
+      {showModelSetup ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="配置账号或模型"
+          onPress={() => store.openSettingsPage(readiness.providerName ? 'providers' : 'account')}
+          style={styles.lightSetup}
+        >
+          <Text style={styles.lightSetupText}>{modelSetupText}</Text>
         </Pressable>
       ) : null}
 
@@ -395,7 +454,12 @@ export function HomeScreen(): React.ReactElement {
         </Pressable>
       </BottomSheet>
 
-      <SessionDrawer visible={drawer} onClose={() => setDrawer(false)} progress={drawerAnim} />
+      <SessionDrawer
+        visible={drawer}
+        onClose={() => setDrawer(false)}
+        onSettle={(open) => settleDrawer(open)}
+        progress={drawerAnim}
+      />
       <ModelSheet />
     </View>
   );
@@ -443,6 +507,7 @@ const createStyles = ({ palette: c }: Theme) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      flexShrink: 0,
     },
     hostQuickBtn: {
       flexDirection: 'row',
@@ -454,6 +519,7 @@ const createStyles = ({ palette: c }: Theme) =>
       backgroundColor: c.glassStrong,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: c.border,
+      flexShrink: 0,
     },
     hostQuickText: {
       fontSize: 11.5,
@@ -470,6 +536,7 @@ const createStyles = ({ palette: c }: Theme) =>
       backgroundColor: c.glass,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: c.border,
+      flexShrink: 0,
     },
     modeDot: { width: 5, height: 5, borderRadius: 3 },
     modeText: { color: c.blue, fontSize: 11.5, fontWeight: '600' },

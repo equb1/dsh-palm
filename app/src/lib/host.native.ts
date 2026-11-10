@@ -109,7 +109,7 @@ export async function requestLanPermission(): Promise<boolean> {
   }
 }
 
-export async function discoverLanHosts(timeoutMs = 4000): Promise<DiscoveredHost[]> {
+export async function discoverLanHosts(timeoutMs = 10000): Promise<DiscoveredHost[]> {
   if (!native?.discoverLanHosts) return [];
   try {
     const list = await native.discoverLanHosts(timeoutMs);

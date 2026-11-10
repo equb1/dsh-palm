@@ -19,25 +19,32 @@ export function TypewriterText({
   const { palette } = useTheme();
   const active = React.useContext(ScreenActiveContext);
   const chars = React.useMemo(() => Array.from(text), [text]);
-  const [count, setCount] = React.useState(0);
-  const started = React.useRef(false);
+  // 非活动页直接显示全文；活动页才从头打一遍。
+  // 不能用 ref 做“只跑一次”的锁：effect 被 StrictMode / 页面栈清理后重跑时，
+  // 锁会把定时器永久挡掉，最后只剩光标。
+  const [count, setCount] = React.useState(active ? 0 : chars.length);
 
   React.useEffect(() => {
-    if (!active || started.current) return;
-    started.current = true;
+    if (!active) {
+      setCount(chars.length);
+      return;
+    }
+    setCount(0);
     if (chars.length === 0) return;
     let index = 0;
     const timer = setInterval(() => {
       index += 1;
-      setCount(index);
+      setCount(Math.min(index, chars.length));
       if (index >= chars.length) clearInterval(timer);
     }, speed);
     return () => clearInterval(timer);
   }, [active, chars, speed]);
 
+  const shown = count >= chars.length ? text : chars.slice(0, count).join('');
+
   return (
     <Text style={style}>
-      {chars.slice(0, count).join('')}
+      {shown}
       {caret && count < chars.length ? (
         <Text style={{ color: palette.blue }}>|</Text>
       ) : null}
@@ -56,8 +63,19 @@ export function RotatingHint({
   const { palette } = useTheme();
   const active = React.useContext(ScreenActiveContext);
   const [index, setIndex] = React.useState(0);
-  const [count, setCount] = React.useState(0);
+  const current = Array.from(items[index] ?? '');
+  const [count, setCount] = React.useState(active ? 0 : current.length);
   const [erasing, setErasing] = React.useState(false);
+
+  // 非活动页显示当前句子全文，绝不留下空白/只有光标
+  React.useEffect(() => {
+    if (!active) {
+      setCount(current.length);
+      setErasing(false);
+    }
+    // current 每次渲染都是新数组，这里只跟随句子下标与活动态
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, index]);
 
   React.useEffect(() => {
     if (!active) return;
@@ -81,10 +99,14 @@ export function RotatingHint({
     return () => clearTimeout(timer);
   }, [active, count, erasing, index, items]);
 
+  const text = active
+    ? Array.from(items[index] ?? '').slice(0, count).join('')
+    : (items[index] ?? '');
+
   return (
     <Text style={style}>
-      {Array.from(items[index] ?? '').slice(0, count).join('')}
-      <Text style={{ color: palette.blue }}>|</Text>
+      {text}
+      {active ? <Text style={{ color: palette.blue }}>|</Text> : null}
     </Text>
   );
 }

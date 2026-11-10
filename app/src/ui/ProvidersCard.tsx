@@ -130,9 +130,6 @@ export function ProvidersCard(): React.ReactElement {
 
   const save = async (): Promise<void> => {
     if (!draft) return;
-    if (light && draft.mode === 'catalog') {
-      return setError('轻引擎只有一条自定义模型渠道；第三方目录请切完整引擎配置');
-    }
     if (draft.id.trim().length === 0) return setError(draft.mode === 'catalog' ? '先选一个提供商' : '先填一个渠道 ID，例如 openrouter');
     if (!draft.editing && draft.apiKey.trim().length === 0) return setError('先填 API Key');
 
@@ -194,7 +191,7 @@ export function ProvidersCard(): React.ReactElement {
       </View>
       <Text style={styles.hint}>
         {light
-          ? '轻引擎只有一条模型渠道：点「编辑」改 Base URL / Key，账号模式会自动复用登录 token；「获取模型」走 OpenAI 兼容的 /models。'
+          ? '轻引擎也支持第三方模型：选目录填 Key，或自定义 Base URL；保存后自动切到该渠道，账号登录的 token 会继续复用。'
           : '除 DeepSeek 外的模型都从这里加：第三方提供商选目录，自定义 API 自己填协议和地址。'}
       </Text>
 
@@ -226,7 +223,6 @@ export function ProvidersCard(): React.ReactElement {
 
       {draft ? (
         <View style={styles.form}>
-          {light ? null : (
           <View style={styles.tabs}>
             <Pressable
               style={[styles.tab, draft.mode === 'catalog' && styles.tabActive]}
@@ -247,7 +243,6 @@ export function ProvidersCard(): React.ReactElement {
               </Text>
             </Pressable>
           </View>
-          )}
 
           {draft.mode === 'catalog' ? (
             <>
@@ -430,9 +425,13 @@ export function ProvidersCard(): React.ReactElement {
             disabled={busy !== null}
           />
         </View>
-      ) : light ? null : (
+      ) : (
         <View style={styles.actions}>
-          <Btn label="添加模型提供商" onPress={() => openNew('catalog')} style={{ flex: 1 }} />
+          <Btn
+            label={light ? '设置模型渠道' : '添加模型提供商'}
+            onPress={() => openNew('catalog')}
+            style={{ flex: 1 }}
+          />
         </View>
       )}
 

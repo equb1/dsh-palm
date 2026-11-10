@@ -4,10 +4,7 @@
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
   <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK"/>
-  <uses-permission
-      android:name="android.permission.NEARBY_WIFI_DEVICES"
-      android:usesPermissionFlags="neverForLocation"
-      tools:targetApi="33"/>
+  <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" tools:targetApi="33"/>
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
@@ -26,7 +23,10 @@
     </intent>
   </queries>
   <application android:name=".MainApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="true" android:theme="@style/AppTheme" android:supportsRtl="true" android:enableOnBackInvokedCallback="false" android:usesCleartextTraffic="true" android:fullBackupContent="@xml/secure_store_backup_rules" android:dataExtractionRules="@xml/secure_store_data_extraction_rules">
-    <meta-data android:name="expo.modules.updates.ENABLED" android:value="false"/>
+    <meta-data android:name="expo.modules.updates.ENABLED" android:value="true"/>
+    <meta-data android:name="expo.modules.updates.EXPO_UPDATE_URL" android:value="https://u.expo.dev/ad6383fb-4e39-4086-b79a-789f22d84eba"/>
+    <meta-data android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="@string/expo_runtime_version"/>
+    <meta-data android:name="expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY" android:value="{&quot;expo-channel-name&quot;:&quot;production&quot;}"/>
     <meta-data android:name="expo.modules.updates.ENABLE_BSDIFF_PATCH_SUPPORT" android:value="true"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
@@ -41,7 +41,6 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="dshpalm"/>
       </intent-filter>
-      <!-- 分享菜单：文字进输入框，图片/文档由原生收件复制进 workspace/uploads -->
       <intent-filter android:label="锦囊">
         <action android:name="android.intent.action.SEND"/>
         <category android:name="android.intent.category.DEFAULT"/>
@@ -56,48 +55,20 @@
         <data android:mimeType="*/*"/>
       </intent-filter>
     </activity>
-    <service
-      android:name=".host.HostService"
-      android:exported="false"
-      android:foregroundServiceType="dataSync" />
-
-    <!-- 桌面常驻桌宠悬浮窗 -->
-    <service
-      android:name=".system.FloatPetService"
-      android:exported="false" />
-
-    <!-- 桌面小组件半透明快速输入浮层 -->
-    <activity
-      android:name=".system.QuickSearchActivity"
-      android:theme="@style/Theme.Dsh.TranslucentDialog"
-      android:exported="false"
-      android:windowSoftInputMode="stateVisible|adjustResize" />
-
-    <!-- M3.3：快捷设置磁贴 -->
-    <service
-      android:name=".system.DshTileService"
-      android:exported="true"
-      android:label="@string/app_name"
-      android:icon="@drawable/ic_dsh_tile"
-      android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+    <activity android:name=".system.QuickSearchActivity" android:theme="@style/Theme.Dsh.TranslucentDialog" android:exported="false" android:windowSoftInputMode="stateVisible|adjustResize"/>
+    <service android:name=".host.HostService" android:exported="false" android:foregroundServiceType="dataSync"/>
+    <service android:name=".system.FloatPetService" android:exported="false"/>
+    <service android:name=".system.DshTileService" android:exported="true" android:label="@string/app_name" android:icon="@drawable/ic_dsh_tile" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
       <intent-filter>
-        <action android:name="android.service.quicksettings.action.QS_TILE" />
+        <action android:name="android.service.quicksettings.action.QS_TILE"/>
       </intent-filter>
-      <meta-data
-        android:name="android.service.quicksettings.ACTIVE_TILE"
-        android:value="true" />
+      <meta-data android:name="android.service.quicksettings.ACTIVE_TILE" android:value="true"/>
     </service>
-
-    <!-- M3.3：桌面小组件 -->
-    <receiver
-      android:name=".system.DshWidgetProvider"
-      android:exported="true">
+    <receiver android:name=".system.DshWidgetProvider" android:exported="true">
       <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
       </intent-filter>
-      <meta-data
-        android:name="android.appwidget.provider"
-        android:resource="@xml/dsh_widget_info" />
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/dsh_widget_info"/>
     </receiver>
   </application>
 </manifest>

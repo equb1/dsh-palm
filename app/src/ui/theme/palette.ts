@@ -362,23 +362,29 @@ export const motion = {
     emphasis: Easing.inOut(Easing.quad),
   },
   spring: {
-    /** 页面 push/pop：约 300ms 收敛，临界阻尼，不 overshoot */
+    /**
+     * 页面 push/pop：约 300ms 收敛，临界阻尼，不 overshoot。
+     *
+     * 注意：这些动画驱动的都是 0..1 的归一化进度（不是像素），所以静止阈值
+     * 必须按 0..1 取。之前误用了 0.5（相当于半个屏幕），RN 认为“离目标还差
+     * 50% 就已经静止”，抽屉/弹层就会停在任意宽度。
+     */
     page: {
       stiffness: 600,
       damping: 44,
       mass: 0.9,
       overshootClamping: true,
-      restDisplacementThreshold: 0.5,
-      restSpeedThreshold: 0.5,
+      restDisplacementThreshold: 0.001,
+      restSpeedThreshold: 0.001,
     },
-    /** 抽屉/底部弹层：跟手松手后约 300ms 收敛 */
+    /** 抽屉/底部弹层：跟手松手后约 300ms 收敛（0..1 进度） */
     sheet: {
       stiffness: 700,
       damping: 46,
       mass: 0.9,
       overshootClamping: true,
-      restDisplacementThreshold: 0.5,
-      restSpeedThreshold: 0.5,
+      restDisplacementThreshold: 0.001,
+      restSpeedThreshold: 0.001,
     },
   },
 } as const;

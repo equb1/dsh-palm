@@ -17,6 +17,7 @@ import {
 import { loadHostCommands, saveHostCommands } from '../lib/hostCmd';
 import { loadAccountToken } from '../lib/accountToken';
 import { humanizeError } from '../lib/errors';
+import { modelReadiness } from '../lib/readiness';
 import {
   createLightHost,
   loadLightConfig,
@@ -43,7 +44,12 @@ import { routeNeedsFullPermission, routeTurn, type RouteTurnResult } from './rou
 import type { WebFrontendTarget } from '../lib/webFrontend';
 import { LocalEngineClient } from '../engine/light/localClient';
 import type { LightHost } from '../engine/light/host';
-import { applyProviderSave, withFreshAccountToken } from '../engine/light/config';
+import {
+  applyProviderSave,
+  DEEPSEEK_DEFAULT,
+  normalizeSetup,
+  withFreshAccountToken,
+} from '../engine/light/config';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
 import { isAppActive, openUrl } from '../lib/platform';
 import {
@@ -278,6 +284,12 @@ export interface AppState {
   prewarmTier: PrewarmTier;
   /** 轻引擎配置页是否打开（HomeScreen 的「配置轻引擎」入口） */
   lightSetupOpen: boolean;
+  /** 设置页直接落到的二级页（账号 / 模型提供商 / 轻引擎）；null = 设置首页 */
+  settingsRoute: 'account' | 'providers' | 'light' | null;
+  /** 当前详情是另一个引擎的只读副本；null = 可发送 */
+  detailReadOnlyEngine: 'light' | 'full' | null;
+  /** 新会话要用的工作区（抽屉里选择） */
+  draftWorkspaceId: string | null;
   /**
    * 一条逻辑会话 → 两个物理会话的映射（1.4）。
    * 列表只显示 lightSessionId；fullSessionId 的会话被隐藏。
@@ -471,6 +483,9 @@ export class Store {
     engine: initialEngineState,
     prewarmTier: initialEngineState.tier,
     lightSetupOpen: false,
+    settingsRoute: null,
+    detailReadOnlyEngine: null,
+    draftWorkspaceId: null,
     links: [],
     sessionPins: {},
     sessionFolders: {},
@@ -524,8 +539,6 @@ export class Store {
   private engineStarted = false;
   /** 冷启动初始化只跑一次；深链要等它结束再切引擎，避免和 BOOT 抢链路 */
   private engineStartInFlight: Promise<void> | null = null;
-  /** 每次冷启动最多自动弹一次配置页，避免用户切到完整模式后还被反复打断 */
-  private lightSetupPrompted = false;
   /** 同一时刻只跑一次 warm；切换/智能预热都走它 */
   private warming: Promise<boolean> | null = null;
   /** 同一时刻只跑一次完整引擎握手（状态轮询和 warm 循环可能同时触发） */
@@ -873,6 +886,7 @@ export class Store {
         },
         workspaceCache: this.state.workspaceCache,
         draftPresetId: this.state.draftPresetId,
+        draftWorkspaceId: this.state.draftWorkspaceId,
         defaultModel: this.state.defaultModel,
         prewarmTier: this.state.prewarmTier,
         links: this.state.links.slice(0, 40),
@@ -904,6 +918,7 @@ export class Store {
           >;
           workspaceCache?: Partial<Record<SessionSource, Workspace[]>>;
           draftPresetId?: string | null;
+          draftWorkspaceId?: string | null;
           defaultModel?: ModelChoice;
           prewarmTier?: PrewarmTier;
           links?: ConversationLink[];
@@ -978,6 +993,9 @@ export class Store {
         }
         if (parsed.draftPresetId && !this.state.draftPresetId) {
           nextPatch.draftPresetId = parsed.draftPresetId;
+        }
+        if (typeof parsed.draftWorkspaceId === 'string') {
+          nextPatch.draftWorkspaceId = parsed.draftWorkspaceId;
         }
         if (parsed.defaultModel && !this.state.defaultModel) {
           nextPatch.defaultModel = parsed.defaultModel;
@@ -1114,8 +1132,18 @@ export class Store {
       const attached = await this.attach(client, 'proot', 'proot', caps);
       this.suppressAutoOpen = false;
       if (!attached) throw new Error(this.state.error ?? '完整引擎握手失败');
-      // 切成功之后旧会话才变只读：失败回退时 currentId 还在，用户能继续用
-      this.patch({ currentId: null });
+      // 不再清空 currentId：切换引擎后会话页要能继续显示原会话，
+      // 由 detailReadOnlyEngine / link.activeSide 决定是否只读。
+      if (this.state.currentId && !this.linkForSession(this.state.currentId)) {
+        const marker = this.state.detailReadOnlyEngine;
+        if (marker === 'full') {
+          // 这个会话本来就属于完整引擎，切过来就恢复可写
+          this.patch({ detailReadOnlyEngine: null });
+        } else if (marker === null && !this.handoffInFlight) {
+          // 当前是轻引擎会话：先标记只读，用户可点「用完整模式继续」
+          this.patch({ detailReadOnlyEngine: 'light' });
+        }
+      }
       return true;
     } catch (err) {
       client.close();
@@ -1161,6 +1189,7 @@ export class Store {
    */
   async connectLight(setup: LightEngineSetup): Promise<void> {
     const keepModalOpen = this.state.connectModalOpen;
+    const previousKind = this.state.engineKind;
     this.patch({ conn: 'connecting', ...(keepModalOpen ? {} : { error: null }) });
     this.lightSetup = setup;
     this.emitEngine({ type: 'LIGHT_CONNECTING' });
@@ -1176,12 +1205,26 @@ export class Store {
       this.lightHost?.close();
       this.lightHost = host;
       this.client = client;
+      // 从完整引擎切回轻引擎时不要自动 reopen 旧完整会话（轻引擎里没有它）
+      this.suppressAutoOpen = true;
       const ok = await this.attach(client, 'light', 'light', caps);
+      this.suppressAutoOpen = false;
       if (ok) {
+        if (this.state.currentId && !this.linkForSession(this.state.currentId)) {
+          const marker = this.state.detailReadOnlyEngine;
+          if (marker === 'light') {
+            // 这个会话本来就属于轻引擎，切回来就恢复可写
+            this.patch({ detailReadOnlyEngine: null });
+          } else if (marker === null && previousKind !== null && previousKind !== 'light') {
+            // 当前是完整引擎会话：在轻引擎里只读
+            this.patch({ detailReadOnlyEngine: 'full' });
+          }
+        }
         await saveLightConfig(setup);
         await saveLightSetupSkipped(false);
       }
     } catch (err) {
+      this.suppressAutoOpen = false;
       client?.close();
       host?.close();
       // 失败别停在「连接中」；清掉引擎链路，回退逻辑才会重新连
@@ -1418,7 +1461,7 @@ export class Store {
   }
 
   /** 点会话行：按来源切到对应引擎（轻 / 本机完整 / 电脑），再打开 */
-  async openSessionRow(id: string, source: SessionSource): Promise<void> {
+  async openSessionRow(id: string, source: SessionSource, summary?: SessionSummary): Promise<void> {
     const current = this.sessionSource();
     if (current !== source) {
       if (source === 'computer') {
@@ -1435,8 +1478,10 @@ export class Store {
         if (this.state.engineKind === 'remote') {
           await this.disconnectAndSwitchToLight();
         } else if (this.state.engineKind !== 'light') {
-          const ok = await this.switchEngine('light');
-          if (!ok) return;
+          // 正在用完整引擎时打开轻引擎会话：不强制切回去，先显示只读副本；
+          // 会话页可以点「用完整模式继续」把上下文交接过来。
+          await this.openForeignSession(id, 'phone-light', summary);
+          return;
         }
       } else {
         // phone-proot
@@ -1451,6 +1496,49 @@ export class Store {
     }
     if (!this.client) return;
     await this.openSession(id);
+  }
+
+  /**
+   * 打开“另一个引擎”的会话：当前引擎不切换，只展示缓存正文并标记只读。
+   * 会话页的「用完整模式继续」会把轻引擎上下文交接到完整引擎。
+   */
+  private async openForeignSession(
+    id: string,
+    source: SessionSource,
+    summaryHint?: SessionSummary,
+  ): Promise<void> {
+    this.flushDeltas();
+    this.pendingDelta.clear();
+    const cached = this.detailCache.get(id) ?? this.baseDetails.get(id);
+    const summary =
+      summaryHint ??
+      this.state.sessionCache[source].find((session) => session.id === id) ??
+      this.state.sessions.find((session) => session.id === id);
+    const detail: SessionDetail =
+      cached ??
+      (summary
+        ? { ...summary, turns: [], contract: { tools: [], net: 'allow' } }
+        : {
+            id,
+            title: '会话',
+            presetId: this.state.draftPresetId ?? 'standard',
+            workspaceId: '',
+            hostId: this.state.caps?.host.id ?? 'local',
+            status: 'idle',
+            updatedAt: Date.now(),
+            unread: 0,
+            preview: '',
+            turns: [],
+            contract: { tools: [], net: 'allow' },
+          });
+    this.patch({
+      currentId: id,
+      detail,
+      detailReadOnlyEngine: source === 'phone-light' ? 'light' : 'full',
+      detailLoading: false,
+      busy: false,
+      error: null,
+    });
   }
 
   /**
@@ -1752,6 +1840,31 @@ export class Store {
     }
   }
 
+  /**
+   * 把当前会话交接到完整引擎继续。
+   *
+   * 用户点会话页的引擎角标 / 只读副本上的「用完整模式继续」时调用：
+   * - 已在轻引擎：走正常的 light → full 交接（建完整会话、发 seed）；
+   * - 已在完整引擎（只读副本）：不再切换引擎，只用缓存正文补建完整会话。
+   */
+  async continueCurrentInFull(): Promise<boolean> {
+    const logicalId = this.state.currentId;
+    if (!logicalId) return this.switchEngine('full');
+    const link = this.linkForSession(logicalId);
+    if (link?.status === 'active' && link.activeSide === 'full') {
+      return this.state.engine.mode === 'full' ? true : this.switchEngine('full');
+    }
+    if (!this.state.detail) return this.switchEngine('full');
+    return this.beginHandoff({
+      logicalId,
+      reason: 'manual_switch',
+      userText: lastUserTextFromDetail(this.state.detail),
+      ...(lastAssistantTextFromDetail(this.state.detail)
+        ? { assistantText: lastAssistantTextFromDetail(this.state.detail) }
+        : {}),
+    });
+  }
+
   async openSession(id: string): Promise<void> {
     if (!this.client) return;
     this.noteUserActivity();
@@ -1800,6 +1913,7 @@ export class Store {
       currentId: logicalId,
       detail: cached ?? fallback,
       detailLoading: !cached,
+      detailReadOnlyEngine: null,
     });
 
     if (link) {
@@ -1928,7 +2042,7 @@ export class Store {
       // 只有轻引擎侧的 detail 才值得作为 merge 基底；完整侧不要反向覆盖
       if (!link || link.activeSide === 'light') this.baseDetails.set(currentId, detail);
     }
-    this.patch({ detail: null, currentId: null, detailLoading: false });
+    this.patch({ detail: null, currentId: null, detailLoading: false, detailReadOnlyEngine: null });
   }
 
   async createSession(presetId: string, workspaceId?: string): Promise<void> {
@@ -2061,7 +2175,7 @@ export class Store {
   }
 
   closeSettings(): void {
-    this.patch({ view: 'main' });
+    this.patch({ view: 'main', settingsRoute: null, lightSetupOpen: false });
   }
 
   async refreshCredentials(ref = 'DEEPSEEK_API_KEY'): Promise<void> {
@@ -2156,11 +2270,41 @@ export class Store {
 
   /** M2.5：把 ProvidersCard 的保存落到轻引擎单渠道并重连；失败不覆盖旧配置 */
   private async saveLightProvider(input: RequestParams['providers.save']): Promise<void> {
-    if (input.mode !== 'custom') {
-      throw new Error('轻引擎只有一条自定义模型渠道；第三方目录请切完整引擎配置');
+    if (input.mode === 'catalog') {
+      // 第三方目录（OpenRouter / SiliconFlow / OpenAI …）：目录只给默认地址，
+      // 轻引擎用它拉一次模型列表，取第一个可用模型作为单渠道。
+      const entry = this.state.providerCatalog.find((item) => item.id === input.id);
+      if (!entry) throw new Error('没找到这个内置提供商；刷新目录或改用手动配置');
+      const baseURL = (input.baseURL?.trim() || entry.defaultBaseURL || '').replace(/\/+$/, '');
+      if (!baseURL) throw new Error('这个提供商没有默认地址，请手动填写 API 地址');
+      const apiKey = input.apiKey.trim();
+      if (!apiKey) throw new Error('先填 API Key');
+      const models = await this.discoverProviderModels({
+        baseURL,
+        api: 'openai-completions',
+        apiKey,
+      });
+      const model = models[0]?.id;
+      if (!model) throw new Error('这个提供商没有返回可用模型，检查 Key 或换一个地址');
+      const previous = this.lightSetup;
+      const { authMode: _authMode, authToken: _authToken, ...base } = previous ?? DEEPSEEK_DEFAULT;
+      const setup = normalizeSetup({
+        ...base,
+        baseURL,
+        apiKey,
+        model,
+        providerName: entry.displayName || previous?.providerName || entry.id,
+      });
+      await this.connectLight(setup);
+      if (this.state.engineKind !== 'light' || this.state.conn !== 'connected') {
+        this.lightSetup = previous;
+        throw new Error('新渠道没连上，旧配置未覆盖；检查 Base URL / API Key / 模型名');
+      }
+      await this.refreshProviders();
+      void this.refreshModels();
+      return;
     }
-    const setup = this.lightSetup;
-    if (!setup) throw new Error('轻引擎还没配置模型渠道');
+    const setup = this.lightSetup ?? DEEPSEEK_DEFAULT;
     const next = applyProviderSave(setup, {
       mode: 'custom',
       baseURL: input.baseURL,
@@ -2169,10 +2313,11 @@ export class Store {
       ...(input.displayName ? { displayName: input.displayName } : {}),
       ...(input.apiKey ? { apiKey: input.apiKey } : {}),
     });
+    const previous = this.lightSetup;
     await this.connectLight(next);
     if (this.state.engineKind !== 'light' || this.state.conn !== 'connected') {
       // connectLight 只有连上才写 SecureStore，这里恢复内存里的旧 setup 以免下次重连读错
-      this.lightSetup = setup;
+      this.lightSetup = previous;
       throw new Error('新渠道没连上，旧配置未覆盖；检查 Base URL / API Key / 模型名');
     }
     await this.refreshProviders();
@@ -2224,6 +2369,15 @@ export class Store {
    * 这里只负责把宿主给的 authorizeUrl 交给系统浏览器。
    */
   async startAccountSignIn(): Promise<void> {
+    // 账号登录走完整引擎的浏览器 OAuth；轻引擎在线时先切到完整引擎，
+    // 否则用户会在「账号」页看到一个永远 unsupported 的登录按钮。
+    if (this.state.engineKind === 'light') {
+      const ok = await this.switchEngine('full');
+      if (!ok) {
+        this.setError('账号登录需要完整引擎；完整引擎没启动起来，稍后再试，或先用第三方模型渠道。');
+        return;
+      }
+    }
     if (!this.client) return;
     this.pendingSignIn = true;
     this.openedAttemptId = null;
@@ -2292,6 +2446,12 @@ export class Store {
     this.patch({ draftPresetId: presetId });
   }
 
+  /** 抽屉里展开工作区后选择：下一条新会话用它，不再跳转页面 */
+  setDraftWorkspace(workspaceId: string | null): void {
+    this.patch({ draftWorkspaceId: workspaceId });
+    this.persistUiCache();
+  }
+
   /**
    * 首页输入框直接开聊：用当前选中的锦囊建会话，再把这句话（及暂存附件）发出去。
    * 标题先取这句话的前 18 个字（如果没打字只发了附件，取首个附件文件名），之后可以再让模型改。
@@ -2321,10 +2481,27 @@ export class Store {
       if (this.state.engine.mode === 'starting-proot') {
         this.setError('完整引擎正在启动，请稍候片刻再发送');
       } else if (!this.state.engine.lightReady) {
-        this.setError('轻引擎还没配置或没连上，点首页「配置轻引擎」先填模型渠道');
+        this.setError('还没有可用模型：先在「设置 → DeepSeek 账号 / 模型提供商」登录或配置渠道，再发送。');
       } else {
         this.setError('引擎正在唤醒中，请稍候片刻再发送');
       }
+      return false;
+    }
+    // 连上了但没有凭据：不要发起注定 MISSING_CREDENTIAL 的请求，也别吐底层日志
+    const readiness = modelReadiness({
+      accountStatus: this.state.account?.status,
+      credentials: this.state.credentials,
+      providers: this.state.providers,
+      engineKind: this.state.engineKind,
+      lightReady: this.state.engine.lightReady,
+    });
+    if (
+      !readiness.modelReady &&
+      this.state.engineKind === 'proot'
+    ) {
+      this.setError(
+        '还没有可用的模型：先登录 DeepSeek 账号，或在「设置 → 模型提供商 / API Key」配置渠道，再发送消息。',
+      );
       return false;
     }
     // 预路由在创建会话之前：错误/不支持时不建会话、不丢草稿
@@ -2367,6 +2544,7 @@ export class Store {
     try {
       const { session } = await this.client.request('sessions.create', {
         presetId,
+        ...(this.state.draftWorkspaceId ? { workspaceId: this.state.draftWorkspaceId } : {}),
         title: rawTitle.length > 18 ? `${rawTitle.slice(0, 18)}…` : rawTitle,
       });
       await this.openSession(session.id);
@@ -2607,10 +2785,13 @@ export class Store {
       this.setError('交接失败：当前会话不在轻引擎里');
       return false;
     }
-    const guard = canSwitch(this.state.engine, 'full');
-    if (!guard.ok) {
-      this.setError(guard.reason ?? '现在不能切换到完整引擎');
-      return false;
+    const alreadyFull = this.state.engine.mode === 'full';
+    if (!alreadyFull) {
+      const guard = canSwitch(this.state.engine, 'full');
+      if (!guard.ok) {
+        this.setError(guard.reason ?? '现在不能切换到完整引擎');
+        return false;
+      }
     }
     if (!this.engineDeps.hostAvailable) {
       this.setError('这台设备不支持完整引擎（需要原生构建，Expo Go 不行）');
@@ -2633,18 +2814,35 @@ export class Store {
         ...(input.files && input.files.length > 0 ? { files: input.files } : {}),
       });
     } catch (error) {
-      this.setError(`交接包生成失败：${humanizeError(error)}`);
-      return false;
+      // 轻引擎链路已经断开（典型：先切到了完整引擎，再从抽屉点开轻引擎会话）：
+      // 用当前缓存的会话正文在本地生成交接包，不要求用户先切回轻引擎。
+      if (this.state.engineKind === 'light') {
+        this.setError(`交接包生成失败：${humanizeError(error)}`);
+        return false;
+      }
+      handoff = buildHandoff({
+        conversationId: logicalId,
+        reason: input.reason,
+        from: { engine: 'light', sessionId: sourceDetail.id },
+        presetId: sourceDetail.presetId,
+        permission: { source: sourceDetail.permission ?? 'workspace-write' },
+        history: turnDetailToHistory(sourceDetail.turns),
+        turns: sourceDetail.turns,
+        ...(input.userText ? { userText: input.userText } : {}),
+        ...(input.assistantText ? { assistantText: input.assistantText } : {}),
+        ...(input.missing && input.missing.length > 0 ? { missing: input.missing } : {}),
+        ...(input.files && input.files.length > 0 ? { files: input.files } : {}),
+      });
     }
 
     // 两阶段切换：失败时 switchEngine 自己会回轻引擎，源会话只读保留
-    const switched = await this.switchToFullForHandoff();
+    const switched = alreadyFull ? true : await this.switchToFullForHandoff();
     if (!switched) {
       this.patch({ currentId: sourceId, detail: sourceDetail, busy: false });
       this.setError('完整引擎没启动起来，已留在轻引擎；草稿还在');
       return false;
     }
-    // connectLocal 会把 currentId 清空，这里先把逻辑会话接回来
+    // 切换过程中 currentId 可能被引擎状态收口，这里把逻辑会话接回来
     this.patch({ currentId: sourceId, detail: sourceDetail, busy: true, error: null });
 
     let fullSessionId: string | undefined;
@@ -2652,7 +2850,9 @@ export class Store {
     try {
       /* 建会话之前先确认完整引擎有模型；没有就回滚，不留下不可用的会话 */
       const models = await this.requestFull('models.list', {});
-      if (models.models.length === 0) throw new Error('完整引擎没有可用模型，交接已取消');
+      if (models.models.length === 0) {
+        throw new Error('完整引擎还没有可用模型：先在「设置 → DeepSeek 账号 / 模型提供商」登录或配置 Key，再切过来');
+      }
 
       const sourceModel = handoff.model.source;
       const matched = sourceModel
@@ -2769,6 +2969,7 @@ export class Store {
         detail: merged ?? sourceDetail,
         busy: running,
         error: null,
+        detailReadOnlyEngine: null,
       });
       if (merged) {
         this.detailCache.set(logicalId, merged);
@@ -3265,7 +3466,7 @@ export class Store {
             this.closeLightSetup();
             this.closeSettings();
           } else {
-            this.openLightSetup();
+            this.setError('完整引擎没启动起来；可以稍后重试，或在设置里登录账号 / 配置模型渠道。');
           }
           return;
         }
@@ -3295,13 +3496,25 @@ export class Store {
     if (tier === 'smart') void this.maybeSmartPrewarm();
   }
 
-  /** HomeScreen 的「配置轻引擎」入口：打开 M1 实验室的轻引擎页 */
+  /**
+   * 首页/抽屉的“去配置”入口：打开设置并直接落在账号 / 模型提供商页。
+   * 不再把用户扔进 M1 实验室。
+   */
+  openSettingsPage(route: 'account' | 'providers' | 'light'): void {
+    this.patch({ view: 'settings', settingsRoute: route, lightSetupOpen: route === 'light', error: null });
+  }
+
+  closeSettingsPage(): void {
+    this.patch({ settingsRoute: null, lightSetupOpen: false });
+  }
+
+  /** HomeScreen 的「配置轻引擎」入口：打开轻引擎渠道页（不再叫 M1 实验室） */
   openLightSetup(): void {
-    this.patch({ view: 'settings', lightSetupOpen: true, error: null });
+    this.openSettingsPage('light');
   }
 
   closeLightSetup(): void {
-    this.patch({ lightSetupOpen: false });
+    this.patch({ lightSetupOpen: false, settingsRoute: null });
   }
 
   /**
@@ -3560,19 +3773,13 @@ export class Store {
     }
     const setup = await this.resolveLightSetup();
     if (!setup) {
-      // 没有渠道 = 轻引擎不可用；先回到未连接态，再引导配置（只自动弹一次）
+      // 没有渠道 = 轻引擎不可用；回到未连接态，由首页横幅引导去账号/模型设置。
+      // 冷启动绝不自动跳到配置页（旧版会直接打开 M1 实验室，体验很突兀）。
       this.patch({ conn: 'closed', engineKind: null });
       this.emitEngine({
         type: 'LIGHT_FAILED',
-        error: '轻引擎还没配置模型渠道：填 Base URL / 模型 / Key，或先用完整模式。',
+        error: '还没有登录账号或配置模型渠道：去「设置 → DeepSeek 账号 / 模型提供商」配置。',
       });
-      if (!this.lightSetupPrompted) {
-        const skipped = await this.engineDeps.loadLightSetupSkipped().catch(() => false);
-        if (!skipped) {
-          this.lightSetupPrompted = true;
-          this.openLightSetup();
-        }
-      }
       return false;
     }
     this.lightSetup = setup;

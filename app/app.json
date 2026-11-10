@@ -2,12 +2,22 @@
   "expo": {
     "name": "锦囊",
     "slug": "dsh-palm",
-    "version": "0.2.2",
+    "version": "0.2.3",
+    "runtimeVersion": "0.2.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "dshpalm",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#0B0D10",
+    "updates": {
+      "url": "https://u.expo.dev/ad6383fb-4e39-4086-b79a-789f22d84eba",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -29,6 +39,12 @@
     },
     "plugins": [
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ad6383fb-4e39-4086-b79a-789f22d84eba"
+      }
+    },
+    "owner": "npcdyc"
   }
 }

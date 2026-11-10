@@ -125,8 +125,26 @@ export function humanizeError(err: unknown): string {
   if (err instanceof LightRequestError) return err.message;
   const raw = err instanceof Error ? err.message : String(err);
 
+  // 没登录 / 没配 Key 时上游会把整段 gateway 错误吐出来；先收成一句人话
+  const lowerRaw = raw.toLowerCase();
+  if (
+    lowerRaw.includes('missing_credential')
+    || lowerRaw.includes('missing-credential')
+    || lowerRaw.includes('missing credential')
+    || lowerRaw.includes('credential-not-found')
+    || lowerRaw.includes('no routable provider')
+    || lowerRaw.includes('provider_not_configured')
+    || lowerRaw.includes('apikey not configured')
+    || lowerRaw.includes('api key not configured')
+  ) {
+    return '当前引擎还没有可用的模型凭据：登录 DeepSeek 账号，或在「设置 → 模型提供商 / API Key」配置渠道后再发送。';
+  }
+
   // 轻引擎/工具已经给了中文人话：原样透传，不要按英文关键字二次翻译
-  if (hasChinese(raw)) return raw.trim();
+  if (hasChinese(raw)) {
+    const text = raw.trim();
+    return text.length > 240 ? `${text.slice(0, 240)}…` : text;
+  }
 
   const m = raw.toLowerCase();
 

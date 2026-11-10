@@ -34,7 +34,7 @@ export function ConnectScreen(): React.ReactElement {
     setScanNote(null);
     try {
       await requestLanPermission();
-      const list = await discoverLanHosts(4000);
+      const list = await discoverLanHosts(10000);
       setLanHosts(list);
       if (list.length === 0) setScanNote('没发现宿主；确认同一 Wi-Fi，或直接手填地址。');
     } finally {
@@ -43,8 +43,10 @@ export function ConnectScreen(): React.ReactElement {
   };
 
   const pickHost = (item: DiscoveredHost): void => {
-    store.setUrl(`ws://${item.host}:${item.port}/ws`);
-    setScanNote(`已填入 ${item.name}；输入配对码后点连接。`);
+    const url = `ws://${item.host}:${item.port}/ws`;
+    store.setUrl(url);
+    setScanNote(`发现 ${item.name}，正在连接…`);
+    void store.connect(url);
   };
 
   return (
@@ -128,7 +130,7 @@ export function ConnectScreen(): React.ReactElement {
                 style={styles.input}
                 value={state.url}
                 onChangeText={(t) => store.setUrl(t)}
-                placeholder="ws://192.168.1.3:8788/ws"
+                placeholder="ws://电脑IP:8788/ws"
                 placeholderTextColor={palette.textFaint}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -197,7 +199,7 @@ export function ConnectScreen(): React.ReactElement {
               <Text style={styles.hintTitle}>先把引擎跑起来</Text>
               <Text style={styles.hintCode}>npm run engine</Text>
               <Text style={styles.hint}>
-                终端会打印一串 ws://192.168.x.x:8788/ws，填到上面。手机和电脑要在同一个 Wi-Fi。
+                终端会打印一串 ws://电脑IP:8787/ws 或 :8788/ws，填到上面。手机和电脑要在同一个 Wi-Fi。
               </Text>
             </View>
             ) : null}

@@ -31,7 +31,7 @@ class LanDiscovery(private val ctx: Context) {
         /** mock 引擎：engine/src/server.ts 默认 8787，只做本地调试，不能当电脑宿主 */
         const val MOCK_PORT = 8787
         private val PROBE_PORTS = intArrayOf(8788, 8787)
-        private const val TIMEOUT_MS = 4_000L
+        private const val TIMEOUT_MS = 10_000L
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -42,8 +42,9 @@ class LanDiscovery(private val ctx: Context) {
     private val found = LinkedHashMap<String, WritableMap>()
     private var resolving = false
     private var finished = false
+    private var finishScheduled = false
     private var multicastLock: WifiManager.MulticastLock? = null
-    private val probePool = Executors.newFixedThreadPool(16)
+    private val probePool = Executors.newFixedThreadPool(64)
 
     fun start(timeoutMs: Long = TIMEOUT_MS, promise: Promise) {
         stopInternal()
@@ -103,20 +104,13 @@ class LanDiscovery(private val ctx: Context) {
             if (parts.size != 4) return@execute
             val prefix = "${parts[0]}.${parts[1]}.${parts[2]}."
 
-            // 优先探测网关、本机相邻 IP 及常见 IP
+            // 扫完整 C 段：只扫本机前后 20 个 / 2..60 会漏掉 .100、.150 这类地址
             val currentLast = parts[3].toIntOrNull() ?: 1
             val targets = mutableListOf<String>()
             targets.add("${prefix}1")
-            for (offset in 1..20) {
-                val up = currentLast + offset
-                if (up in 2..254) targets.add("$prefix$up")
-                val down = currentLast - offset
-                if (down in 2..254) targets.add("$prefix$down")
-            }
-            // 补齐其余常用 IP
-            for (i in 2..60) {
-                val ip = "$prefix$i"
-                if (!targets.contains(ip)) targets.add(ip)
+            for (last in 2..254) {
+                if (last == currentLast) continue
+                targets.add("$prefix$last")
             }
 
             for (targetIp in targets) {
@@ -127,7 +121,7 @@ class LanDiscovery(private val ctx: Context) {
                         if (finished) return@execute
                         try {
                             val socket = Socket()
-                            socket.connect(InetSocketAddress(targetIp, port), 180)
+                            socket.connect(InetSocketAddress(targetIp, port), 450)
                             socket.close()
                             if (!isRealBridge(targetIp, port)) return@execute
                             main.post {
@@ -153,8 +147,8 @@ class LanDiscovery(private val ctx: Context) {
         return try {
             val url = java.net.URL("http://$host:$port/health")
             conn = url.openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 280
-            conn.readTimeout = 280
+            conn.connectTimeout = 500
+            conn.readTimeout = 500
             conn.requestMethod = "GET"
             if (conn.responseCode !in 200..299) return false
             val body = conn.inputStream.bufferedReader().use { it.readText() }
@@ -228,6 +222,16 @@ class LanDiscovery(private val ctx: Context) {
             putString("version", "1")
         }
         found[id] = map
+        scheduleEarlyFinish()
+    }
+
+    /** 找到第一台先别让用户干等 10 秒：给 mDNS 1.2 秒补齐同网段其他宿主就返回。 */
+    private fun scheduleEarlyFinish() {
+        if (finishScheduled || finished) return
+        finishScheduled = true
+        main.postDelayed({
+            if (!finished) finish()
+        }, 1200)
     }
 
     private fun drain() {
@@ -259,17 +263,23 @@ class LanDiscovery(private val ctx: Context) {
         fun text(key: String): String? = attrs[key]?.toString(Charsets.UTF_8)?.takeIf { it.isNotBlank() }
         val host = info.host?.hostAddress ?: return
         if (info.port <= 0) return
+        // 不要把自己（手机上的 proot 桥）当成“电脑宿主”
+        val kind = text("kind") ?: "desktop"
+        if (kind == "phone") return
+        val local = getLocalIpv4Address()
+        if (host == local || host.startsWith("127.") || host == "::1" || host == "localhost") return
         val id = text("id") ?: info.serviceName ?: "$host:${info.port}"
         val map: WritableMap = Arguments.createMap().apply {
             putString("id", id)
             putString("name", text("name") ?: info.serviceName ?: host)
             putString("host", host)
             putInt("port", info.port)
-            putString("kind", text("kind") ?: "desktop")
+            putString("kind", kind)
             putString("fingerprint", text("fp") ?: "")
             putString("version", text("v") ?: "1")
         }
         found[id] = map
+        scheduleEarlyFinish()
     }
 
     private fun finish() {

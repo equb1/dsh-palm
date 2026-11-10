@@ -39,12 +39,23 @@ function localAddresses(): string[] {
 }
 
 export function advertiseBridge(input: AdvertiseInput): BridgeAdvertiser | null {
-  let mdns: ReturnType<typeof createMdns> | null = null;
-  try {
-    // 不能只用 loopback，否则手机上永远发现不了桌面桥；默认走所有网卡。
-    mdns = createMdns({ loopback: false });
-  } catch {
-    return null;
+  const sockets: Array<ReturnType<typeof createMdns>> = [];
+  const addresses = localAddresses();
+  // Windows/macOS 经常有 WSL / Hyper-V / Clash 等虚拟网卡：只绑默认接口时
+  // 多播包可能永远到不了 Wi-Fi。给每个非 loopback IPv4 各开一个 socket。
+  for (const address of addresses) {
+    try {
+      sockets.push(createMdns({ loopback: false, interface: address }));
+    } catch {
+      /* 单个网卡不支持组播时继续试下一张 */
+    }
+  }
+  if (sockets.length === 0) {
+    try {
+      sockets.push(createMdns({ loopback: false }));
+    } catch {
+      return null;
+    }
   }
 
   const instance = `${safeLabel(input.hostId)}.${SERVICE}`;
@@ -70,57 +81,63 @@ export function advertiseBridge(input: AdvertiseInput): BridgeAdvertiser | null 
       },
       { name: instance, type: 'TXT', ttl, data: txt },
     ];
-    for (const address of localAddresses()) {
+    for (const address of addresses) {
       records.push({ name: target, type: 'A', ttl, data: address });
     }
     return records;
   };
 
-  const respond = (): void => {
+  const respond = (mdns: ReturnType<typeof createMdns>): void => {
     try {
-      mdns?.respond({ answers: answers() });
+      mdns.respond({ answers: answers() });
     } catch {
       /* 组播被系统拒绝时不影响桥本身 */
     }
   };
 
-  mdns.on('query', (packet) => {
-    const questions = packet.questions ?? [];
-    const asked = questions.some(
-      (q) =>
-        q.name === SERVICE
-        || q.name === SERVICE_ENUM
-        || q.name.toLowerCase() === instance.toLowerCase()
-        || q.name.toLowerCase() === target,
-    );
-    if (!asked) return;
-    const records = answers();
-    if (questions.some((q) => q.name === SERVICE_ENUM)) {
-      records.unshift({ name: SERVICE_ENUM, type: 'PTR', ttl, data: SERVICE });
-    }
-    try {
-      mdns?.respond({ answers: records });
-    } catch {
-      /* ignore */
-    }
-  });
-  mdns.on('error', () => {
-    /* 网络切换/组播不可用时静默；手动地址仍然可用 */
-  });
+  for (const mdns of sockets) {
+    mdns.on('query', (packet) => {
+      const questions = packet.questions ?? [];
+      const asked = questions.some(
+        (q) =>
+          q.name === SERVICE
+          || q.name === SERVICE_ENUM
+          || q.name.toLowerCase() === instance.toLowerCase()
+          || q.name.toLowerCase() === target,
+      );
+      if (!asked) return;
+      const records = answers();
+      if (questions.some((q) => q.name === SERVICE_ENUM)) {
+        records.unshift({ name: SERVICE_ENUM, type: 'PTR', ttl, data: SERVICE });
+      }
+      try {
+        mdns.respond({ answers: records });
+      } catch {
+        /* ignore */
+      }
+    });
+    mdns.on('error', () => {
+      /* 网络切换/组播不可用时静默；手动地址仍然可用 */
+    });
+    respond(mdns);
+  }
 
-  respond();
-  const timer = setInterval(respond, 30_000);
+  const timer = setInterval(() => {
+    for (const mdns of sockets) respond(mdns);
+  }, 30_000);
   (timer as unknown as { unref?: () => void }).unref?.();
 
   return {
     close: () => {
       clearInterval(timer);
-      try {
-        mdns?.destroy();
-      } catch {
-        /* ignore */
+      for (const mdns of sockets) {
+        try {
+          mdns.destroy();
+        } catch {
+          /* ignore */
+        }
       }
-      mdns = null;
+      sockets.length = 0;
     },
   };
 }

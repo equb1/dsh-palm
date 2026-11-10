@@ -27,7 +27,7 @@ export function HostScreen({ onClose }: { onClose: () => void }): React.ReactEle
     setScanNote(null);
     try {
       await requestLanPermission();
-      const hosts = await discoverLanHosts(4_000);
+      const hosts = await discoverLanHosts(10_000);
       setLanHosts(hosts);
       if (hosts.length === 0) setScanNote('没有发现宿主；确认同一 Wi-Fi，或回连接页手动填地址。');
     } finally {

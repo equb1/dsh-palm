@@ -159,7 +159,7 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
     <View style={styles.root}>
       <View style={styles.header}>
         <IconButton glyph="‹" label="返回" onPress={onClose} />
-        <Text style={styles.title}>M1 实验室 · 轻引擎</Text>
+        <Text style={styles.title}>轻引擎渠道</Text>
         <Pill style={{ marginLeft: 'auto' }}>
           <Text style={[styles.status, connected && { color: palette.ok }]}>
             {connected ? '已连接' : state.conn === 'connecting' ? '连接中' : '未连接'}

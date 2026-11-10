@@ -10,6 +10,7 @@
  * （1.3 起附件由 App 原生收件落进 /workspace/uploads，只用 files 传路径。）
  */
 import { EngineProtocolError } from '../../lib/client';
+import { loadAccountToken } from '../../lib/accountToken';
 import { AttachmentPathError, promptWithFiles } from '../../lib/attachments/prompt';
 import { listProviderModels } from './catalog';
 import {
@@ -19,6 +20,7 @@ import {
   type ApprovalResolution,
   type Capabilities,
   type CapabilityContract,
+  type CatalogProvider,
   type EngineEvent,
   type EventName,
   type EventPayloads,
@@ -121,6 +123,24 @@ const PERMISSIONS: PermissionOption[] = [
   { value: 'read-only', name: '只读', description: '不能执行命令、不能写文件' },
   { value: 'workspace-write', name: '工作区（推荐）', description: '命令和写入每次都要你批准' },
   { value: 'danger-full-access', name: '完整', description: '不再逐次批准；仍只能访问 /workspace' },
+];
+
+/**
+ * 轻引擎内置的第三方目录（OpenAI 兼容）。
+ * 完整引擎从宿主 `llm/listConfigurableProviders` 拿目录；轻引擎没有宿主，
+ * 这里给一份常用列表，用户选一个填 Key 就能用。
+ */
+const PROVIDER_CATALOG: CatalogProvider[] = [
+  { id: 'deepseek', displayName: 'DeepSeek', defaultBaseURL: 'https://api.deepseek.com/v1' },
+  { id: 'openai', displayName: 'OpenAI', defaultBaseURL: 'https://api.openai.com/v1' },
+  { id: 'openrouter', displayName: 'OpenRouter', defaultBaseURL: 'https://openrouter.ai/api/v1' },
+  { id: 'siliconflow', displayName: 'SiliconFlow 硅基流动', defaultBaseURL: 'https://api.siliconflow.cn/v1' },
+  { id: 'moonshot', displayName: 'Moonshot Kimi', defaultBaseURL: 'https://api.moonshot.cn/v1' },
+  { id: 'zhipu', displayName: '智谱 GLM', defaultBaseURL: 'https://open.bigmodel.cn/api/paas/v4' },
+  { id: 'dashscope', displayName: '通义千问 DashScope', defaultBaseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+  { id: 'groq', displayName: 'Groq', defaultBaseURL: 'https://api.groq.com/openai/v1' },
+  { id: 'mistral', displayName: 'Mistral', defaultBaseURL: 'https://api.mistral.ai/v1' },
+  { id: 'together', displayName: 'Together AI', defaultBaseURL: 'https://api.together.xyz/v1' },
 ];
 
 const APPROVAL_TIMEOUT = 5 * 60_000;
@@ -909,13 +929,30 @@ export class LightHost {
         });
       },
       'credentials.unset': async () => ({ ok: true as const }),
-      'account.state': async () => ({
-        account: {
-          status: 'signed-out' as const,
-          attempt: null,
-          links: { usageUrl: 'https://platform.deepseek.com/usage', topUpUrl: 'https://platform.deepseek.com/top_up' },
-        },
-      }),
+      'account.state': async () => {
+        // 轻引擎不代表“没登录”：本机 <filesDir>/home/.dsh/.credentials.yaml 里
+        // 有 DeepSeek 账号 token 时，抽屉/设置页必须和完整引擎显示一致。
+        const token = await loadAccountToken();
+        if (token) {
+          return {
+            account: {
+              status: 'credential-stored' as const,
+              attempt: null,
+              links: {
+                usageUrl: 'https://platform.deepseek.com/usage',
+                topUpUrl: 'https://platform.deepseek.com/top_up',
+              },
+            },
+          };
+        }
+        return {
+          account: {
+            status: 'signed-out' as const,
+            attempt: null,
+            links: { usageUrl: 'https://platform.deepseek.com/usage', topUpUrl: 'https://platform.deepseek.com/top_up' },
+          },
+        };
+      },
       'account.signIn': async () => {
         throw new EngineProtocolError({
           code: 'unsupported',
@@ -939,7 +976,7 @@ export class LightHost {
           },
         ],
       }),
-      'providers.catalog': async () => ({ providers: [] }),
+      'providers.catalog': async () => ({ providers: PROVIDER_CATALOG }),
       'providers.discover': async ({
         baseURL,
         api,
