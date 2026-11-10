@@ -863,3 +863,34 @@
 - 处理：抽屉动画只留 Home 一个 owner（`drawer` 状态 effect）；`SessionDrawer` 收到 `progress`
   时只消费、不再 spring；打开/关闭阈值与面板宽度抽到 `ui/drawerGeometry.ts`，两边共用。
 - 验证：`test/drawer-geometry.test.ts` 覆盖 clamp/阈值；`npm run verify` 337 pass。
+
+### I31. 桌面小组件冷启动提问：App 打开了却没有会话（2026-11-10）
+
+- 现象：App 被杀后，从桌面小组件快速输入一句问题并发送，App 被拉起，但既没有新建会话也没有回复。
+- 原因：`App.tsx` 的两段 effect 同时启动——`engineStart()` 还在 `hydrateLocalCache → connectLight`，
+  深链已经调用 `store.startWith(draft)`；此时 `client=null` / `conn!=='connected'`，`startWith`
+  直接返回 false，消息被吞。
+- 处理：`startWith()` 开头先 `await engineStartInFlight/engineStart()`；App 冷启动前先读
+  `Linking.getInitialURL()`，遇到 `source=widget` 调 `noteLightBootRequest()`，让本次启动
+  即使之前选过「先用完整模式」也不拉 proot。桌面提问用 `preferLight: true`，
+  失败时把原话放回首页输入框。
+- 验证：`test/pet-pack.test.ts` 锁资源契约；真机步骤见本文件 M3.3 / AI-TASKS。
+
+### I32. 桌面小组件弹窗浮在 App 上（2026-11-10）
+
+- 现象：App 在后台时点小组件搜索框，快速输入卡片下面垫着刚才的 App 界面，看起来小组件浮在 App 上。
+- 原因：`QuickSearchActivity` 用的是半透明主题，但没声明 `taskAffinity`；Android 默认与
+  `MainActivity` 共用任务栈，`FLAG_ACTIVITY_NEW_TASK` 会把整个后台任务栈拉到前台再压上弹窗。
+- 处理：Manifest 给 `QuickSearchActivity` 加 `android:taskAffinity=""`、
+  `launchMode="singleInstance"`、`excludeFromRecents="true"`、`noHistory="true"`。
+  弹窗跑在自己的空亲和栈里，只浮在桌面；发送后才把 `MainActivity` 带到前台。
+- 验证：`sh gradlew :app:compileDebugKotlin` 通过；真机点小组件应回桌面而不是后台 App。
+
+### I33. 品牌桌宠从位图换扁平插画后出现白边（2026-11-10）
+
+- 现象：`design/pet/*-1024.png` 缩到 sprite sheet 后，在深色背景上边缘有一圈浅色毛边。
+- 原因：PIL 的 LANCZOS 会对 RGBA 四个通道独立重采样，透明像素里残留的白色 RGB
+  会渗进描边；旧深色描边素材不明显，新品牌图是奶油色描边，白边更显眼。
+- 处理：生成脚本先做 alpha 预乘（`RGB × A`）再缩放，旋转也在预乘图上做；
+  输出量化到 128 色（FASTOCTREE, 无抖动），16 张 sheet 合计约 940KB。
+- 验证：`test/pet-pack.test.ts` 校验 16 张 sheet 尺寸/帧索引；深色背景 64px 目检无白边。

@@ -521,6 +521,14 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
   UI cache，断线后可「重连」。仍未做多宿主密钥分仓和 E2E。
 - 系统入口：`DshTileService`（QS）、`DshWidgetProvider`（桌面小组件）、通知 ACTION_VIEW
   直达会话/审批；HostService 常驻通知也可点回 App。悬浮球未接。
+- 小组件快速提问：`QuickSearchActivity` 独立 `taskAffinity` + `singleInstance`，
+  不会把后台 App 任务栈带到前台；发送走深链 `source=widget_quick&draft=…&autoSend=1`，
+  `store.startWith(text, { preferLight: true })` 先等 `engineStart`、锁定轻引擎，
+  失败时原话回填输入框。冷启动读 `Linking.getInitialURL()` 时会调
+  `noteLightBootRequest()`，不因历史的「先用完整模式」去拉 proot。
+- 桌宠数据包：`app/assets/pets/xiaoji/pack.json` + 16 张 256px sheet，RN 与原生
+  `FloatPetService` 共用；`scripts/build-pet-sheets.py` 从 `design/pet` 生成，
+  working 会在生成时去掉重复悬浮屏。
 
 > 注：1.5 的「生成文件」弹层（`GeneratedFilesSheet`，只列本会话工具生成的文件、可打开）已落地，
 > 不等于这里的 U8 全功能文件面板（全工作区浏览/上传管理/重命名/搜索/分享）。

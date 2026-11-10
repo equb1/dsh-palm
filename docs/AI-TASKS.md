@@ -27,9 +27,9 @@
 - UI token 已对齐官方 DSH 默认浅色（2026-11-04）：`#FFFFFF` 基底、`#F9FAFB` 侧栏、
   deepseek 蓝 `#4176E6`、8/12/16/20/28 圆角。深色 alias 已接（2026-11-06）：
   `theme/palette.ts` + `ThemeProvider`，支持跟随系统/浅色/深色，存 UI cache。
-- 桌宠帧动画初版（2026-11-08）：`src/pet` 12 态状态机 + `PetRuntime` 帧时钟 +
-  deepy/maid 16 态 sprite sheet + RN/原生悬浮窗逐帧；真机待验收，详见
-  [archive/40](archive/40-handoff-2026-11-08.md)。
+- 桌宠帧动画（2026-11-10）：`src/pet` 12 态状态机 + `PetRuntime` 帧时钟 +
+  品牌桌宠「小寄」16 张 sprite sheet + RN/原生悬浮窗逐帧；素材生成见
+  [BRAND-PET](BRAND-PET.md) 与 `scripts/build-pet-sheets.py`。
 - 输入区按 dsh-go 几何（2026-11-04）：单行 56 / 28 圆角、40 圆键；权限与锦囊在输入框上方，
   模型回顶栏，`+` 走附件面板；B3 前先把 Chat 的回合/思考/工具渲染拆到 `ui/chat/*`。
 - 流式主链路已修（2026-11-04）：canonical run/block id、chunk 缓冲、稳定块 memo、FlatList 和 follow
@@ -71,6 +71,8 @@
 - 品牌资产（2026-11-10）：**Crabstack / 蟹栈**，桌宠**小寄**；App 图标、Android
   adaptive/monochrome 已接入 `app/assets/icon.png`、`adaptive-icon.png`、`monochrome-icon.png`
   与 `res/mipmap-*`；设计源在 `design/`（未入库）。品牌/桌宠交接见 [BRAND-PET](BRAND-PET.md)。
+  小寄 sprite sheet（256px/帧，16 张）与 `pack.json` 在 `app/assets/pets/xiaoji/`，
+  生成脚本 `scripts/build-pet-sheets.py`；旧 deepy/maid 素材已移除。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎附件只给路径，不解析图片/PDF；
   轻引擎无文档编辑、无 pptx（复杂/编辑/pptx 走完整引擎）。
@@ -572,7 +574,13 @@ type AttachmentChipsProps = {
     `heartbeat-stable-2026-11-09.png`；日志 `scratch/wifi-outage-2026-11-09.jsonl`。
   - [x] 30 分钟整段已补：round 13–30 连续 18 轮（见上）；蜂窝切换等同「断 Wi-Fi」——电脑只在
     LAN 里可达，没有第二条路径可测。
-- [ ] **3.3 系统入口**（小组件、悬浮球、QS、通知直达、后台分享）
+- [x] **3.3 系统入口**（小组件、QS、通知直达、桌面悬浮桌宠）
+  - 2026-11-10：桌面小组件「问问小寄」独立任务栈（不再浮在后台 App 上）；
+    快速提问冷启动先等引擎、锁定轻引擎（`noteLightBootRequest` + `preferLight`）；
+    失败时原话回填输入框。品牌桌宠换成「小寄」16 张 sprite sheet（12 态 + 4 交互），
+    原生悬浮窗同步换 pack 与静态兜底图。验证：`npm run verify` 全绿、
+    `sh gradlew :app:compileDebugKotlin` 通过；真机点按路径待装新 APK 验收。
+  - 仍未做：悬浮球、E2E 加密、小组件里展示最近会话。
   - [x] QS 磁贴、桌面小组件、通知 ACTION_VIEW 直达会话/审批、常驻通知可点回 App
   - [ ] 悬浮球（overlay service）未做，设置里明确标注「暂未接入」
   - [x] 后台分享：`ShareInbox` 已有，冷启动/onNewIntent 都接

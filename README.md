@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="site/assets/hero-zh.svg" alt="锦囊 · dsh-palm" width="900">
+  <img src="site/assets/hero-zh.svg" alt="Crabstack · 蟹栈 (dsh-palm)" width="900">
 </p>
 
 <p align="center">
@@ -13,21 +13,21 @@
 <h3 align="center">把 DeepSeek Harness 装进口袋</h3>
 
 <p align="center">
-  锦囊（dsh-palm）是运行在 Android 手机上的 DSH 宿主：默认在本机跑轻量 TypeScript 引擎，打开即用；<br>
+  Crabstack / 蟹栈（dsh-palm）是运行在 Android 手机上的 DSH 宿主：默认在本机跑轻量 TypeScript 引擎，打开即用；<br>
   需要真 Linux、Python 或后台长任务时，再按需拉起 proot 完整引擎。电脑是可选的另一台宿主。
 </p>
 
 <p align="center">
   <a href="https://github.com/equb1/dsh-palm/releases/latest"><img alt="下载 Android APK" src="https://img.shields.io/badge/下载_Android_APK-4B67B4?style=for-the-badge&logo=android&logoColor=white"></a>
   <a href="https://github.com/equb1/dsh-palm"><img alt="GitHub 源码" src="https://img.shields.io/badge/GitHub-源码-181717?style=for-the-badge&logo=github&logoColor=white"></a>
-  <a href="https://equb1.github.io/dsh-palm/"><img alt="落地页" src="https://img.shields.io/badge/落地页-锦囊-2B3245?style=for-the-badge"></a>
+  <a href="https://equb1.github.io/dsh-palm/"><img alt="落地页" src="https://img.shields.io/badge/落地页-Crabstack-2B3245?style=for-the-badge"></a>
 </p>
 
 <p align="center"><sub>非官方项目，与 DeepSeek 无隶属关系。英文说明见 <a href="README.en.md">README.en.md</a>。</sub></p>
 
 ---
 
-## 为什么是锦囊
+## 为什么是 Crabstack / 蟹栈
 
 - **手机是完整宿主。** 不是遥控器：轻引擎、完整引擎、工作区、通知和文件都在手机上跑。
 - **默认快，按需真。** 轻引擎负责随身问答、文档和日常工具；proot 只在需要真 Linux 时出现。
@@ -66,11 +66,12 @@
 - LAN：同一 Wi-Fi 下扫描或手填电脑宿主地址，断线后可重连上次宿主。
 - 插件兼容矩阵：内置 305 个包的离线快照，按 L0–L3 标注运行方式与判定理由；实验室可打开 L0 WebView，L3 走 proot。
 - 系统入口：QS 磁贴、桌面小组件、通知直达会话 / 审批；常驻通知也能回到 App。
+- 桌面小组件点搜索框会在独立栈里弹出小寄快速提问卡；发送固定走轻引擎，并把结果带回 App。
 
 ### 深色主题与桌宠
 
 - 主题跟随系统，也可手动切换浅色 / 深色；聊天、审批、文件、终端和代码块一致。
-- 内置 deepy / maid 逐帧桌宠素材与 12 态状态机，随思考、工作、审批等待切换动作；桌面悬浮窗为实验能力。
+- 品牌桌宠 **小寄（寄居蟹）**：6 组品牌原画驱动 12 态逐帧动画，随思考、工作、审批等待切换动作；桌面悬浮窗为实验能力。
 
 ## 安装
 
