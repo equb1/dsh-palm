@@ -382,6 +382,10 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 | 交互色 | deepseek 蓝 `#4176E6`；浅蓝底 `#E4EDFD`；品牌字标黑 `#0F1115` |
 | 状态 | 成功 `#22C55E`、警告 `#F59E0B`、危险 `#EC1313` |
 
+品牌资产（2026-11-10）：**壳台 / Shellbench**，桌宠**小寄**。App 图标走
+`app/assets/icon.png`；Android adaptive 前景/单色 + `mipmap-anydpi-v26` 在
+`app/android/app/src/main/res/mipmap-*`；设计源与桌宠状态在 `design/`（未入库）。
+
 深色（官方 Neutral 色阶；`palette.ts` 的 `darkColors`）：
 
 | 项 | 值 |
