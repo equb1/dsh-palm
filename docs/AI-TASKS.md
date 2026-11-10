@@ -49,7 +49,7 @@
   usage 累加、turn/end 幂等收尾；单测见 `test/real-assistant-message.test.ts`。
 - 品牌资产（2026-11-10）：**Crabstack / 蟹栈**，桌宠**小寄**；App 图标、Android
   adaptive/monochrome 已接入 `app/assets/icon.png`、`adaptive-icon.png`、`monochrome-icon.png`
-  与 `res/mipmap-*`；设计源在 `design/`（未入库）。
+  与 `res/mipmap-*`；设计源在 `design/`（未入库）。品牌/桌宠交接见 [BRAND-PET](BRAND-PET.md)。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎附件只给路径，不解析图片/PDF；
   轻引擎无文档编辑、无 pptx（复杂/编辑/pptx 走完整引擎）。
@@ -626,9 +626,9 @@ JS：`adb logcat -s ReactNativeJS`；端口：桥 8788 / dsh 8787。
 
 ## 7. 文档维护规则
 
-1. **四篇分工**：REQUIREMENTS（要什么）/ TECHNICAL（怎么做）/ PITFALLS（踩过什么）/ AI-TASKS（做什么）。
+1. **四篇分工**：REQUIREMENTS（要什么）/ TECHNICAL（怎么做）/ PITFALLS（踩过什么）/ AI-TASKS（做什么）。品牌与桌宠的专题交接放 `BRAND-PET.md`，它不替代这四篇。
 2. 任务状态**只改本文件**；TECHNICAL 只写机制，不列任务；REQUIREMENTS 不写实现细节。
 3. 新坑 → 追加 PITFALLS，格式「现象 → 原因 → 处理 → 验证」。
 4. 决定 → REQUIREMENTS §12 或本文件 §4；定了就删“待决”。
 5. **不要写死测试条数**，统一写“以 `npm run verify` 输出为准”。
-6. 旧文档只进 `docs/archive/`，不再引用；新文档互相链接只用四篇之间的相对路径。
+6. 旧文档只进 `docs/archive/`，不再引用；新文档互相链接只用四篇 + 专题文档（如 `BRAND-PET.md`）的相对路径。

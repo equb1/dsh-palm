@@ -79,6 +79,7 @@ cd app/android && sh gradlew :app:assembleDebug
 | [docs/TECHNICAL.md](docs/TECHNICAL.md) | **技术**：架构、协议、dsh API、proot/轻引擎、路由、登录配对、UI、构建 |
 | [docs/PITFALLS.md](docs/PITFALLS.md) | **踩坑**：现象 → 原因 → 处理 → 验证 |
 | [docs/AI-TASKS.md](docs/AI-TASKS.md) | **给 AI 的清单**：任务、工程债、待决、分支/提交规则、命令 |
+| [docs/BRAND-PET.md](docs/BRAND-PET.md) | **品牌与桌宠**：Crabstack/蟹栈、图标资产、热更新边界、小寄状态机、提示词、验收 |
 | [docs/STREAMING-FIX.md](docs/STREAMING-FIX.md) | **专项方案**：长会话流式的根因、改动、验证与剩余项 |
 
 旧文档在 [docs/archive/](docs/archive/)（只读，2026-11-03 归档）。

@@ -384,7 +384,7 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 
 品牌资产（2026-11-10）：**Crabstack / 蟹栈**，桌宠**小寄**。App 图标走
 `app/assets/icon.png`；Android adaptive 前景/单色 + `mipmap-anydpi-v26` 在
-`app/android/app/src/main/res/mipmap-*`；设计源与桌宠状态在 `design/`（未入库）。
+`app/android/app/src/main/res/mipmap-*`；设计源与桌宠状态在 `design/`（未入库）。品牌决策、热更新边界与桌宠状态机见 [BRAND-PET](BRAND-PET.md)。
 
 深色（官方 Neutral 色阶；`palette.ts` 的 `darkColors`）：
 
