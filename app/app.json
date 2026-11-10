@@ -5,6 +5,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "dshpalm",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#0B0D10",
     "assetBundlePatterns": [
@@ -17,7 +18,9 @@
     "android": {
       "package": "cool.cnb.dshpalm",
       "adaptiveIcon": {
-        "backgroundColor": "#0B0D10"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F7F3EA",
+        "monochromeImage": "./assets/monochrome-icon.png"
       },
       "softwareKeyboardLayoutMode": "resize"
     },

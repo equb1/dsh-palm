@@ -47,6 +47,9 @@
   OAuth 授权完成（页面「授权已完成」），回 App 已登录、模型可选（见 M2.7）。
 - 桥补非流式 assistant/message（2026-11-06）：最终全文覆盖同步骤流式块、工具按 callId 去重、
   usage 累加、turn/end 幂等收尾；单测见 `test/real-assistant-message.test.ts`。
+- 品牌资产（2026-11-10）：**壳台 / Shellbench**，桌宠**小寄**；App 图标、Android
+  adaptive/monochrome 已接入 `app/assets/icon.png`、`adaptive-icon.png`、`monochrome-icon.png`
+  与 `res/mipmap-*`；设计源在 `design/`（未入库）。
 - 验证：`npm run verify` 全绿（**数量以命令输出为准**）；APK 可构建；`stream:replay` 10 万 delta 通过。
 - 已知限制：PDF 暂缓；render/recalc/旧格式无 Linux LibreOffice；轻引擎附件只给路径，不解析图片/PDF；
   轻引擎无文档编辑、无 pptx（复杂/编辑/pptx 走完整引擎）。
