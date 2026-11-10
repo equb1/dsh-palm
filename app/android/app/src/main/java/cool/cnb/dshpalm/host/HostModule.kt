@@ -423,7 +423,7 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
                 if (enabled) {
                     // 不在这里硬拦权限：部分 ROM Settings/AppOps 查询会误报；
                     // 真正 addView 失败时服务会自己 stopSelf，JS 侧再提示。
-                    cool.cnb.dshpalm.system.FloatPetService.start(activity, role ?: "deepy", state ?: "sleeping")
+                    cool.cnb.dshpalm.system.FloatPetService.start(activity, role ?: "xiaoji", state ?: "sleeping")
                     promise.resolve(true)
                 } else {
                     cool.cnb.dshpalm.system.FloatPetService.stop(activity)

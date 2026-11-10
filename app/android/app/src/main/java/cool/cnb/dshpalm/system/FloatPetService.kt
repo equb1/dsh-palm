@@ -31,11 +31,11 @@ import cool.cnb.dshpalm.R
 import kotlin.math.abs
 
 /**
- * 桌面常驻桌宠悬浮窗服务（全面参考 ccch1mneyyy/dsh-go 规范）。
+ * 桌面常驻桌宠「小寄」悬浮窗服务。
  *
  * 核心特性：
  * 1. EdgeSnap 边缘平滑吸附 + 惯性动画
- * 2. 像素艺术 Nearest-Neighbor 锐利渲染（禁用模糊滤波）
+ * 2. 平涂插画用抗锯齿渲染（小寄不是像素风）
  * 3. 触觉与微震动反馈（拖拽、贴边）
  * 4. 任务状态与交互气泡（Speech Bubble）
  * 5. 长按快捷菜单 / 点击回 App
@@ -143,7 +143,7 @@ class FloatPetService : Service() {
         val longPressRunnable = Runnable {
             longPressTriggered = true
             triggerHaptic(30)
-            showBubble("长按：点击可回到 App", 2500)
+            showBubble("点我回蟹栈；拖动可以换位置", 2500)
         }
 
         floatView?.setOnTouchListener { _, event ->
@@ -180,7 +180,7 @@ class FloatPetService : Service() {
                     if (!isDragging && !longPressTriggered) {
                         // 单击：唤起 App 或展示气泡
                         triggerHaptic(15)
-                        showBubble("回到会话中…", 1500)
+                        showBubble("小寄带你回蟹栈…", 1500)
                         val appIntent = Intent(this, MainActivity::class.java).apply {
                             action = Intent.ACTION_VIEW
                             data = Uri.parse("dshpalm://session?source=pet_float")
@@ -206,7 +206,7 @@ class FloatPetService : Service() {
         try {
             windowManager?.addView(floatView, params)
             isShowing = true
-            // 默认可见；App 前台的隐藏由 JS 的 setFloatingPetVisible(false) 负责
+            // 外置模式下这就是唯一一只小寄；App 内宠物由 JS 按 floatingActive 隐藏
             floatView?.visibility = View.VISIBLE
             applyState(currentRole, currentState)
         } catch (_: Throwable) {
@@ -301,7 +301,7 @@ class FloatPetService : Service() {
             .copy(Bitmap.Config.ARGB_8888, false)
         petImageView?.let { iv ->
             val drawable = BitmapDrawable(resources, cropped)
-            drawable.paint.isFilterBitmap = false
+            drawable.paint.isFilterBitmap = true
             drawable.paint.isDither = false
             iv.setImageDrawable(drawable)
         }
@@ -329,25 +329,17 @@ class FloatPetService : Service() {
     }
 
     private fun fallbackStatic(role: String, state: String) {
-        val resId = when (role) {
-            "maid" -> when (state) {
-                "coding", "working", "juggling", "sweeping" -> R.drawable.maid_coding
-                "done", "waking", "notification" -> R.drawable.maid_done
-                "waiting", "attention", "thinking" -> R.drawable.maid_waiting
-                else -> R.drawable.maid_sleeping
-            }
-            else -> when (state) {
-                "coding", "working", "juggling", "sweeping" -> R.drawable.deepy_coding
-                "done", "waking", "notification" -> R.drawable.deepy_done
-                "waiting", "attention", "thinking" -> R.drawable.deepy_waiting
-                else -> R.drawable.deepy_sleeping
-            }
+        val resId = when (state) {
+            "coding", "working", "juggling", "sweeping" -> R.drawable.xiaoji_working
+            "done", "waking", "notification", "success" -> R.drawable.xiaoji_done
+            "waiting", "attention", "thinking" -> R.drawable.xiaoji_thinking
+            else -> R.drawable.xiaoji_sleeping
         }
         petImageView?.let { iv ->
             iv.setImageResource(resId)
             val drawable = iv.drawable
             if (drawable is BitmapDrawable) {
-                drawable.paint.isFilterBitmap = false
+                drawable.paint.isFilterBitmap = true
                 drawable.paint.isDither = false
             }
         }
@@ -355,11 +347,11 @@ class FloatPetService : Service() {
 
     private fun showStatusBubble(state: String) {
         val statusHint = when (state) {
-            "working", "coding" -> "正在全力执行中…"
-            "juggling" -> "双任务并进 🤹"
-            "sweeping" -> "多任务全力冲刺 🔥"
-            "attention", "waiting" -> "有任务等待确认 ⚠️"
-            "thinking" -> "正在深思熟虑…"
+            "working", "coding" -> "小寄正在干活…"
+            "juggling" -> "双任务并进"
+            "sweeping" -> "多任务全力冲刺"
+            "attention", "waiting" -> "有任务等你确认"
+            "thinking" -> "小寄正在想…"
             else -> null
         }
         if (statusHint != null) showBubble(statusHint, 3000)
@@ -388,7 +380,7 @@ class FloatPetService : Service() {
 
         var isShowing: Boolean = false
             private set
-        var currentRole: String = "deepy"
+        var currentRole: String = "xiaoji"
         var currentState: String = "sleeping"
 
         fun setVisible(context: Context, visible: Boolean) {
@@ -399,7 +391,8 @@ class FloatPetService : Service() {
             context.startService(intent)
         }
 
-        fun start(context: Context, role: String = "deepy", state: String = "sleeping") {            val intent = Intent(context, FloatPetService::class.java).apply {
+        fun start(context: Context, role: String = "xiaoji", state: String = "sleeping") {
+            val intent = Intent(context, FloatPetService::class.java).apply {
                 putExtra(EXTRA_ROLE, role)
                 putExtra(EXTRA_STATE, state)
             }

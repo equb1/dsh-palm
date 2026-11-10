@@ -20,7 +20,7 @@ const OPTIONS: Array<{ id: ThemeMode; title: string; hint: string; icon: string;
   { id: 'system', title: '跟随系统', hint: '随手机深浅色设置自动无感切换', icon: '◐', tone: 'slate' },
   { id: 'light', title: '浅色 (极简白)', hint: '干净素雅的经典浅色界面', icon: '☀', tone: 'slate' },
   { id: 'dark', title: '深色 (极夜黑)', hint: 'OLED 纯黑沉浸感，低光环境护眼', icon: '☾', tone: 'slate' },
-  { id: 'deepy', title: '深海蓝 (Deepy 专属)', hint: '湛蓝深海搭配天蓝伴侣荧光强调色', icon: '🐋', tone: 'blue' },
+  { id: 'deepy', title: '深海蓝', hint: '湛蓝深海搭配天蓝荧光强调色', icon: '🌊', tone: 'blue' },
   { id: 'violet', title: '极光紫 (赛博梦境)', hint: '深邃暗夜与优雅柔和紫色', icon: '✦', tone: 'violet' },
   { id: 'emerald', title: '森系绿 (薄荷清爽)', hint: '自然墨绿与清新薄荷绿', icon: '☘', tone: 'green' },
 ];

@@ -2,7 +2,7 @@
  * 数据驱动的桌宠规范定义（参考 ccch1mneyyy/dsh-go）
  */
 
-export type PetRole = 'deepy' | 'maid';
+export type PetRole = 'xiaoji';
 
 export type PetState =
   | 'idle'

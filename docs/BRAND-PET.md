@@ -217,12 +217,36 @@ design/README.md
 | `error` | 壳歪/裂，螺旋眼，旁边掉一颗螺丝 | 出错 |
 | `sleeping` | 壳闭合，蜷缩，Z | 长时间空闲/后台 |
 
-**重要**：现在 `design/pet/working-1024.png` 元素偏多（两个屏幕 + 工具槽 + 模块 + 扳手 + 撑杆）。缩到 256px 会糊。正式接入前先精简为：
+**已精简（2026-11-10）**：`scripts/build-pet-sheets.py` 在生成 sprite sheet 前会去掉
+`working` 右侧重复的悬浮屏，只留左侧一个悬浮屏、一个蓝色模块、一把扳手和工作台面；
+同时补回壳面接缝，缩到 64px 仍能读。设计源 `design/pet/working-1024.png` 本身未改，
+方便以后重出图。
 
-- 一个悬浮屏；
-- 一个模块；
-- 一把扳手；
-- 保留撑杆/工作台面。
+### 4.5 12 态动画映射（已实现）
+
+6 张品牌原画扩展成 12 态 + 4 个交互反应（`app/assets/pets/xiaoji/pack.json`）：
+
+| 状态 | 源图 | 动作 | 触发 |
+|---|---|---|---|
+| `idle` | idle | 呼吸起伏 + 蟹钳微摆 | 无任务 |
+| `thinking` | thinking | 托腮歪头 + 问号浮动 | 模型流式/思考 |
+| `working` | working（已精简） | 插模块、扳手轻敲 | 单任务执行 |
+| `juggling` | working | 双倍节奏左右忙活 | 2 个并行任务 |
+| `sweeping` | working | 高频冲刺 + 跃动 | ≥3 个并行任务 |
+| `attention` | thinking | 急切探头张望 | 审批/提问等待 |
+| `notification` | success | 双钳举起跳一下（一次性） | 一轮完成 |
+| `error` | error | 螺旋眼 + 壳歪抖动 | 出错 |
+| `carrying` | idle | 背着工作台轻晃 | 空闲随机动作 |
+| `sleeping` | sleeping | 缩壳慢呼吸 | 空闲 >60s |
+| `waking` | idle | 从缩壳起身（一次性） | 从睡眠被唤醒 |
+| `roam` | idle | 左右张望巡游 | 空闲随机动作 |
+| `react-left/right` | idle | 向左/向右倾 | 单击左右 |
+| `react-tickle` | success | 开心抖壳 | 双击/挠痒 |
+| `react-drag` | working | 悬空摆动 | 拖拽 |
+
+渲染：RN 用 `PetCanvas` + `PetRuntime` 逐帧裁剪；Android 悬浮窗
+`FloatPetService` 直接读 `assets/pets/xiaoji/pack.json`，App 退后台仍能播动画。
+平涂插画使用抗锯齿（`isFilterBitmap = true`），不再沿用像素风的最近邻。
 
 ### 4.4 资产规格
 
@@ -377,15 +401,16 @@ eyes closed, a small "Z" above its head, peaceful.
 
 ## 8. 任务清单（给下一个 AI）
 
-- [ ] 把 `design/pet` 的 6 个状态选 512/256 版本放进 `app/assets/pets/xiaoji/`；
-- [ ] 精简 `working`（一个屏幕/模块/扳手）；
-- [ ] 实现 `PetHost` + `PetState` + manifest；
-- [ ] 接 store 的 run/tool/error 状态；
-- [ ] 首页/聊天空状态先接 `idle`；
-- [ ] 单测：状态映射、资源回退、最短展示时间；
-- [ ] 真机 256px/512px 验收；
+- [x] 把 `design/pet` 的 6 个状态生成 256px sprite sheet 放进 `app/assets/pets/xiaoji/`；
+- [x] 精简 `working`（一个屏幕/模块/扳手），生成时自动处理；
+- [x] 实现 `PetHost`（`CompanionPet` + `PetCanvas`）+ `PetState` + `pack.json`；
+- [x] 接 store 的 run/tool/error 状态（running / waiting_approval / error）；
+- [x] 输入区上方常驻 `idle`，完成/出错用瞬态；
+- [x] 单测：状态映射、资源回退、最短展示时间（`test/pet-*.test.ts`）；
+- [x] Android 原生悬浮窗使用 `xiaoji` pack 与静态兜底图；
+- [ ] 真机 256px/512px 验收（需装新 APK）；
 - [ ] 可选：远程 pet pack（manifest/version/hash/fallback）；
-- [ ] 可选：悬浮桌宠立项（原生，单独分支）。
+- [x] 系统悬浮桌宠（原生 `FloatPetService`，默认 `xiaoji`）。
 
 ## 9. 未决事项
 

@@ -143,7 +143,7 @@ export function PluginsScreen(): React.ReactElement {
     {
       name: '@dsh/companion-pet',
       version: '1.0.0',
-      desc: 'Deepy 与鲸娘 · 工作伴侣：敲代码/等待确认/任务汇报/用量统计',
+      desc: '小寄 · 蟹栈工作伴侣：敲代码/等待确认/任务汇报/用量统计',
       tier: 'L1',
     },
     {

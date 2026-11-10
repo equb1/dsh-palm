@@ -22,9 +22,10 @@ import {
   setFloatingPetEnabled,
 } from '../../lib/host';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '../theme';
-import { getPetPack, PetStateMachine, type PetRole, type PetState } from '../../pet';
+import { getPetPack, PetStateMachine, type PetState } from '../../pet';
 
-export type { PetRole } from '../../pet';
+const PET_ROLE = 'xiaoji' as const;
+const PET_SIZE = 76;
 
 /* ------------------------------------------------------------------ *
  * 主组件：浮动在 Composer 输入框上方，并支持桌面外置常驻
@@ -34,15 +35,13 @@ export function CompanionPet(): React.ReactElement | null {
   const state = useStore();
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const [role, setRole] = React.useState<PetRole>('deepy');
   const [hudOpen, setHudOpen] = React.useState(false);
   const [floatingActive, setFloatingActive] = React.useState(false);
   const [petState, setPetState] = React.useState<PetState>('idle');
   const [currentAnim, setCurrentAnim] = React.useState<string>('idle');
   const [bubbleText, setBubbleText] = React.useState<string | undefined>(undefined);
 
-  // 动画状态：完成时的空翻，或者呼吸微律动
-  const flipAnim = React.useRef(new Animated.Value(0)).current;
+  // 完成时的小跳；角色本体动画由 sprite sheet 负责
   const bounceAnim = React.useRef(new Animated.Value(0)).current;
 
   // 自由拖动：记录松手时的位移，限制在屏幕范围内，不改变状态机
@@ -109,7 +108,7 @@ export function CompanionPet(): React.ReactElement | null {
   // 状态机实例
   const smRef = React.useRef<PetStateMachine | null>(null);
   if (!smRef.current) {
-    smRef.current = new PetStateMachine(getPetPack(role));
+    smRef.current = new PetStateMachine(getPetPack(PET_ROLE));
   }
 
   // 订阅状态机变化
@@ -122,11 +121,6 @@ export function CompanionPet(): React.ReactElement | null {
       setBubbleText(bubble);
     });
   }, []);
-
-  // 角色切换同步到状态机
-  React.useEffect(() => {
-    smRef.current?.setPack(getPetPack(role));
-  }, [role]);
 
   // 根据当前 App 状态计算伴侣状态并推入状态机
   const runningSessions = state.sessions.filter((s) => s.status === 'running');
@@ -163,37 +157,32 @@ export function CompanionPet(): React.ReactElement | null {
     });
   }, []);
 
-  // 当任务从 working 变为 done 时的空翻动作
+  // 当任务从 working 变为 done 时轻轻跳一下（小寄是寄居蟹，不做空翻）
   const prevPetState = React.useRef<PetState>(petState);
   React.useEffect(() => {
-    if ((prevPetState.current === 'working' || prevPetState.current === 'juggling' || prevPetState.current === 'sweeping') && petState === 'idle') {
-      flipAnim.setValue(0);
+    if (
+      (prevPetState.current === 'working' ||
+        prevPetState.current === 'juggling' ||
+        prevPetState.current === 'sweeping') &&
+      petState === 'idle'
+    ) {
       Animated.sequence([
-        Animated.timing(bounceAnim, { toValue: -14, duration: 250, useNativeDriver: true }),
-        Animated.parallel([
-          Animated.timing(flipAnim, { toValue: 1, duration: 450, useNativeDriver: true }),
-          Animated.timing(bounceAnim, { toValue: 0, duration: 450, useNativeDriver: true }),
-        ]),
+        Animated.timing(bounceAnim, { toValue: -14, duration: 220, useNativeDriver: true }),
+        Animated.spring(bounceAnim, { toValue: 0, useNativeDriver: true, friction: 5, tension: 120 }),
       ]).start();
     }
     prevPetState.current = petState;
 
     if (floatingActive) {
-      void setFloatingPetEnabled(true, role, petState);
+      void setFloatingPetEnabled(true, PET_ROLE, petState);
     }
-  }, [petState, role, floatingActive, bounceAnim, flipAnim]);
-
-  const spin = flipAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  }, [petState, floatingActive, bounceAnim]);
 
   // 开启 / 关闭「App 外显示」系统桌面悬浮窗
   const handleToggleFloating = async (val: boolean) => {
     if (val) {
-      // 原生服务自己判断 App 是否在前台：前台隐藏、后台显示；
-      // 所以这里可以立即启动，不会和 App 内宠物同时出现。
-      const ok = await setFloatingPetEnabled(true, role, petState);
+      // 开启后只看原生悬浮窗这一只小寄：App 内的 PetCanvas 立刻隐藏。
+      const ok = await setFloatingPetEnabled(true, PET_ROLE, petState);
       if (ok) setFloatingActive(true);
       else {
         Alert.alert(
@@ -229,7 +218,7 @@ export function CompanionPet(): React.ReactElement | null {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="伴侣宠物与任务监控"
+          accessibilityLabel="小寄 · 任务与工作台监控"
           onPress={() => {
             const now = Date.now();
             if (now - lastTapRef.current < 320) {
@@ -246,12 +235,8 @@ export function CompanionPet(): React.ReactElement | null {
           style={styles.petTouch}
           hitSlop={8}
         >
-          <Animated.View
-            style={{
-              transform: [{ translateY: bounceAnim }, { rotate: spin }],
-            }}
-          >
-            <PetCanvas role={role} animation={currentAnim} size={64} />
+          <Animated.View style={{ transform: [{ translateY: bounceAnim }] }}>
+            <PetCanvas role={PET_ROLE} animation={currentAnim} size={PET_SIZE} />
           </Animated.View>
 
           {/* 并行任务数角标 */}
@@ -282,9 +267,9 @@ export function CompanionPet(): React.ReactElement | null {
           <Pressable style={styles.hudCard} onPress={(e) => e.stopPropagation()}>
             <View style={styles.hudHeader}>
               <View style={styles.hudTitleRow}>
-                <PetCanvas role={role} animation={currentAnim} size={48} />
-                <View>
-                  <Text style={styles.hudName}>{role === 'deepy' ? 'Deepy (小蓝鲸)' : '鲸娘'}</Text>
+                <PetCanvas role={PET_ROLE} animation={currentAnim} size={52} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.hudName}>小寄 · 蟹栈助手</Text>
                   <Text style={styles.hudStatus}>
                     {petState === 'working' || petState === 'juggling' || petState === 'sweeping'
                       ? `正在全力干活（${Math.max(1, activeCount)} 个任务执行中）…`
@@ -301,30 +286,8 @@ export function CompanionPet(): React.ReactElement | null {
               </Pressable>
             </View>
 
-            {/* 切换角色按钮 */}
-            <View style={styles.roleSwitchRow}>
-              <Pressable
-                onPress={() => {
-                  setRole('deepy');
-                  if (floatingActive) void setFloatingPetEnabled(true, 'deepy', petState);
-                }}
-                style={[styles.roleBtn, role === 'deepy' && styles.roleBtnActive]}
-              >
-                <Text style={[styles.roleBtnText, role === 'deepy' && styles.roleBtnTextActive]}>
-                  小鲸鱼 Deepy
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setRole('maid');
-                  if (floatingActive) void setFloatingPetEnabled(true, 'maid', petState);
-                }}
-                style={[styles.roleBtn, role === 'maid' && styles.roleBtnActive]}
-              >
-                <Text style={[styles.roleBtnText, role === 'maid' && styles.roleBtnTextActive]}>
-                  鲸娘
-                </Text>
-              </Pressable>
+            <View style={styles.brandStrip}>
+              <Text style={styles.brandStripText}>Crabstack · 合上就走，打开就干</Text>
             </View>
 
             {/* 「App 外显示」系统悬浮窗常驻开关 */}
@@ -414,13 +377,13 @@ const createStyles = ({ palette: c }: Theme) =>
     container: {
       position: 'absolute',
       right: 14,
-      top: -78,
+      top: -90,
       zIndex: 35,
       alignItems: 'flex-end',
     },
     bubble: {
       position: 'absolute',
-      bottom: 66,
+      bottom: 80,
       right: 0,
       maxWidth: 160,
       backgroundColor: c.glassStrong,
@@ -527,30 +490,16 @@ const createStyles = ({ palette: c }: Theme) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    roleSwitchRow: {
-      flexDirection: 'row',
-      backgroundColor: c.bgElevated,
-      borderRadius: radius.pill,
-      padding: 3,
-      gap: 4,
-    },
-    roleBtn: {
-      flex: 1,
+    brandStrip: {
+      alignItems: 'center',
       paddingVertical: 6,
       borderRadius: radius.pill,
-      alignItems: 'center',
+      backgroundColor: c.bgElevated,
     },
-    roleBtnActive: {
-      backgroundColor: c.blueSoft,
-    },
-    roleBtnText: {
+    brandStripText: {
       color: c.textDim,
-      fontSize: 12,
+      fontSize: 11.5,
       fontWeight: '500',
-    },
-    roleBtnTextActive: {
-      color: c.blue,
-      fontWeight: '600',
     },
     overlaySettingCard: {
       flexDirection: 'row',

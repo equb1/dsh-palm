@@ -27,14 +27,14 @@
             <ImageView
                 android:layout_width="22dp"
                 android:layout_height="22dp"
-                android:src="@drawable/deepy_waiting" />
+                android:src="@drawable/xiaoji_thinking" />
 
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
-                android:text="锦囊桌面快速提问"
+                android:text="问问小寄 · Crabstack"
                 android:textColor="#0F172A"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -67,7 +67,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:background="@null"
-                android:hint="输入想问的问题，随时随地解答…"
+                android:hint="输入问题，小寄马上回答…"
                 android:imeOptions="actionSend"
                 android:inputType="textMultiLine"
                 android:maxLines="4"

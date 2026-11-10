@@ -71,7 +71,7 @@
 ### Dark theme and desktop pets
 
 - Follow the system theme or switch light/dark manually. Chat, approvals, files, terminal and code blocks stay consistent.
-- deepy / maid sprite packs and a 12-state machine react to thinking, work and approval waits. The floating desktop pet is experimental.
+- **Xiaoji** (the Crabstack hermit crab) drives a 12-state sprite machine; it reacts to thinking, work and approval waits. The floating desktop pet is experimental.
 
 ## Install
 
