@@ -119,14 +119,22 @@ export async function reloadWithUpdate(): Promise<void> {
 export function updateFailureMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
   if (!raw) return '检查更新失败';
-  if (/network|fetch|timeout|ECONN|ENOTFOUND|Failed to fetch/i.test(raw)) {
-    return '连不上热更新服务器：确认电脑已运行 npm run update:server，手机和电脑在同一 Wi-Fi。';
+  const lower = raw.toLowerCase();
+  // OkHttp/连接被对端关掉时抛的是 “Connection closed” 这类英文；先给一句人话
+  if (/connection closed|socket closed|closed by peer|broken pipe|econnreset|econnaborted|连接关闭/.test(lower)) {
+    return '连不上 Expo 更新服务器（连接被关闭）：检查手机网络后重试。';
   }
-  if (/disabled|development|Expo Go/i.test(raw)) {
+  if (/network|fetch|timeout|econn|enotfound|unable to resolve|no address|host unreachable/.test(lower)) {
+    return '连不上 Expo 更新服务器：检查手机网络后重试。';
+  }
+  if (/disabled|development|expo go/i.test(lower)) {
     return '当前安装包没有启用热更新：开发构建需要重新安装 release 包。';
   }
-  if (/runtime/i.test(raw)) {
+  if (/runtime/i.test(lower)) {
     return '安装包的 runtimeVersion 与服务器更新不一致：需要重新打包（原生改动必须换 runtimeVersion）。';
+  }
+  if (/no update available|not available/i.test(lower)) {
+    return '已经是最新版本。';
   }
   return raw.length > 240 ? `${raw.slice(0, 240)}…` : raw;
 }

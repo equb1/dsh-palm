@@ -16,6 +16,7 @@ import {
   systemEntryStatus,
 } from '../lib/host';
 import { modelReadiness } from '../lib/readiness';
+import { updateRuntimeInfo } from '../lib/updates';
 import { EngineScreen } from './EngineScreen';
 import { LightEngineScreen } from './LightEngineScreen';
 import { AccountScreen } from './settings/AccountScreen';
@@ -137,6 +138,14 @@ export function SettingsScreen(): React.ReactElement {
 
   const lightModel = state.defaultModel?.model ?? '未配置';
   const providerCount = state.providers.length;
+  const updateInfo = updateRuntimeInfo();
+  const versionLabel = `${updateInfo.appVersion ?? state.caps?.host.engineVersion ?? '—'}${
+    updateInfo.supported && updateInfo.enabled
+      ? updateInfo.isEmbeddedLaunch
+        ? ' · 内置包'
+        : ' · 热更新'
+      : ''
+  }`;
   const allGroups: Array<{ key: string; title: string; rows: SettingsRow[] }> = [
     {
       key: 'ai',
@@ -378,21 +387,13 @@ export function SettingsScreen(): React.ReactElement {
       title: '帮助与关于',
       rows: [
         {
-          id: 'updates',
-          title: '软件更新',
-          value: '热更新',
-          icon: '⇅',
-          tone: 'slate',
-          hint: '检查并安装 OTA 更新',
-          onPress: () => setRoute('updates'),
-        },
-        {
           id: 'version',
-          title: '版本',
-          value: state.caps?.host.engineVersion ?? '—',
+          title: '版本与更新',
+          value: versionLabel,
           icon: 'v',
           tone: 'slate',
-          onPress: () => flash(`引擎 ${state.caps?.host.engineVersion ?? '—'} · 轻引擎 0.1.0-light`),
+          hint: '检查并安装热更新',
+          onPress: () => setRoute('updates'),
         },
         {
           id: 'export',

@@ -2378,7 +2378,11 @@ export class Store {
         return;
       }
     }
-    if (!this.client) return;
+    if (!this.client) {
+      // 切引擎成功了但桥没连上：别静默返回，否则用户看到的是“点了没反应”
+      this.setError('引擎还没连上，稍等两秒再点一次登录。');
+      return;
+    }
     this.pendingSignIn = true;
     this.openedAttemptId = null;
     this.patch({ busy: true, error: null });

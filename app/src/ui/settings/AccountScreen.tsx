@@ -54,6 +54,10 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
   const signedIn = account?.status === 'credential-stored';
   const waiting = accountAttempt?.phase === 'waiting-browser' || accountAttempt?.phase === 'initializing';
   const accountNote = attemptText(accountAttempt?.phase, accountAttempt?.errorCode);
+  /** 轻引擎下登录要先起完整引擎，给按钮一个即时反馈，别让用户以为没反应 */
+  const [signInBusy, setSignInBusy] = React.useState(false);
+  const startingFull = state.engine.mode === 'starting-proot';
+  const lightMode = state.engineKind === 'light';
 
   // 账号：进页面拉一次；有登录尝试时 1 秒一次（真引擎的授权页要等宿主生成）
   React.useEffect(() => {
@@ -162,13 +166,39 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
                   </>
                 ) : (
                   <Btn
-                    label="用 DeepSeek 账号登录"
-                    onPress={() => void store.startAccountSignIn()}
+                    label={signInBusy || startingFull ? '正在启动完整引擎…' : '用 DeepSeek 账号登录'}
+                    disabled={signInBusy || startingFull}
+                    onPress={() => {
+                      setSignInBusy(true);
+                      void store.startAccountSignIn().finally(() => setSignInBusy(false));
+                    }}
                     style={{ flex: 1 }}
                   />
                 )}
               </View>
             )}
+
+            {signInBusy || startingFull ? (
+              <Text style={styles.hint}>
+                账号登录走完整引擎（proot）的浏览器 OAuth：正在启动完整引擎，首次可能要 30–60 秒；
+                启动完成后会自动打开授权页。
+              </Text>
+            ) : null}
+
+            {lightMode && !signedIn && !signInBusy && !startingFull ? (
+              <>
+                <Text style={styles.hint}>
+                  不想等完整引擎？轻引擎可以直接填 API Key（Base URL + 模型 + Key）使用，
+                  不需要账号登录。
+                </Text>
+                <Btn
+                  label="配置轻引擎渠道（API Key）"
+                  kind="ghost"
+                  onPress={() => store.openLightSetup()}
+                  style={{ flex: 1 }}
+                />
+              </>
+            ) : null}
           </View>
 
           {Boolean(state.error) ? (

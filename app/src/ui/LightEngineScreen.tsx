@@ -192,7 +192,14 @@ export function LightEngineScreen({ onClose }: { onClose: () => void }): React.R
                     disabled={connecting}
                     style={{ flex: 1.2 }}
                   />
-                ) : null}
+                ) : (
+                  <Btn
+                    label="去登录 DeepSeek 账号"
+                    kind="ghost"
+                    onPress={() => store.openSettingsPage('account')}
+                    style={{ flex: 1.2 }}
+                  />
+                )}
                 <Btn
                   label="先用完整模式"
                   kind="ghost"
