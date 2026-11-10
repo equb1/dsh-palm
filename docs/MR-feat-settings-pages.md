@@ -1,6 +1,7 @@
-# MR: `feat/settings-pages` → `develop`
+# MR: `feat/settings-pages` → `develop`（已合并）
 
-> 2026-11-06。分支已推送：`origin/feat/settings-pages`（HEAD `026b88d` 之后）。
+> 2026-11-06 夜间状态：**已通过 MR #4 合入 `develop`**（`98e1dbe 合并来自 feat/settings-pages 的合并请求 #4`）。
+> 分支保留只作历史；深色主题、完整引擎平权、M2.1–M2.4 已在后续独立分支合入。
 > 对比：https://cnb.cool/debaox3.0/test-new-technology/dsh-palm/-/compare/develop...feat/settings-pages
 
 ## 包含内容
@@ -32,8 +33,8 @@ npm run release:preflight           # 只读预检
 
 ## 风险 / 未完成
 
-- **深色主题**未做，需按 `docs/DARK-THEME.md` 单独重构样式层。
-- **M2.7 OAuth** 已在 release 真机完成授权闭环（2026-11-06）；3.1 的「拒绝授权」路径仍未验证。
-- **release 首装**已通过（2026-11-06，release 签名，首启解压约 46s）；正式升级演练仍未做。
-- release APK 的 versionCode 仍为 1；正式覆盖升级前要 bump `DSH_PALM_VERSION_CODE`。
-- `develop` 与远端有历史分叉（43 个本地提交未推），合并前先确认 develop 状态。
+- **深色主题**已完成（`feat/dark-theme` 合入 `develop`）；浅色真机轮次仍可补。
+- **M2.7 OAuth** 正常授权已在 release 真机闭环；拒绝授权已有桥中继，待真机点一次。
+- **release 首装**已通过；`0.2.0 (2)` 已 bump，同签名覆盖升级待执行。
+- **完整引擎 delete/search/shell** 已完成；LAN 发现/系统入口为第一步，E2E/多宿主/悬浮球未做。
+- `develop` 已同步 `origin/develop`；旧分支可清理。

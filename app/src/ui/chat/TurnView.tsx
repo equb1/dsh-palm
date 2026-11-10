@@ -1,5 +1,15 @@
 import React from 'react';
-import { Clipboard, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Clipboard,
+  Easing,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { Approval, Block, Turn } from '../../protocol';
 import {
@@ -9,9 +19,114 @@ import {
 } from '../../protocol/qa';
 import { MarkdownView } from '../MarkdownView';
 import { font, radius, useTheme, useThemedStyles, type Theme } from '../theme';
+import { BrandIcon, type BrandIconName } from '../components/BrandIcon';
 import { ApprovalCard } from './ApprovalCard';
 import { CapabilityCard } from './CapabilityCard';
 import { ReadonlyQaCard } from './ReadonlyQaCard';
+import { ShareTurnSheet } from './ShareTurnSheet';
+
+function toolIconName(name: string): BrandIconName {
+  const key = name.toLowerCase();
+  if (/(bash|shell|exec|command|terminal|python|node)/.test(key)) return 'terminal';
+  if (/(read|write|edit|patch|file|doc|office)/.test(key)) return 'fileText';
+  if (/(search|grep|glob|find|web|fetch)/.test(key)) return 'search';
+  if (/(image|vision|photo)/.test(key)) return 'image';
+  return 'wrench';
+}
+
+function ThinkingGlyph({ live }: { live: boolean }): React.ReactElement {
+  const { palette } = useTheme();
+  const spin = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (!live) {
+      spin.stopAnimation();
+      spin.setValue(0);
+      return;
+    }
+    const animation = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 2400,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [live, spin]);
+
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          { rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) },
+        ],
+      }}
+    >
+      <BrandIcon
+        name="sparkles"
+        size={13}
+        color={live ? palette.blue : palette.textFaint}
+        strokeWidth={1.6}
+      />
+    </Animated.View>
+  );
+}
+
+function ThinkingDots(): React.ReactElement {
+  const { palette } = useTheme();
+  const dot1 = React.useRef(new Animated.Value(0)).current;
+  const dot2 = React.useRef(new Animated.Value(0)).current;
+  const dot3 = React.useRef(new Animated.Value(0)).current;
+  const values = [dot1, dot2, dot3];
+
+  React.useEffect(() => {
+    const animations = values.map((value, index) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(index * 140),
+          Animated.timing(value, {
+            toValue: 1,
+            duration: 280,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration: 280,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.delay((2 - index) * 140),
+        ]),
+      ),
+    );
+    animations.forEach((animation) => animation.start());
+    return () => animations.forEach((animation) => animation.stop());
+  }, [dot1, dot2, dot3]);
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 2 }}>
+      {values.map((value, index) => (
+        <Animated.View
+          key={index}
+          style={{
+            width: 3,
+            height: 3,
+            borderRadius: 1.5,
+            backgroundColor: palette.blue,
+            transform: [
+              {
+                translateY: value.interpolate({ inputRange: [0, 1], outputRange: [0, -2.5] }),
+              },
+            ],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
 
 const ThinkingRow = React.memo(function ThinkingRow({
   text,
@@ -22,6 +137,7 @@ const ThinkingRow = React.memo(function ThinkingRow({
   onToggle?: () => void;
   live?: boolean;
 }): React.ReactElement {
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = React.useState(false);
   const scrollRef = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
@@ -31,15 +147,14 @@ const ThinkingRow = React.memo(function ThinkingRow({
   const shownRaw = open && live ? text.slice(-LIVE_WINDOW) : text;
   const shown = shownRaw.length > MAX_OPEN ? shownRaw.slice(-MAX_OPEN) : shownRaw;
   const truncated = text.length > MAX_OPEN;
-  const preview = text.trim().split('\n')[0]?.replace(/\*\*/g, '').slice(0, 120) ?? '';
-  // 实时思考收成 3 行窗：只跟最后几行，不再每 token 重排前面已读的内容
-  const livePreview = text
+  const lines = text
     .trim()
     .split('\n')
-    .slice(-3)
-    .join('\n')
-    .replace(/\*\*/g, '')
-    .slice(-240);
+    .map((l) => l.replace(/\*\*/g, '').trim())
+    .filter(Boolean);
+  const preview = (lines[0] ?? '').slice(0, 120);
+  // 实时思考单行紧凑预览：只跟最后一行内容
+  const livePreview = (lines[lines.length - 1] ?? '').slice(-120);
 
   // dsh-go 的做法：一轮结束就把展开的全文收回去，过程收进一行摘要。
   React.useEffect(() => {
@@ -58,19 +173,26 @@ const ThinkingRow = React.memo(function ThinkingRow({
       accessibilityLabel={open ? '收起思考' : '展开思考'}
       style={styles.row}
     >
-      <Text style={styles.rowGlyph}>✳</Text>
+      <ThinkingGlyph live={live === true} />
       <Text style={[styles.thinkingLabel, live && styles.thinkingActive]}>
         {live ? '思考中' : '思考'}
       </Text>
+      {live ? <ThinkingDots /> : null}
       {!open ? (
-        <Text style={[styles.rowText, live && styles.rowTextLive]} numberOfLines={live ? 3 : 1}>
+        <Text style={[styles.rowText, live && styles.rowTextLive]} numberOfLines={1}>
           {live ? livePreview : preview}
         </Text>
       ) : (
         <View style={{ flex: 1 }} />
       )}
-      {live && !open ? <Text style={styles.liveDot}>●</Text> : null}
-      <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+      <View
+        style={{
+          transform: [{ rotate: open ? '90deg' : '-90deg' }],
+          marginLeft: 2,
+        }}
+      >
+        <BrandIcon name="back" size={14} color={palette.textFaint} strokeWidth={1.8} />
+      </View>
     </Pressable>
   );
 
@@ -126,12 +248,16 @@ const ToolRow = React.memo(function ToolRow({
         accessibilityLabel={detail ? `${block.name} 详情` : undefined}
         style={styles.row}
       >
-        <Text style={[styles.rowGlyph, { color }]}>▤</Text>
+        <BrandIcon name={toolIconName(block.name)} size={15} color={color} strokeWidth={1.7} />
         <Text style={styles.toolName}>{block.name}</Text>
         <Text style={styles.rowText} numberOfLines={1}>
           {block.summary}
         </Text>
-        {detail ? <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text> : null}
+        {detail ? (
+          <View style={{ transform: [{ rotate: open ? '90deg' : '-90deg' }] }}>
+            <BrandIcon name="back" size={14} color={palette.textFaint} />
+          </View>
+        ) : null}
         <Text style={[styles.rowState, { color }]}>
           {block.state === 'running' ? '·' : block.state === 'error' ? '×' : '✓'}
         </Text>
@@ -171,13 +297,15 @@ const ToolGroupRow = React.memo(function ToolGroupRow({
         accessibilityLabel={open ? '收起工具组' : '展开工具组'}
         style={styles.row}
       >
-        <Text style={styles.rowGlyph}>▤</Text>
+        <BrandIcon name="layers" size={15} color={palette.textFaint} />
         <Text style={styles.toolGroupTitle}>{tools.length} 个工具</Text>
         <Text style={styles.rowText} numberOfLines={1}>
           {names.join(' · ')}
         </Text>
         {errors > 0 ? <Text style={[styles.rowState, { color: palette.danger }]}>×{errors}</Text> : null}
-        <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+        <View style={{ transform: [{ rotate: open ? '90deg' : '-90deg' }] }}>
+          <BrandIcon name="back" size={14} color={palette.textFaint} />
+        </View>
       </Pressable>
       {open ? tools.map((tool) => <ToolRow key={tool.id} block={tool} />) : null}
     </View>
@@ -214,7 +342,8 @@ function renderBlock(
   approvals: Record<string, Approval>,
   onToggleThinking?: () => void,
   live?: boolean,
-  fontScale = 1
+  fontScale = 1,
+  selectionResetKey?: number,
 ): React.ReactElement | null {
   switch (block.kind) {
     case 'thinking':
@@ -230,7 +359,15 @@ function renderBlock(
       );
     }
     case 'text':
-      return <MarkdownView key={block.id} text={block.text} streaming={live} fontScale={fontScale} />;
+      return (
+        <MarkdownView
+          key={block.id}
+          text={block.text}
+          streaming={live}
+          fontScale={fontScale}
+          selectionResetKey={selectionResetKey}
+        />
+      );
     case 'approval': {
       const view = approvalBlockView(block, approvals);
       if (!view) return null;
@@ -247,10 +384,19 @@ function renderBlock(
   }
 }
 
-function AssistantActions({ text }: { text: string }): React.ReactElement | null {
+function AssistantActions({
+  text,
+  userText,
+  sessionTitle,
+}: {
+  text: string;
+  userText?: string;
+  sessionTitle?: string;
+}): React.ReactElement | null {
   const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [copied, setCopied] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
   if (!text.trim()) return null;
 
   const copy = (): void => {
@@ -260,19 +406,43 @@ function AssistantActions({ text }: { text: string }): React.ReactElement | null
   };
 
   return (
-    <View style={styles.actions}>
-      <Pressable accessibilityRole="button" accessibilityLabel="复制回答" onPress={copy} hitSlop={8}>
-        <Text style={[styles.actionGlyph, copied && { color: palette.ok }]}>{copied ? '✓' : '⧉'}</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="分享回答"
-        onPress={() => void Share.share({ message: text })}
-        hitSlop={8}
-      >
-        <Text style={styles.actionGlyph}>↗</Text>
-      </Pressable>
-    </View>
+    <>
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="复制回答"
+          onPress={copy}
+          hitSlop={6}
+          style={({ pressed }) => [styles.actionPill, pressed && { opacity: 0.7 }]}
+        >
+          <BrandIcon
+            name={copied ? 'check' : 'copy'}
+            size={13}
+            color={copied ? palette.ok : palette.textDim}
+          />
+          <Text style={[styles.actionLabel, copied && { color: palette.ok }]}>
+            {copied ? '已复制' : '复制'}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="分享回答"
+          onPress={() => setShareOpen(true)}
+          hitSlop={6}
+          style={({ pressed }) => [styles.actionPill, pressed && { opacity: 0.7 }]}
+        >
+          <BrandIcon name="share" size={13} color={palette.textDim} />
+          <Text style={styles.actionLabel}>分享</Text>
+        </Pressable>
+      </View>
+      <ShareTurnSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        userText={userText || ''}
+        assistantText={text}
+        sessionTitle={sessionTitle}
+      />
+    </>
   );
 }
 
@@ -315,6 +485,9 @@ const AssistantTurn = React.memo(function AssistantTurn({
   fallbackDurationMs,
   expandProcess,
   fontScale = 1,
+  selectionResetKey,
+  previousUserText,
+  sessionTitle,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
@@ -324,7 +497,11 @@ const AssistantTurn = React.memo(function AssistantTurn({
   expandProcess?: boolean;
   /** U7 对话字号倍率 */
   fontScale?: number;
+  selectionResetKey?: number;
+  previousUserText?: string;
+  sessionTitle?: string;
 }): React.ReactElement {
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [open, setOpen] = React.useState(expandProcess === true);
   const completed = turn.status !== 'streaming';
@@ -378,13 +555,20 @@ const AssistantTurn = React.memo(function AssistantTurn({
           style={styles.summary}
         >
           <View style={styles.summaryHead}>
-            <Text style={styles.summaryCheck}>✓</Text>
+            <BrandIcon
+              name={turn.status === 'error' ? 'close' : 'check'}
+              size={14}
+              color={turn.status === 'error' ? palette.danger : palette.ok}
+              strokeWidth={2}
+            />
             <Text style={styles.summaryTitle}>
               {turn.status === 'stopped' ? '已停止' : turn.status === 'error' ? '出错' : '已完成'}
             </Text>
             {duration ? <Text style={styles.summaryDuration}>，用时 {duration}</Text> : null}
             <View style={{ flex: 1 }} />
-            <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+            <View style={{ transform: [{ rotate: open ? '90deg' : '-90deg' }] }}>
+              <BrandIcon name="back" size={14} color={palette.textFaint} />
+            </View>
           </View>
           {summary ? <Text style={styles.summarySub}>{summary}</Text> : null}
         </Pressable>
@@ -396,7 +580,7 @@ const AssistantTurn = React.memo(function AssistantTurn({
             <ToolGroupRow key={entry.key} tools={entry.tools} />
           ) : (
             <React.Fragment key={entry.key}>
-              {renderBlock(entry.block, approvals, onToggleThinking, false, fontScale)}
+              {renderBlock(entry.block, approvals, onToggleThinking, false, fontScale, selectionResetKey)}
             </React.Fragment>
           ),
         )}
@@ -405,12 +589,12 @@ const AssistantTurn = React.memo(function AssistantTurn({
         ? [
             ...noticeBlocks.map((b, i) => (
               <React.Fragment key={`notice-${b.id}-${i}`}>
-                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale)}
+                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale, selectionResetKey)}
               </React.Fragment>
             )),
             ...answerBlocks.map((b, i) => (
               <React.Fragment key={`${b.id}-${i}`}>
-                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale)}
+                {renderBlock(b, approvals, onToggleThinking, undefined, fontScale, selectionResetKey)}
               </React.Fragment>
             )),
           ]
@@ -421,12 +605,19 @@ const AssistantTurn = React.memo(function AssistantTurn({
                 approvals,
                 onToggleThinking,
                 turn.status === 'streaming' && i === visibleBlocks.length - 1,
-                fontScale
+                fontScale,
+                selectionResetKey,
               )}
             </React.Fragment>
           ))}
 
-      {completed ? <AssistantActions text={answerText} /> : null}
+      {completed ? (
+        <AssistantActions
+          text={answerText}
+          userText={previousUserText}
+          sessionTitle={sessionTitle}
+        />
+      ) : null}
     </View>
   );
 });
@@ -438,6 +629,10 @@ function TurnViewImpl({
   fallbackDurationMs,
   expandProcess,
   fontScale = 1,
+  onPressUserTurn,
+  selectionResetKey,
+  previousUserText,
+  sessionTitle,
 }: {
   turn: Turn;
   approvals: Record<string, Approval>;
@@ -445,6 +640,10 @@ function TurnViewImpl({
   fallbackDurationMs?: number;
   expandProcess?: boolean;
   fontScale?: number;
+  onPressUserTurn?: (turn: Turn, text: string) => void;
+  selectionResetKey?: number;
+  previousUserText?: string;
+  sessionTitle?: string;
 }): React.ReactElement {
   const styles = useThemedStyles(createStyles);
   if (turn.role === 'user') {
@@ -454,7 +653,12 @@ function TurnViewImpl({
       .trim();
     return (
       <View style={styles.userRow}>
-        <View style={styles.userBubble}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`用户消息：${text}，点击回填到输入框`}
+          onPress={onPressUserTurn ? () => onPressUserTurn(turn, text) : undefined}
+          style={({ pressed }) => [styles.userBubble, pressed && styles.userBubblePressed]}
+        >
           <Text
             style={[
               styles.userText,
@@ -463,7 +667,7 @@ function TurnViewImpl({
           >
             {text}
           </Text>
-        </View>
+        </Pressable>
       </View>
     );
   }
@@ -476,6 +680,9 @@ function TurnViewImpl({
       fallbackDurationMs={fallbackDurationMs}
       expandProcess={expandProcess}
       fontScale={fontScale}
+      selectionResetKey={selectionResetKey}
+      previousUserText={previousUserText}
+      sessionTitle={sessionTitle}
     />
   );
 }
@@ -492,6 +699,9 @@ const createStyles = ({ palette: c }: Theme) =>
     borderRadius: radius.lg,
     maxWidth: '84%',
   },
+  userBubblePressed: {
+    opacity: 0.75,
+  },
   userText: { color: c.text, fontSize: 14, lineHeight: 22 },
 
   assistant: { gap: 8 },
@@ -506,15 +716,26 @@ const createStyles = ({ palette: c }: Theme) =>
   summaryTitle: { color: c.text, fontSize: 13, fontWeight: '600' },
   summaryDuration: { color: c.textDim, fontSize: 12 },
   summarySub: { color: c.textFaint, fontSize: 11.5, lineHeight: 16 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingVertical: 2 },
-  actionGlyph: { color: c.textFaint, fontSize: 15 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  actionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    backgroundColor: c.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+  },
+  actionLabel: { color: c.textDim, fontSize: 11.5, fontWeight: '500' },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
   rowGlyph: { color: c.textFaint, fontSize: 11 },
   rowText: { color: c.textDim, fontSize: 13, flex: 1 },
-  rowTextLive: { fontSize: 12, lineHeight: 17 },
+  rowTextLive: { fontSize: 12, lineHeight: 16 },
   toolGroupTitle: { color: c.textDim, fontSize: 12, fontWeight: '600' },
-  thinkingLabel: { color: c.textFaint, fontSize: 13 },
+  thinkingLabel: { color: c.textFaint, fontSize: 12, lineHeight: 16 },
   toolName: { color: c.textFaint, fontSize: 11, fontFamily: font.mono },
   rowState: { fontSize: 11 },
   chevron: { color: c.textFaint, fontSize: 11 },

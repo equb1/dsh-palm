@@ -422,7 +422,7 @@
 - 处理：统一走 `SmoothKeyboardAvoid`；底部安全区单独留；不重复加 padding。
 - 验证：1–6 行输入、中文候选都不遮。
 
-### H7. 长会话流式仍抖 / 思考重复（2026-11-04 主体已修，20 分钟 soak 待补）
+### H7. 长会话流式仍抖 / 思考重复（2026-11-04 主体已修，2026-11-06 soak 通过）
 **现象**
 
 - 20+ 分钟的长任务，思考或正文输出时界面一跳一跳，不是连续流；
@@ -464,11 +464,13 @@
 - “回到底部”移入列表容器，键盘弹出时仍在 Composer 上方。
 - 新增 `test/stream-turns.test.ts` 与 `scripts/stream-replay.ts`；10 万 delta 回放通过。
 
-**仍然待做**
+**后续观察**
 
-1. **20 分钟真机 soak**：本轮完成 3000 字、工具密集长流和多次重进，但还没跑到连续 20 分钟。需要补一条带工具、键盘反复开关、多次退出重进的回归。
-2. **APK 直装**：设备旧包签名不一致，本轮按 E8 用 Metro + 手动更新 rootfs 桥验证；统一调试签名后再直接 `adb install -r` 验证 APK 内补丁。
-3. **VirtualizedList 警告**：真机仍偶发 `large list slow to update` 警告，暂不阻塞交互；后续结合性能基准调窗口参数。
+1. [x] **20 分钟 / 90 分钟真机 soak**：2026-11-05 20 分钟通过；2026-11-06 90 分钟、109 轮、
+   PSS 349→615MB、无 OOM（I10）。
+2. [x] **APK 直装**：设备已统一 release 签名，`adb install -r` 覆盖升级保留数据。
+3. **VirtualizedList 警告**：真机仍偶发 `large list slow to update` 警告，暂不阻塞交互；
+   后续结合 >200 轮长上下文再调窗口参数。
 
 **验证方式**
 
@@ -704,3 +706,160 @@
   拒绝 `..`、根目录改名/删除，列表跳过软链，500 条上限。UI 复用 FilesScreen。
 - 验证：`test/bridge-workspace.test.ts` 覆盖列表/改名/删除/穿越/软链；桥补丁需
   `node scripts/build-bridge.mjs` 后重打 APK；真机已验 fs.list/delete，rename 由单测覆盖。
+
+### I17. 完整引擎 delete/search 只能走 dsh 磁盘布局（2026-11-06）
+
+- 现象：dsh 远程 API 没有 session/delete、session/search；强行做会在宿主内存里留下幽灵会话。
+- 原因：会话持久化在 `$DSH_HOME/sessions/--<project>--/<encoded-id>/session.vN.jsonl.zstd`，
+  上游没有删除 seam，搜索 FTS 默认还是 `:memory:` + `openAt: never`。
+- 处理：`sessionFs.ts` 复刻 `projectKey`/`encodeSegment`，删除会话目录后加 250ms 二次确认，
+  并在桥内用 tombstone 立即过滤列表/详情/搜索；搜索按需解多帧 zstd，复用 `projectRecords`。
+- 验证：`test/bridge-session-fs.test.ts` 覆盖路径/代际选择/删除；`bridge-session-search.test.ts`
+  覆盖标题/用户/思考/正文/片段。代价是首次搜索大历史可能接近客户端 15s 超时。
+
+### I18. just-bash 进桥会拉原生 zstd/liblzma（2026-11-06）
+
+- 现象：`node scripts/build-bridge.mjs` 报 `.node` 无 loader、`node-liblzma` 解析失败。
+- 原因：`just-bash` 的 Node 入口带可选原生压缩依赖；桥只需要解释器和自己的 SandboxFs。
+- 处理：`build-bridge.mjs` 用 esbuild plugin 把 `just-bash` 固定指向
+  `dist/bundle/browser.js`；桥体积约 1.6MB，运行时不需要那些原生模块。
+- 验证：桥构建通过；`shell.run` 的 pwd/ls/写拒绝由校验用例覆盖。
+
+### I19. Android 16 局域网发现要组播锁和本地网络权限（2026-11-06）
+
+- 现象：mDNS 广播存在，但手机 NSD 扫不到；或 Android 16 直接拒绝本地网络访问。
+- 原因：Android 默认过滤组播；targetSdk 36 还要 `ACCESS_LOCAL_NETWORK`。
+- 处理：HostService 启动时持有 `WifiManager.MulticastLock`，退出释放；manifest 加
+  `ACCESS_LOCAL_NETWORK`/`CHANGE_WIFI_MULTICAST_STATE`，HostModule 提供按需请求。
+- 验证：连接页「扫描局域网」应列出桥的 `_dsh-palm._tcp`；扫不到时仍可手填地址。
+
+### I20. 设置里断开后连接页被设置页盖住（2026-11-06）
+
+- 现象：HostScreen 点「断开当前连接」后仍停在设置页，看起来像按钮没反应。
+- 原因：`disconnect()` 只设 `connectModalOpen=true`，但 `App.tsx` 先按 `view` 选屏，
+  `view='settings'` 时不会渲染 ConnectScreen。
+- 处理：`disconnect()` 同时把 `view` 置回 `main`；设置页断开后正常进入连接页。
+- 验证：设置 → 宿主 → 断开，ConnectScreen 出现；重新进 App 轻引擎自动恢复。
+
+### I21. mDNS 扫描不到：loopback / 权限 / Windows 防火墙（2026-11-06）
+
+- 现象：HostScreen 点「扫描」一直空；Node 本机查询却能看到广播。
+- 原因 1：`multicast-dns({loopback:true})` 只在本机回环广播，局域网网卡发不出去；
+  改为 `loopback:false`。
+- 原因 2：Android 13+ NSD 需要 `NEARBY_WIFI_DEVICES`；部分 Android 16 ROM 没有
+  `ACCESS_LOCAL_NETWORK`，只 request 它会静默失败。现在先请求 NEARBY_WIFI_DEVICES，
+  真机可见系统允许弹窗。
+- 原因 3：Windows 防火墙默认拒绝入站 UDP 5353/ TCP 8788；本机测试中 PC 能 ping 手机，
+  手机 ping PC 100% 丢包，mDNS 因此无法跨设备验收。要么加防火墙规则，要么换同一交换机/
+  关闭 AP 隔离。
+- 验证：手机允许附近设备权限后扫描仍空时，先查 `ping <pc>` 和防火墙，不要先怀疑代码。
+
+### I22. 会话抽屉展开卡顿（2026-11-06）
+
+- 现象：点左上角打开抽屉，展开瞬间明显掉帧；`dumpsys gfxinfo` 8 次开合
+  Janky 6.42%（14/218），每次展开约 1 帧超时。
+- 原因 1：抽屉关闭时整棵内容卸载，展开时一边启动 200ms 位移动画、一边挂载
+  129 个原生 View 并 layout，挂载和动画抢同一帧。
+- 原因 2：`renderToHardwareTextureAndroid` 在动画首帧申请整块面板纹理，
+  首帧额外卡顿。
+- 原因 3：每次 store patch 都重算 `sessionRows()`/筛选/分组；抽屉展开时
+  HomeScreen 也订阅整份 store。
+- 处理：Home 空闲 350ms 预挂载抽屉并保持挂载（关闭只移出屏幕，`pointerEvents`
+  置 none）；首次未预挂载时等一帧再启动动画；去掉 backdrop/panel 的硬件纹理；
+  `sessionRows`/搜索/筛选/分组改用 `useMemo`。
+- 验证：同机同脚本 8 次开合 Janky **3.51%（8/228）**；单独 5 次展开均
+  **0 janky frame**，5 次关闭 4 次 0、1 次 1 帧。`npm run verify` 全绿。
+
+### I23. 页面切换像“雪花/闪白”而不是进入动画（2026-11-07）
+
+- 现象：首页点会话进详情，旧页瞬间消失、新页先以 opacity 1 画一帧再变透明淡入，
+  像换台闪屏；返回也没有方向。
+- 原因：`ScreenFade` 在 `useEffect` 里才 `setValue(0)`，且 App 是单容器条件渲染，
+  旧页在切页瞬间卸载；没有 push/pop 栈。
+- 处理：`ScreenStack` 保留旧页做 24% 视差 + 新页右侧滑入；非当前页冻结 store
+  订阅并 `display:none`；点会话先推空壳详情，`sessions.get` 并行。
+- 验证：真机 push/pop 方向正确、返回保留首页滚动；每次 push 约 1 帧小 hitch，
+  比原来的闪白大幅改善（见 [ANIMATION](ANIMATION.md)）。
+
+### I24. 「在电脑继续」把手机的锦囊 id 当成电脑预设（2026-11-09）
+
+- 现象：手机轻会话长按 →「在电脑继续」→ 红字
+  `session/create -> agent-preset/not-found | Unknown agent preset: light`，电脑 tab 没多会话。
+- 原因：手机轻引擎的预设 id 是 `light`（`PRESETS` 里还有只读等），电脑宿主是
+  `standard/ptc/minimal/cordis`；`pushSessionToComputer` 把 `detail.presetId` 原样传给
+  `sessions.create`，桥又原样塞进 `session/create`，宿主直接拒绝。
+- 处理：桥 `sessions.create` 先 `resolveHostPreset`——名字存在就透传，不存在落宿主默认预设
+  （`agentPresets/list` 的 `isDefault`）；返回的 `session.presetId` 用解析后的 id。
+  万一宿主仍拒绝，桥抛人话「电脑宿主没有锦囊「x」，可用：…」而不是原始 RPC 串。
+  App 侧 `pushSessionToComputer` 也先按电脑 `caps.presets` 挑同名/第一个。
+- 验证：`test/real-preset-fallback.test.ts`（假 dsh 对未知预设回 `agent-preset/not-found`）；
+  真机手机轻会话推送两次都成功，电脑 tab 新增会话、预设落 `standard`，电脑 DSH 侧各跑 1 轮
+  （测试后 `session/cancel`）。
+- 顺带：电脑 DSH 的 `session/create` 没有 title 参数，会拿第一条消息自动起名；seed 首行是
+  `[dsh-handoff:…]`，所以推送后要立刻 `sessions.rename` 回手机标题（实测立即改名不会被
+  title-llm 覆盖，3/6/12s 复查仍是新名字）。
+
+### I25. adb 模拟长按：`input swipe` 可以，`input motionevent` 会卡住整个面板（2026-11-09）
+
+- 现象：用 `adb shell "input motionevent DOWN x y; sleep 1; input motionevent UP x y"` 长按抽屉行，
+  菜单能弹；但之后抽屉里所有点击（菜单项、tab、行）全部无响应，只有返回键有效。
+- 原因：`motionevent` 分进程注入，DOWN/UP 的 downTime 对不上，RN 侧 responder 收不到完整
+  touch 流，整块面板停在“按下”状态。
+- 处理：长按用 `adb shell input swipe x y x y-4 1200`（同点 + 2–4px、1000–1500ms）；
+  两次 `motionevent` 只用来做单次探测，用完最好 force-stop 重开 App。
+- 备注：`uiautomator dump` 在动画/连续帧（桌宠）时会 `could not get idle state`，
+  失败后返回的是上一次的 `/sdcard/ui.xml`，别把旧 dump 当现状——以截图为准。
+
+### I26. 锁屏 40s 后 adb 解不开，自动化会卡在安全锁屏（2026-11-09）
+
+- 现象：`input keyevent 26` 关屏 40s，再 `input keyevent 224` + 上滑：截图全黑，
+  `dumpsys window` 一直 `NotificationShade`、`dumpsys display` 先 `DOZE` 后 `ON`；
+  实际停在 EMUI 锁屏（截图里只有时钟/AOD 和指纹圈），后续 UI 操作全部无效。
+- 原因：短时间关屏（5s）唤醒后还能滑开；超过安全超时（约 30s+）进入需要指纹/密码的
+  secure lock。`wm dismiss-keyguard`、`cmd statusbar collapse`、`locksettings set-disabled true`
+  都不生效（`lockscreen.disabled` 仍是 0）。
+- 处理：自动化不要长时间关屏；锁屏恢复验证要人解锁，或者设备本来就没设密码/已 root。
+  锁屏期间可以继续验证「后台会话/桥重连」——电脑侧推消息仍然成功，只是手机不渲染。
+- 验证：2026-11-09 soak 第 8 轮锁屏 40s，PSS 209→177MB；第 9–12 轮电脑侧仍 1.5–1.6s 完成。
+
+### I27. soak 驱动里用 `Start-Process` 起桥会把 Node 卡死（2026-11-09）
+
+- 现象：Node 脚本里 `execFileSync('powershell', ['-Command', "Start-Process node ... -PassThru"])`
+  起桥后不再返回，整段 soak 卡在 `restart-up` 之前；桥其实已经起来（8787 健康）。
+- 原因：`Start-Process` 起的 node 继承了 PowerShell 的 stdout 句柄，父进程等不到管道 EOF。
+- 处理：用原生 `spawn(node, ['--import','tsx','engine/src/main.ts'], { detached:true,
+  stdio:['ignore', fdOut, fdErr] })` + `unref()`；停桥仍可用 `Stop-Process`。
+- 备注：设备锁屏/doze 时 `adb exec-out screencap -p` 也可能长时间不返回，soak 脚本要给它加超时
+  （本轮最后一张 `soak-end.png` 就是卡在这，数据已经齐了）。
+
+### I28. 远程 soak 的可用做法（2026-11-09）
+
+- 手机停在电脑会话上，**由电脑侧通过桥 `sessions.send` 推消息**、手机只负责跟随渲染：
+  不用碰中文 IME，也不需要 UI 输入（`input text` 会被输入法拆成候选词）。
+- 完成判定轮询 DSH 的 `session/list`（`running` + `sessionStats.steps` 增加），比截图 OCR 稳。
+- 本轮 12 轮：延迟 1.556–1.595s（median 1.576s），桥重启 2 次恢复 3.1s / 2.6s，
+  PSS 223→168MB（峰值 273MB，锁屏后回落到 17xMB）。
+- 产物：`scratch/soak-remote-2026-11-09.jsonl`、`scratch/soak-shots/`、
+  驱动 `scratch/soak-remote.ts`、汇总 `scratch/soak-summary.ts`。
+
+### I29. Wi-Fi 断开后服务端留半开连接，要发心跳清理（2026-11-09）
+
+- 现象：手机切掉 Wi-Fi，App 约 6s 变橙（client 收到 socket 关闭、开始退避重连），但电脑侧
+  `Get-NetTCPConnection -LocalPort 8787` 里那条 `192.168.1.2:xxxx` 一直 `ESTABLISHED`——
+  手机发不出 FIN，桥不知道对端没了；反复切网会堆半开 socket。
+- 处理：桥每 20s `ws.ping()`，上一轮没回 pong 就 `terminate()`（`aliveClients` Map）。
+  RN/OkHttp 会自动回 pong：实测连续 3 个心跳周期同一条连接（remote port 不变）没被误杀。
+- 验证：Wi-Fi 断开后 **t+35s** 半开连接消失（加心跳前一直挂着）；Wi-Fi 回来后 App
+  **4.9s / 9.8s** 用新 remote port 重连，首页角标橙→绿。
+- 产物：`scratch/wifi-outage-2026-11-09.jsonl`、`scratch/wifi-shots/`、`scratch/wifi-outage.ts`，
+  截图 `scratch/shots/wifi-off-orange-2026-11-09.png` / `wifi-recovered-2026-11-09.png`。
+
+
+### I30. 抽屉手势偶发只滑出一半（2026-11-09）
+
+- 现象：从左侧滑出会话抽屉时，偶发停在半开，需要再滑一次或点按钮。
+- 原因：`HomeScreen` 松手后启动一个 spring，`SessionDrawer` 的 `visible` effect 又对同一个
+  `Animated.Value` 启动第二个 spring；两套配置不同，native driver 下互相抢值。
+- 处理：抽屉动画只留 Home 一个 owner（`drawer` 状态 effect）；`SessionDrawer` 收到 `progress`
+  时只消费、不再 spring；打开/关闭阈值与面板宽度抽到 `ui/drawerGeometry.ts`，两边共用。
+- 验证：`test/drawer-geometry.test.ts` 覆盖 clamp/阈值；`npm run verify` 337 pass。

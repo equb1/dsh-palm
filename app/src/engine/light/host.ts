@@ -563,6 +563,8 @@ export class LightHost {
       }) => {
         const session = this.requireSession(sessionId);
         session.model = { provider, model };
+        if (model) this.options.model.model = model;
+        if (provider) this.options.model.providerName = provider;
         await this.save(session);
         return { session: this.detail(session) };
       },
@@ -598,6 +600,53 @@ export class LightHost {
         this.statuses.delete(session.id);
         await this.repo.remove(session.id);
         return { ok: true as const };
+      },
+      'sessions.rewind': async ({ sessionId, turnId }: { sessionId: string; turnId: string }) => {
+        const session = this.requireSession(sessionId);
+        const run = this.runs.get(sessionId);
+        if (run) {
+          run.abortKind = 'stop';
+          run.step.abort();
+          this.rejectPending(sessionId, 'stop');
+        }
+        // 定位 turn
+        const turnIndex = session.turns.findIndex((t) => t.id === turnId);
+        if (turnIndex < 0) {
+          throw new EngineProtocolError({ code: 'not_found', message: `未找到指定回合：${turnId}` });
+        }
+        const targetTurn = session.turns[turnIndex]!;
+        let removedText = '';
+        for (const block of targetTurn.blocks) {
+          if (block.kind === 'text') removedText += block.text;
+        }
+
+        // 计算 targetTurn 在所有 user turns 中的序号
+        let userTurnCount = 0;
+        for (let i = 0; i <= turnIndex; i++) {
+          if (session.turns[i]!.role === 'user') userTurnCount++;
+        }
+
+        // 截断 turns 到 turnIndex 之前
+        session.turns = session.turns.slice(0, turnIndex);
+
+        // 截断 history 中对应的用户消息及其后续
+        let userMsgSeen = 0;
+        let historyCut = -1;
+        for (let i = 0; i < session.history.length; i++) {
+          if (session.history[i]!.role === 'user') {
+            userMsgSeen++;
+            if (userMsgSeen === userTurnCount) {
+              historyCut = i;
+              break;
+            }
+          }
+        }
+        if (historyCut >= 0) {
+          session.history = session.history.slice(0, historyCut);
+        }
+
+        await this.save(session);
+        return { session: this.detail(session), removedText };
       },
       'shell.run': async ({ command }: { command: string }) => {
         if (!command.trim()) {
@@ -664,18 +713,36 @@ export class LightHost {
         return { results: results.slice(0, max) };
       },
       'models.list': async () => {
-        const currentModel: ModelOption = {
-          provider: this.providerId(),
-          providerName: this.options.model.providerName ?? '轻引擎',
-          id: this.options.model.model,
-          name: this.options.model.model,
-          description: '轻引擎当前使用的模型',
-        };
         const catalog = await this.modelCatalog();
-        const models = catalog.length > 0 ? catalog.slice() : [currentModel];
-        // 旧配置的 deepseek-chat 不在账号目录里，仍然让用户能选回当前值
-        if (!models.some((item) => item.id === currentModel.id)) models.unshift(currentModel);
-        return { models, default: this.modelChoice() };
+        let currentId = this.options.model.model;
+        let models: ModelOption[];
+        if (catalog.length > 0) {
+          models = catalog.slice();
+          // 如果当前是占位符 deepseek-chat 且不在目录里，自动对齐到目录第一项
+          if (currentId === 'deepseek-chat' && !models.some((item) => item.id === currentId)) {
+            currentId = models[0]!.id;
+            this.options.model.model = currentId;
+          } else if (!models.some((item) => item.id === currentId)) {
+            models.push({
+              provider: this.providerId(),
+              providerName: this.options.model.providerName ?? '轻引擎',
+              id: currentId,
+              name: currentId,
+              description: '当前自定义模型',
+            });
+          }
+        } else {
+          models = [
+            {
+              provider: this.providerId(),
+              providerName: this.options.model.providerName ?? '轻引擎',
+              id: currentId,
+              name: currentId,
+              description: '轻引擎当前使用的模型',
+            },
+          ];
+        }
+        return { models, default: { provider: this.providerId(), model: currentId } };
       },
       'permissions.list': async () => ({ options: PERMISSIONS, default: 'workspace-write' }),
       'presets.list': async () => ({ presets: PRESETS }),

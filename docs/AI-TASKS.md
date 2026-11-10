@@ -1,12 +1,20 @@
 # 锦囊 · AI 维护清单
 
-> 状态：2026-11-06。**本文件是任务状态、规则和命令的唯一来源**。
+> 状态：2026-11-09 凌晨（会话来源分离 / 「在电脑继续」真机通过 / 工作区按 tab / 桌宠单实例 / 构建收口）。
+> **本文件是任务状态、规则和命令的唯一来源**。
 > 需求看 [REQUIREMENTS](REQUIREMENTS.md)，实现看 [TECHNICAL](TECHNICAL.md)，坑看 [PITFALLS](PITFALLS.md)，
 > 长会话流式见 [STREAMING-FIX](STREAMING-FIX.md)。交接：2026-11-05 见
 > [archive/32](archive/32-handoff-2026-11-05.md) / [archive/33](archive/33-handoff-2026-11-05.md)，
 > 2026-11-06 见 [archive/34](archive/34-handoff-2026-11-06.md) / [archive/35](archive/35-handoff-2026-11-06.md) /
-> [archive/36](archive/36-handoff-2026-11-06.md) / [archive/37](archive/37-handoff-2026-11-06.md)。
-> **每次做完任务，必须回来勾选/更新这里**；不要另开任务文档。
+> [archive/36](archive/36-handoff-2026-11-06.md) / [archive/37](archive/37-handoff-2026-11-06.md) /
+> [archive/38](archive/38-handoff-2026-11-06.md)；
+> 2026-11-08 见 [archive/39](archive/39-handoff-2026-11-08.md) /
+> [archive/40](archive/40-handoff-2026-11-08.md) /
+> [archive/41](archive/41-handoff-2026-11-08.md) /
+> [archive/42](archive/42-handoff-2026-11-08.md)；
+> 2026-11-09 见 [archive/43](archive/43-handoff-2026-11-09.md) /
+> [archive/44](archive/44-handoff-2026-11-09.md)。
+> 桌宠方案：[PET-PLAN](PET-PLAN.md)；数据规范：[PET-SPECIFICATION](PET-SPECIFICATION.md)。
 
 ## 1. 当前基线
 
@@ -19,11 +27,14 @@
 - UI token 已对齐官方 DSH 默认浅色（2026-11-04）：`#FFFFFF` 基底、`#F9FAFB` 侧栏、
   deepseek 蓝 `#4176E6`、8/12/16/20/28 圆角。深色 alias 已接（2026-11-06）：
   `theme/palette.ts` + `ThemeProvider`，支持跟随系统/浅色/深色，存 UI cache。
+- 桌宠帧动画初版（2026-11-08）：`src/pet` 12 态状态机 + `PetRuntime` 帧时钟 +
+  deepy/maid 16 态 sprite sheet + RN/原生悬浮窗逐帧；真机待验收，详见
+  [archive/40](archive/40-handoff-2026-11-08.md)。
 - 输入区按 dsh-go 几何（2026-11-04）：单行 56 / 28 圆角、40 圆键；权限与锦囊在输入框上方，
   模型回顶栏，`+` 走附件面板；B3 前先把 Chat 的回合/思考/工具渲染拆到 `ui/chat/*`。
 - 流式主链路已修（2026-11-04）：canonical run/block id、chunk 缓冲、稳定块 memo、FlatList 和 follow
-  状态机已落地；真机工具密集长流、上滑冻结、回到底部、重进通过。20 分钟 soak 已完成
-  （2026-11-05：33 回合 / 41 次流式，0 duplicate，PSS 623MB，见 PITFALLS I10），90 分钟待补；
+  状态机已落地；真机工具密集长流、上滑冻结、回到底部、重进通过。20 分钟和 90 分钟 soak 均已完成
+  （2026-11-06：109 轮，PSS 349→615MB，无 OOM，见 PITFALLS I10）；
   见 `PITFALLS.md` H7 和 [STREAMING-FIX](STREAMING-FIX.md)。
 - 完整引擎（proot）自带 Python/Office 层（2026-11-04）：`assets/python.bin` 首次启动解压到 rootfs，
   `python3` + docx/openpyxl/pptx；三格式创建/读回/编辑在真机通过（见 P0 1.1）。
@@ -47,6 +58,16 @@
   OAuth 授权完成（页面「授权已完成」），回 App 已登录、模型可选（见 M2.7）。
 - 桥补非流式 assistant/message（2026-11-06）：最终全文覆盖同步骤流式块、工具按 callId 去重、
   usage 累加、turn/end 幂等收尾；单测见 `test/real-assistant-message.test.ts`。
+- 完整引擎平权（2026-11-06 夜间）：`sessions.delete` 直接删 dsh 会话目录（运行中拒绝）、
+  `sessions.search` 扫本地 vN 日志（标题/用户/正文/思考，片段与轻引擎一致）、`shell.run`
+  用只读 SandboxFs + just-bash（写操作 EACCES）；工作区映射修成真实 workspaceId，
+  新建工作区可落在 `/root/work` 下。
+- OAuth 取消（2026-11-06 夜间）：桥起 loopback 回调中继，用户拒绝授权时立刻
+  `account/cancelSignIn`，App 显示「已取消授权」，不再等 600s。
+- LAN（M3.2 第一步）：桥持久化 hostId/name/fingerprint 并广播 `_dsh-palm._tcp`；
+  Android NSD 扫描宿主，连接页可扫描/填入地址/重连上次宿主；群组播锁由 HostService 持有。
+- 系统入口（M3.3 第一步）：QS 磁贴、桌面小组件、通知 ACTION_VIEW 直达会话/审批、
+  常驻通知可点回 App；悬浮球和 E2E 加密仍未做。
 - 品牌资产（2026-11-10）：**Crabstack / 蟹栈**，桌宠**小寄**；App 图标、Android
   adaptive/monochrome 已接入 `app/assets/icon.png`、`adaptive-icon.png`、`monochrome-icon.png`
   与 `res/mipmap-*`；设计源在 `design/`（未入库）。品牌/桌宠交接见 [BRAND-PET](BRAND-PET.md)。
@@ -237,6 +258,9 @@
   - 文件夹是 UI 层标签，不改宿主/工作区；协议没有 folder 字段。
   - 2026-11-06 验收：筛选/全部功能/正文搜索/置顶/自定义文件夹全部通过
     （`ACCEPTANCE-2026-11-06`）；完整引擎正文搜索与多工作区仍属后续项。
+  - 2026-11-09 抽屉收尾：抽屉 0→1 动画改由 Home 单一 owner，SessionDrawer 只消费 `progress`，
+    修手势滑出偶发半开；宽度/开合阈值抽到 `ui/drawerGeometry.ts`。工作区从多行只读块改成
+    一行「工作区 ›」入口，点开 WorkspaceScreen。单测 `test/drawer-geometry.test.ts` 3 条。
 - [x] **U7 视觉**：浅色主题、字号档、动效 token（按压/弹层/列表）
   - 2026-11-06 前置：外观组加了「完成后收起过程」开关（`collapseProcess`，默认开，
     持久化在 UI cache）；关掉后完成的回合默认展开思考/工具过程，收起/展开仍可手动点。
@@ -255,6 +279,13 @@
     设置、主题页、聊天、审批卡、文件页与系统跟随（见 [DARK-THEME](DARK-THEME.md)）。
     真机用并行测试包（`cool.cnb.dshpalm.test`，不动 release 数据）深色 `device:regression`
     10/10 通过（2026-11-06，含引擎启停/文件/全文搜索）；测试包仍在设备上，release 未动。
+  - 2026-11-07 动效重做：`ScreenStack` 页面栈替换 ScreenFade（右滑入/左移视差/返回滑出），
+    设置二级页同栈，`BottomSheet` 遮罩淡入+面板滑出，抽屉弹簧+左滑跟手+首页 42px 视差，
+    点会话先推空壳详情再并行拉数据。真机抽屉展开 5/5 0 掉帧；详见 [ANIMATION](ANIMATION.md)。
+  - 2026-11-07 品牌视觉：`BrandIcon`/`BrandMark` 替换设置/全部功能/思考/工具/操作栏的汉字与
+    Unicode 符号；首页顶栏改为 BrandMark+模型胶囊+单一运行模式胶囊（点开模式弹层）；
+    首页打字机问候/循环提示；回到底部自绘箭头+弹簧；思考图标旋转+三点跳动；用户/AI 正文
+    `selectable` 长按复制。详见 [BRAND-UI](BRAND-UI.md)。
 - [x] **U8 内容屏**：文件面板、终端、工作区（依赖后端接口）
   - 2026-11-06 第一步：轻宿主加 `fs.list`（列 `/workspace` 目录，返回 name/kind/size/mtime，
     子项 500 条上限、单子项 stat 失败不拖垮整页）；新增 `ui/FilesScreen.tsx` 文件浏览器
@@ -287,10 +318,16 @@
     单测 `test/bridge-workspace.test.ts` 4 条（列表/改名/删除/穿越/软链）；`npm run verify` 244 pass。
     真机已验证：完整引擎文件页列出 docs/uploads，删除 `docs/u8-test.txt` 后 UI 与宿主目录同步消失；
     rename 由单测覆盖。
-  - 未做：多工作区创建/置顶/分组（M2）；完整引擎终端/正文搜索（仍显式 unsupported）。
+  - 2026-11-06 夜间完整引擎平权：`sessions.delete` / `sessions.search` / `shell.run` 已实现；
+    工作区映射改为真实 `workspaceId`，`sessions.create` 支持传入 workspaceId，
+    `workspaces.create` 可在 `/root/work` 下创建目录；WorkspaceScreen 增加「新建工作区」入口。
+  - 未做：多工作区的置顶/分组/排序（M2 余项）；完整引擎正文搜索仍是本地日志扫描，
+    没有上游 FTS 的实时索引。
 - [x] **U9 长会话流式布局**：FlatList + blankSpace + follow 状态机；真机主要路径通过，
   20 分钟 soak 已完成（33 回合），**90 分钟 soak 已完成**（2026-11-06，109 轮，PSS 615MB，
   无 OOM/崩溃，PITFALLS I10）
+  - 2026-11-06 夜间抽屉展开优化：空闲预挂载 + 关闭不卸载 + 去掉面板硬件纹理 +
+    useMemo；同机 8 次开合 Janky 6.42%→3.51%，单独展开 0 掉帧（PITFALLS I22）。
 
 #### 可并行 UI 项（2026-11-03，给 agent）
 
@@ -508,9 +545,66 @@ type AttachmentChipsProps = {
 
 - [ ] **3.1 官方 OAuth 真机验证**（loopback + 拒绝授权）
   - [x] 正常授权 loopback：release 真机通过（2026-11-06，页面「授权已完成」、回 App 已登录）
-  - [ ] 用户拒绝授权路径未验证（需确认上游回调对 `error` 参数的处理）
+  - [x] 用户拒绝授权：桥用 loopback 回调中继 + `account/cancelSignIn`，代码路径完成；
+    真机需要再点一次「拒绝授权」验收（App 应立即显示「已取消授权」）
+  - [ ] 关闭浏览器/不回调仍会走 600s 超时（可后续加前台启发式取消）
 - [ ] **3.2 LAN 直连**（mDNS、E2E WS、索引同步、离线状态机）
+  - [x] 第一步：桥持久化 hostId/name/fingerprint，广播 `_dsh-palm._tcp`；
+    Android NSD 扫描、连接页列表、手填地址兜底、上次宿主重连
+  - [x] 第一步：HostService 持有 Wi-Fi 组播锁；宿主页「局域网扫描」可在不断开当前连接时扫描；
+    NEARBY_WIFI_DEVICES 运行时权限已接（Android 16 弹窗可见）
+  - [ ] 真机跨设备发现：2026-11-09 复测**扫描已可用**——连接页「扫描局域网宿主」扫到
+    `电脑宿主 (192.168.1.3:8787)`（TCP 探活 + `/health`），点结果即填入地址并连上
+    （`lan-discovery-2026-11-09.png`）；mDNS 广播在 Windows 防火墙下仍不可靠（5353/8788 曾被拒）
+  - [ ] E2E WS（X25519 + 加密帧）未做；当前仍是明文 `ws://`
+  - [ ] 多宿主索引/密钥分仓未做（目前只有一个 active remote host + 全局设备密钥）
+  - [ ] 完整离线状态机（在线/重连/离线/配对失效 + 最后同步时间）只做了「上次宿主重连」
+  - [x] 远程重连 soak（2026-11-09，**30 轮 / 合计约 50 分钟；其中 18 轮连续 30 分钟**）：
+    电脑侧每 ~100s 推一条，手机跟随渲染；完成延迟 **1.556–1.595s（median 1.575s）**，30 轮 0 失败；
+    桥重启 4 次恢复 **3.09s / 2.57s / 3.07s / 2.54s**；PSS 223 起、峰值 294MB、30 分钟段
+    247→251MB（无 OOM/崩溃）；锁屏 40s 后 PSS 209→177MB、电脑侧推送仍成功（PITFALLS I26）。
+    产物 `scratch/soak-remote-2026-11-09.jsonl`、`scratch/soak-shots/`、`scratch/soak-summary.ts`；
+    收尾截图 `soak30-final-2026-11-09.png`（round 28–30）。
+  - [x] Wi-Fi 切换恢复（2026-11-09，USB adb 控制）：关 Wi-Fi 后 App ~6s 首页角标变橙
+    （client 收到 socket 关闭、按 0.8s→8s 退避重连）；开 Wi-Fi 后 **4.9s / 9.8s** 用新 TCP
+    连接回绿。桥加 20s WS ping 心跳后，断开留下的半开连接 **35s** 被清掉（之前一直挂着，PITFALLS I29）。
+    截图 `wifi-off-orange-2026-11-09.png` / `wifi-recovered-2026-11-09.png`、
+    `heartbeat-stable-2026-11-09.png`；日志 `scratch/wifi-outage-2026-11-09.jsonl`。
+  - [x] 30 分钟整段已补：round 13–30 连续 18 轮（见上）；蜂窝切换等同「断 Wi-Fi」——电脑只在
+    LAN 里可达，没有第二条路径可测。
 - [ ] **3.3 系统入口**（小组件、悬浮球、QS、通知直达、后台分享）
+  - [x] QS 磁贴、桌面小组件、通知 ACTION_VIEW 直达会话/审批、常驻通知可点回 App
+  - [ ] 悬浮球（overlay service）未做，设置里明确标注「暂未接入」
+  - [x] 后台分享：`ShareInbox` 已有，冷启动/onNewIntent 都接
+- [x] **3.4 跨设备会话：来源分离 +「在电脑继续（复制历史）」**（2026-11-09）
+  - [x] 抽屉「手机 N / 电脑 M」tab，行标签 `📱 轻` / `📱 完整` / `💻 电脑`；长按菜单只对当前来源开放
+  - [x] 工作区按 tab 缓存（`workspaceCache`）；电脑 caps 没工作区时用电脑会话的 workspace 名回退
+  - [x] 连电脑成功后关连接页；远程 `autoReconnect`；远程表单拒绝 `127.0.0.1/localhost`
+  - [x] `store.pushSessionToComputer`：`buildHandoff` → 电脑 `sessions.create` → `sessions.send(seed)`
+    → `refreshSessions`；发完立刻 `sessions.rename` 改回手机标题（否则电脑 DSH 会拿 seed 首行
+    起名成 `[dsh-handoff:…] 这是一次从…`）
+  - [x] 顶栏角标/运行模式按 `link` 区分：连电脑显示「电脑模式」，不再误标「完整模式」
+  - [x] 桥整机重启恢复（2026-11-09 01:32）：连电脑时杀掉 8787 桥 → 角标仍「电脑模式」、
+    状态点变橙、不掉回轻引擎；重启桥后约 12s 自动回绿，打开推送会话能正常拉快照
+    （`remote-bridge-down-2026-11-09.png` / `remote-bridge-restored-2026-11-09.png`）
+  - 真机（2026-11-09 01:22/01:30，release 0.2.0 vc16）：手机轻会话「帮我搜索一下乌克兰…」长按
+    →「在电脑继续」→ 确认，**不再报 `agent-preset/not-found`**（PITFALLS I24），电脑 tab
+    22→23→24，多出会话；第二次推送标题保留为「帮我搜索一下乌克兰游戏地铁三部曲的2…」
+    （不是 `[dsh-handoff:…]`），预设落成 `standard`；电脑 DSH 侧各跑 1 轮后手动 cancel。
+    截图 `push-menu-2026-11-09.png` / `push-confirm-2026-11-09.png` /
+    `push-computer-tab-2026-11-09.png`；连电脑后首页角标「电脑模式」、运行模式页
+    「电脑宿主（已连接）」（`home-remote-badge-2026-11-09.png`、`mode-sheet-remote-2026-11-09.png`）。
+  - 电脑 tab 工作区：`ces-mobile D:\ces-mobile` / `default-workspace C:\Users\chenf\Documents\…`。
+  - [x] 反向「在手机继续（摘要交接）」（2026-11-09）：电脑会话长按 → 切轻引擎 →
+    `sessions.import` 重建历史 + seed（**不触发模型**），标题沿用电脑会话；copy 语义不建
+    ConversationLink。单测 `test/handoff-reverse.test.ts` 两条（预设落 `light`、seed 标记/replay、
+    非电脑来源直接拒绝）。真机通过（02:14）：电脑 tab 长按 → 确认 → 手机 tab 13→14，
+    新会话按 replay 重建 T19–T26（含锁屏期间跑的 round 9–12）；
+    截图 `reverse-menu/reverse-confirm/reverse-imported/reverse-phone-tab-2026-11-09.png`。
+  - [x] 同步可行性调研（2026-11-09）：DSH 没有 `session/import|export`（404），只有
+    `session/fork`（复制事件、`parentSession`/`isSeeded`）；存储是 `session.v4.jsonl.zstd`
+    多帧事件流。方案对比与推荐见 [SESSION-SYNC](SESSION-SYNC.md)。
+  - 限制：是复制/接管，不是双向同步；电脑侧新增消息不回写手机（要等 DSH import/export API）。
 
 ### M4 · 远期
 
@@ -524,6 +618,9 @@ type AttachmentChipsProps = {
 - 图片渲染未做系统真机验收；
 - TTS/朗读未接（需要原生 TTS）；
 - 轻引擎账号 token 读自明文 YAML，安全模型需在文档里说清；
+- LAN 仍是明文 WS，E2E 加密未做；设备密钥仍只有一个全局槽，多宿主会互相覆盖；
+- 悬浮球未接（SYSTEM_ALERT_WINDOW 已声明，但没有 overlay service）；
+- 完整引擎搜索按需扫日志，长会话首次搜索可能受 15s 请求超时限制；
 - 发布签名/正式包流程（见 E8）。
 
 ## 3. 工程债
@@ -534,13 +631,17 @@ type AttachmentChipsProps = {
     `session.queued`，当前 run 结束（含手动停止）后自动 `startRun` 下一条，返回 `{queued:true}`。
     单测：第一条 `waitForAbort`，第二条排队，stop 后收到两次 `run.finished` 且第二轮有回复。
     局限：App 界面仍用「停止 / 插话」，没有主动「排队发送」按钮；协议层已支持。
-- [ ] **E3** 宿主缺会话删除/正文搜索 → 等上游或自建索引
+- [x] **E3** 宿主缺会话删除/正文搜索 → 等上游或自建索引
+  - 2026-11-06 夜间：完整引擎也实现 `sessions.delete` / `sessions.search`（删 dsh 会话目录 + 扫描 vN 日志；
+    运行中拒绝），完整引擎侧不再是 unsupported；`test/real-bridge-parity.test.ts` 用假 dsh 覆盖
+    delete/search/shell/workspace 四条链路。
   - 2026-11-06：轻引擎实现 `sessions.delete`（运行中的会话拒绝删除），抽屉长按菜单加「删除」
     + 二次确认；store 删除后关闭当前会话、清理 ConversationLink、刷新列表。mock 宿主同样支持，
     完整引擎显式 unsupported。真机删掉「Do not ask questions」测试会话，
     其他会话不受影响（`148-drawer-longpress-menu.png`、`149-drawer-after-delete.png`）；
     单测覆盖删除与运行中拒绝。
-  - 仍缺：完整引擎删除与正文搜索（轻引擎已支持删除 + `sessions.search` 全文搜索）。
+  - 仍缺：上游 FTS 的实时索引（当前完整引擎搜索按需扫日志）；删除后其他在线客户端的
+    实时 `session.deleted` 事件（协议尚未加）。
 - [ ] **E4** 沙箱只有 JS 层路径约束 → 文档别承诺安全边界
 - [ ] **E5** 真机回归靠手跑 → 发版前跑 `scripts/device-*.ts`
   - 2026-11-06 第一步：新增 `scripts/device-regression.ts` + `npm run device:regression`：
@@ -550,6 +651,10 @@ type AttachmentChipsProps = {
     用 uiautomator 文本断言，失败自动截图。真机一次通过 10 步；键盘弹起时先 `hideKeyboard()`
     再按返回，否则第一次返回只收键盘。
   - 仍只有一条主路径；登录/审批/流式长会话/引擎启停/文件操作等还没进脚本。
+  - 2026-11-06 夜间 release 0.2.0 已装，`device:regression` **8/10**：冷启动、抽屉、
+    全部功能、文件根、文件操作菜单（用 `uploads/weekly.docx` fixture）、返回、设置 6 组、
+    设置二级页、引擎启停均过；全文搜索在“当前轻会话列表为空 + 搜索输入焦点异常”时
+    没有结果，未完成最后一步。脚本已兼容 `docs/` 和 `uploads/` fixture。
   - 2026-11-06 手工补审批路径：真机新会话发「Use the bash tool to run: echo approval-ok…」→
     审批卡（`拒绝/批准`，显示 `执行命令`/`echo approval-ok`）→ 批准 → 工具输出 `approval-ok`
     （`169-approval-card.png`、`170-approval-approved.png`）。流式与工具行同时可见；
@@ -569,8 +674,9 @@ type AttachmentChipsProps = {
   - 关键修正（推翻旧想法）：release 默认 `debuggable=false`，装完 `run-as` 不可用；且 debug 与 release
     证书不同。所以这台设备 debug → release **必然丢 App 数据**，「卸前 tar 备份 files/shared_prefs、
     装 release 再还原」走不通。首装/升级仍等用户确认后执行（路径 A 干净首装 / 路径 B 同签名升级）。
-  - 2026-11-06 重新构建：`gradlew :app:assembleRelease` 7m51s 成功，新 APK 243.6MiB、
-    sha256 `89F9F424…`、证书 `50de0609…`；`npm run release:preflight` 全 PASS，首装仍等用户确认。
+  - 2026-11-06 夜间：versionCode bump 到 `2` / versionName `0.2.0`，重新 `assembleRelease`
+    （包含完整引擎平权、深色主题、M2.1–M2.4、LAN 发现、系统入口）；APK 244.2MiB、
+    sha256 `235CB1DA…`，设备已同签名 `install -r` 升级成功（数据保留）。
 
 
 ## 4. 待决事项
@@ -582,6 +688,9 @@ type AttachmentChipsProps = {
 | 插件市场（D3） | 只启用/配置 / 下载执行 | 前者（2.5.2） |
 | 多端同步（D4） | 索引+引用 / 也同步正文 | 仅索引+引用 |
 | PDF（C14） | 继续暂缓 / 重启 | 继续暂缓 |
+
+> 2026-11-06 夜间确认：PDF、OCR、LibreOffice render/recalc、旧 Office 格式、TTS
+> 本轮不做，只在文档和 UI 里标注；不要为了“看起来完整”接假入口。
 
 ## 5. 分支、提交与验证规则
 

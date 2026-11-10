@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="52dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="12dp"
+    android:paddingEnd="10dp"
+    android:background="@drawable/dsh_widget_bg">
+
+    <!-- 品牌 Logo 图标 -->
+    <ImageView
+        android:id="@+id/widget_logo"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:src="@mipmap/ic_launcher"
+        android:contentDescription="@string/app_name" />
+
+    <!-- 搜索框中央提示区（点击打开 App 并直接唤起输入框） -->
+    <LinearLayout
+        android:id="@+id/widget_search_box"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="问问锦囊… 搜索或输入问题"
+            android:textColor="#475569"
+            android:textSize="13.5sp"
+            android:ellipsize="end"
+            android:singleLine="true" />
+
+        <TextView
+            android:id="@+id/widget_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="已就绪 · 点击直接提问"
+            android:textColor="#94A3B8"
+            android:textSize="10sp"
+            android:singleLine="true"
+            android:layout_marginTop="1dp" />
+    </LinearLayout>
+
+    <!-- 右侧快捷新建会话按钮 (+) -->
+    <LinearLayout
+        android:id="@+id/widget_btn_new"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="＋"
+            android:textColor="#2563EB"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>

@@ -6,6 +6,7 @@
  */
 import { build } from 'esbuild';
 import { copyFileSync, mkdirSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const OUT = 'dist/dsh-palm-bridge.cjs';
 /** 同时也放进 APK 的 assets：运行时每次启动同步进 rootfs，改桥就不用重打 payload */
@@ -20,6 +21,18 @@ const result = await build({
   bundle: true,
   platform: 'node',
   target: 'node20',
+  // 桥运行在 Node 里，但 just-bash 的 Node 入口带 @mongodb-js/zstd / node-liblzma
+  // 这类可选原生模块；我们只需要它的纯 JS 解释器 + 自己的 SandboxFs，所以固定走 browser 入口。
+  plugins: [
+    {
+      name: 'just-bash-browser',
+      setup(build) {
+        build.onResolve({ filter: /^just-bash$/ }, () => ({
+          path: resolve('app/node_modules/just-bash/dist/bundle/browser.js'),
+        }));
+      },
+    },
+  ],
   // CJS：ws 这类 CommonJS 依赖里有 require('events')，打成 ESM 会炸（Dynamic require is not supported）
   format: 'cjs',
   banner: {

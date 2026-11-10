@@ -7,6 +7,30 @@
  *   - ws /api/remote.mux，{type:'open', streamId, endpoint} → {type:'item', streamId, value}
  */
 
+import { createHash, createHmac } from 'node:crypto';
+
+function encodeBase64Url(buf: Buffer | Uint8Array | string): string {
+  return Buffer.from(buf).toString('base64').replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/g, '');
+}
+
+function decodeBase64Url(str: string): Buffer {
+  let b64 = str.replaceAll('-', '+').replaceAll('_', '/');
+  while (b64.length % 4 !== 0) b64 += '=';
+  return Buffer.from(b64, 'base64');
+}
+
+export function generateDshCookie(authority: string, secretStr: string): string {
+  const secret = decodeBase64Url(secretStr);
+  const cName = 'dsh-auth-' + encodeBase64Url(createHash('sha256').update(authority).digest());
+  const issuedAt = Date.now();
+  const expiresAt = issuedAt + 1440 * 60 * 1000 * 30;
+  const payload = { version: 1, authority, issuedAt, expiresAt };
+  const body = encodeBase64Url(Buffer.from(JSON.stringify(payload), 'utf8'));
+  const sig = createHmac('sha256', secret).update(body).digest();
+  const cValue = `v1.${body}.${encodeBase64Url(sig)}`;
+  return `${cName}=${cValue}`;
+}
+
 export interface RealSessionListItem {
   sessionId: string;
   updatedAt: number;
@@ -55,8 +79,24 @@ export class DshRealClient {
     this.token = token;
   }
 
-  /** 用 URL 里的 token 换 cookie；/api 只认 cookie，不认 query token */
+  /** 登录换取 cookie：支持直接通过 secret 派生 cookie 或走 GET /?token= 换 cookie */
   async login(): Promise<void> {
+    if (this.cookie) return;
+
+    // 1. 如果 token 类似 base64url secret，先尝试直接派生 cookie
+    try {
+      const url = new URL(this.baseUrl);
+      const authority = url.host;
+      const derived = generateDshCookie(authority, this.token);
+      this.cookie = derived;
+      // 验证 cookie 是否有效
+      await this.rpc('session/list', { _request: {} });
+      return;
+    } catch {
+      this.cookie = '';
+    }
+
+    // 2. 回退到 GET /?token= 换 cookie
     const res = await fetch(`${this.baseUrl}/?token=${encodeURIComponent(this.token)}`, {
       redirect: 'manual',
     });

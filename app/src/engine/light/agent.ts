@@ -17,8 +17,10 @@ import type {
   RiskLevel,
   SessionStatus,
   Turn,
+  TurnStatus,
 } from '../../protocol';
 import { streamChat } from './provider';
+import { SSE_IDLE_TIMEOUT_MS } from './transport.shared';
 import { newBlockId } from './sessionRepo';
 import { checkToolCapability } from './capability';
 import { closePendingToolCalls, sanitizeToolHistory } from './history';
@@ -243,6 +245,7 @@ export class Agent {
     try {
       for (let step = 0; step < maxSteps; step += 1) {
         if (run.abortKind === 'stop') {
+          this.finalizeStreamingTurns(session, 'stopped', sink, run.runId);
           return this.finish(run, { reason: 'stopped' });
         }
         // steer 之后换一个新的 step controller；否则沿用当前的
@@ -301,8 +304,8 @@ export class Agent {
         try {
           result = await this.stream(
             modelConfig,
-            // 空闲超时：45s 没有新分片就当超时（transport 里重置）
-            { messages, tools, signal, idleTimeoutMs: 45_000 },
+            // 空闲超时：默认 120s 没有新分片就当超时（transport 里重置）
+            { messages, tools, signal, idleTimeoutMs: SSE_IDLE_TIMEOUT_MS },
             {
               onText: (delta) => {
                 markFirst('content');
@@ -542,6 +545,7 @@ export class Agent {
         }
       }
 
+      this.finalizeStreamingTurns(session, 'error', sink, run.runId);
       return this.finish(run, {
         reason: 'error',
         error: `超过最大步数（${maxSteps}），已停止`,
@@ -549,9 +553,35 @@ export class Agent {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (run.step.signal.aborted) return this.finish(run, { reason: 'stopped' });
+      const isAbort = run.step.signal.aborted;
+      this.finalizeStreamingTurns(session, isAbort ? 'stopped' : 'error', sink, run.runId);
+      if (isAbort) return this.finish(run, { reason: 'stopped' });
       this.logError(run, error);
       return this.finish(run, { reason: 'error', error: message });
+    }
+  }
+
+  private finalizeStreamingTurns(
+    session: StoredSession,
+    reason: 'stopped' | 'error' | 'done',
+    sink?: RunSink,
+    runId?: string,
+  ): void {
+    const status: TurnStatus = reason === 'done' ? 'done' : reason === 'stopped' ? 'stopped' : 'error';
+    let changed = false;
+    for (const turn of session.turns) {
+      if (turn.status === 'streaming') {
+        turn.status = status;
+        changed = true;
+        sink?.emit('block.appended', {
+          sessionId: session.id,
+          runId: runId ?? turn.runId ?? 'run',
+          turn: cloneTurn(turn),
+        });
+      }
+    }
+    if (changed) {
+      sink?.persist().catch(() => {});
     }
   }
 

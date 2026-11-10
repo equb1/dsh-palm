@@ -109,7 +109,11 @@ export async function postSse(request: SseRequest): Promise<SseHttpResult> {
         });
       }
     };
-    xhr.onerror = () => finishReject(offlineError());
+    xhr.onerror = () => {
+      // 空闲超时里的 xhr.abort() 在部分 ROM 上会走 onerror；别把超时误报成断网
+      if (timedOut) return;
+      finishReject(offlineError());
+    };
     xhr.ontimeout = () => {
       timedOut = true;
       finishReject(new LightRequestError('timeout', lightTimeoutMessage(idleMs)));

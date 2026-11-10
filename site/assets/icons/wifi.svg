@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="LAN 与远程宿主">
+  <rect width="48" height="48" rx="14" fill="#4B67B4"/>
+  <path d="M12 20a21 21 0 0124 0M16.5 25a15 15 0 0115 0M21 30a8.5 8.5 0 016 0" fill="none" stroke="#F4F7FF" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="24" cy="35" r="2.4" fill="#F4F7FF"/>
+</svg>

@@ -87,8 +87,10 @@ UI 侧统一经 `app/src/lib/errors.ts` 翻成人话。
   发送：`session/send`；插话：`session/steer`；取消：`session/cancel`；
   改名：`session/rename { request: { sessionId, title } }`。
 - 钉/归档在 workspace 控制器：`workspace/pinSession|unpinSession|archiveSession|unarchiveSession`。
-- **没有**会话删除、正文搜索的远程接口。
-- 文件接口 `fs.list/rename/delete` 不经过 dsh：桥在 proot 内直接用 Node fs 读写 `/root/work`（见 §5.1）。
+- **没有**会话删除、正文搜索的远程接口；桥在 proot 内按 dsh 磁盘布局直接处理
+  （`engine/src/real/sessionFs.ts`：删会话目录、扫 `session.vN.jsonl.zstd`）。
+- 文件接口 `fs.list/rename/delete` 不经过 dsh：桥在 proot 内直接用 Node fs 读写
+  默认工作区（优先会话真实 cwd，回退 `/root/work`；见 §5.1）。
 - 事件投影：`engine/src/real/project.ts` 把 `user/message`、`assistant/message`、工具调用等
   折成 `Turn/Block`；`run.finished` 映射状态。非流式 `assistant/message` 用最终全文覆盖
   同一步骤的流式块，按 seq/message id 去重，工具调用按 callId 去重，usage 累加到回合。
@@ -183,15 +185,19 @@ app/src/engine/shell/   just-bash + 限额（30s、2000 命令、24k 输出…�
 - 文件名：`lib/filenames.ts` 统一清洗（中文/空格/`#`/`%` 等），生成工具与审批卡共用。
 - 文件浏览（U8）：协议 `fs.list` / `fs.rename` / `fs.delete` 由轻宿主用工作区 `SandboxFs` 实现
   （`/` 根、name/kind/size/mtime，500 条上限；根目录不可重命名/删除）。
-  完整引擎由桥的 `engine/src/real/workspaceFs.ts` 直接读写 `/root/work`：同样支持 list/rename/delete，
-  拒绝 `..`/根目录改名删除，软链不跟随；不依赖 dsh 远程接口。
-- 只读终端（U8）：`shell.run` 由轻宿主用独立只读挂载（Workspace SandboxFs `readOnly` + MountableFs）
-  跑 ShellRunner，写操作返回 EACCES；15s 超时、20k 输出；完整引擎 unsupported。
+  完整引擎由桥的 `engine/src/real/workspaceFs.ts` 直接读写：根优先取最近会话的真实 cwd
+  （如 `/root/work/deepseek-harness/default-workspace`），回退 `/root/work`；同样支持
+  list/rename/delete，拒绝 `..`/根目录改名删除，软链不跟随；不依赖 dsh 远程接口。
+- 只读终端（U8）：`shell.run` 用独立只读挂载（Workspace SandboxFs `readOnly` + MountableFs）
+  跑 ShellRunner，写操作返回 EACCES；15s 超时、20k 输出。轻宿主和完整引擎共用同一套实现；
+  桥打包时 `just-bash` 固定走 browser 入口，避免可选原生 zstd/liblzma 依赖。
 - 会话运行（E2）：同一会话同时最多一个 run；运行中再 `sessions.send` 会写历史并进
   `session.queued`（返回 `queued:true`），当前 run 结束后自动开下一条；UI 仍以插话/停止为主。
 - 会话管理（E3）：轻宿主实现 `sessions.delete`（运行中拒绝）和 `sessions.search`（标题/历史/思考
-  正文，返回片段与命中数）；`sessions.pin` 的状态进 `SessionSummary.pinned`，抽屉据此分「置顶」组；
-  完整引擎对 delete/search 显式 unsupported。
+  正文，返回片段与命中数）；`sessions.pin` 的状态进 `SessionSummary.pinned`，抽屉据此分「置顶」组。
+  完整引擎同样实现 delete/search：删除 dsh 会话目录（含 200ms 写句柄兜底），搜索按需读
+  `session.vN.jsonl.zstd` 并复用 `projectRecords`，语义与轻引擎对齐；大历史首次搜索受
+  15s 请求超时约束。
 - 图片视觉（M2.4）：`engine/light/vision.ts` 按模型名启发式识别视觉能力；图片读成 data URL，
   单张 8MB、合计 16MB、最多 4 张；非视觉/超限降级为路径并在正文提示。历史只落 `imageFiles`（路径+MIME），
   请求前才读字节，provider 转成 OpenAI `content` array；不把 base64 写进会话 JSON。
@@ -400,7 +406,8 @@ C17 统一会话列表第一步只做“缓存 + 徽标 + 先切引擎再打开�
 
 通用 token：圆角 4 / 8 / 12 / 16 / 20 / 28 / 999；间距 4 / 8 / 12 / 16 / 20 / 28；
 字体系统/monospace，正文 14/22、次级 13/20、说明 12/18；动效 100 / 200 / 300ms，
-`cubic-bezier(.4,0,.2,1)`。主题模式 `system` / `light` / `dark` 存 UI cache，
+`cubic-bezier(.4,0,.2,1)`；页面/抽屉/弹层用 `motion.spring.page|sheet`（约 300ms 收敛）。
+主题模式 `system` / `light` / `dark` 存 UI cache，
 `ThemeProvider` 用 `useColorScheme()` 解析 system；根 View/StatusBar、启动 Overlay 和
 web `colorScheme` 一起切换。深色对比度按正文 ≥ 4.5:1 选值。
 
@@ -409,15 +416,16 @@ web `colorScheme` 一起切换。深色对比度按正文 ≥ 4.5:1 选值。
 | 屏 | 内容 |
 |---|---|
 | 启动层 `LaunchOverlay` | 品牌 + 进度，覆盖首屏，就绪后淡出；跟随主题 |
-| 首页 `HomeScreen` | 品牌、时段问候、最近会话、Composer（权限/锦囊在输入框上方） |
-| 抽屉 `SessionDrawer` | 工作区、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
+| 首页 `HomeScreen` | BrandMark + 模型胶囊 + 单一运行模式胶囊；打字机问候/循环提示；最近会话、Composer（权限/锦囊在输入框上方）；模式弹层走 BottomSheet |
+| 抽屉 `SessionDrawer` | 工作区入口、搜索、筛选胶囊、运行中/今天/更早、行内状态、长按菜单、底部账号/设置、⊞ 全部功能 |
 | 全部功能 `FeaturesScreen` | 卡片网格：对话/设置/引擎/实验室 + 文件/工作区/终端（可用）+ 插件/社区（未接入标灰） |
 | 文件 `FilesScreen` | `fs.list` 列 `/workspace`、面包屑、文件名过滤、目录/文件行、`fs.rename`/`fs.delete`、分享（轻引擎） |
 | 搜索 `SearchScreen` | `sessions.search` 全文搜索（标题/历史/思考），命中片段，点开进会话 |
 | 工作区 `WorkspaceScreen` | 宿主工作区概览（root/会话数/运行中/锦囊数）+ 文件入口（轻引擎单工作区） |
 | 终端 `TerminalScreen` | `shell.run` 只读终端：pwd/ls/cat/grep，写操作被沙箱拒绝，15s/20k |
 | 聊天 `ChatScreen` | 顶栏（返回/标题/预设/模型）、回合、思考、工具行、审批/提问卡、输入区；字号档 `chatFontScale`；深色由 palette 驱动 |
-| 动效 `ScreenFade` | 页面切换淡入（motion.duration.base/standard）；设置行按压 0.98（fast） |
+| 动效 `ScreenStack` | 页面 push 从右滑入、旧页左移 24% + 压暗；返回滑出；非当前页冻结 store 订阅并用 `display:none` 隔离；详见 [ANIMATION](ANIMATION.md) |
+| 动效 `BottomSheet` | 遮罩淡入 + 面板底部弹簧；ModelSheet / GeneratedFilesSheet 共用 |
 | 设置 `SettingsScreen` | 6 组首页（搜索 / SettingsTile / 右侧当前值），只做导航 |
 | 设置二级页 | `AccountScreen` / `CredentialsScreen` / `ProvidersScreen` / `HostScreen` / `LabScreen` / `EngineScreen` / `ThemeScreen` |
 | 引擎 `EngineScreen` | 状态环、启停/重启、失败卡、保活、日志、高级启动命令 |
@@ -430,7 +438,7 @@ Markdown 渲染在 `MarkdownView.tsx`：代码块（语言标签/复制/横向�
 代码高亮在 `syntax.ts`（js/ts、py、sh、json、html；未知语言回退纯文本）。
 聊天渲染在 `app/src/ui/chat/*`（`TurnView` / `ApprovalCard` / `CapabilityCard` / `ChatCard`），`ChatScreen.tsx` 只负责顶栏、滚动和 Composer 组装。
 生成文件面板在 `GeneratedFilesSheet.tsx`（`lib/generatedFiles.ts` 解析工具结果 + `fileActions.native.ts`
-用 expo File 的 `canPreview/preview` 打开；分享暂未做）。
+用 expo File 的 `canPreview/preview` 打开/分享）。
 
 ### 8.3 聊天页：现状与目标
 
@@ -480,6 +488,10 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 - 外观：主题进 `ThemeScreen`（跟随系统/浅色/深色，`themeMode` 存 UI cache）；对话字号
   标准/大/特大（`chatFontScale`）；「完成后收起过程」开关（`collapseProcess`）。
 - 通用：通知由系统管理；后台保活进引擎页。
+- 抽屉手势：`HomeScreen` 持有 `drawerAnim` 唯一动画；`SessionDrawer` 有 `progress` 时只消费，
+  不再起第二个 spring；左滑关闭只跟手 + 回弹。宽度/阈值在 `ui/drawerGeometry.ts`（302dp，
+  开 25%/vx>0.3，关 72%/vx<-0.35）。
+- 抽屉里工作区只保留一行「工作区 ›」入口（点开 WorkspaceScreen），不再列只读工作区列表。
 - 抽屉分组：置顶 / 运行中 / 今天 / 更早；筛选胶囊「全部 / 运行中 / 待确认 / 未读」；文件夹胶囊
   「全部文件夹 + 自定义文件夹」（长按「移到文件夹…」，UI cache 的 `sessionFolders`）；行尾最多一个状态标记；
   长按出「置顶/取消置顶/归档/改名/删除」；搜索框右侧「全文」进 SearchScreen；标题右侧 ⊞ 进「全部功能」；
@@ -493,12 +505,53 @@ VirtualizedList 慢更新/内存增长（PITFALLS I10）继续观察。
 
 ### 8.7 未做
 
-U8 的完整引擎文件系统/终端、多工作区（M2）、小组件/悬浮球、通知直达会话。
-浅色/深色主题、字号档、动效 token、全部功能页、文件/工作区/只读终端均已完成；
-任务状态见 [AI-TASKS](AI-TASKS.md)。
+多工作区的置顶/分组/排序、悬浮球、E2E 加密 WS、多宿主索引/密钥分仓、完整离线状态机。
+完整引擎文件系统/终端/delete/search、工作区新建、浅色/深色主题、字号档、动效 token、
+全部功能页、通知直达、QS 磁贴、桌面小组件均已完成；任务状态见 [AI-TASKS](AI-TASKS.md)。
+
+### 8.8 LAN 发现与系统入口（M3.2/M3.3 第一步）
+
+- 桥身份：`engine/src/real/identity.ts` 把 hostId/name/fingerprint 持久化到
+  `DSH_PALM_DEVICES` 同目录；`capabilities.host` 带 `fingerprint`。
+- mDNS：`engine/src/real/discovery.ts` 广播 `_dsh-palm._tcp`，TXT 只含 id/name/kind/path/fp/v；
+  不广播会话正文或凭据。找不到组播时静默降级。
+- Android：`HostModule.discoverLanHosts` 用 `NsdManager` 扫描并 resolve；HostService 持有
+  Wi-Fi multicast lock；Android 16 声明 `ACCESS_LOCAL_NETWORK` 并按需请求。
+- 连接页：扫描结果点一下填 `ws://host:port/ws`，配对码仍由用户输入；`remoteHost` 存在
+  UI cache，断线后可「重连」。仍未做多宿主密钥分仓和 E2E。
+- 系统入口：`DshTileService`（QS）、`DshWidgetProvider`（桌面小组件）、通知 ACTION_VIEW
+  直达会话/审批；HostService 常驻通知也可点回 App。悬浮球未接。
 
 > 注：1.5 的「生成文件」弹层（`GeneratedFilesSheet`，只列本会话工具生成的文件、可打开）已落地，
 > 不等于这里的 U8 全功能文件面板（全工作区浏览/上传管理/重命名/搜索/分享）。
+
+### 8.9 页面栈与动效（2026-11-07）
+
+- `ScreenStack` 维护页面栈：push 时旧页保留挂载并左移 24%，新页从右滑入；
+  pop 时当前页右滑出，目标页从 -24% 回 0。动画结束后非当前页 `display:none`，
+  不卸载以保留滚动位置/输入态。
+- `ScreenActiveContext` 冻结非当前页的 `useStore` 订阅；详情页流式输出时，
+  底下首页/设置页不跟着重渲染。
+- `openSession` 先同步推入空壳 `detail`（`detailLoading=true`），转场和
+  `sessions.get` 并行；`ChatScreen` 首屏 `initialNumToRender=8`，顶栏初始高度
+  `topInset+52`，避免首帧跳高。
+- 抽屉：`motion.spring.sheet` + `PanResponder` 左滑跟手 + 首页 42px 视差；
+  预挂载内容，关闭只移出屏幕。
+- 底部弹层：`BottomSheet` 遮罩淡入 + 面板弹簧滑出；ModelSheet /
+  GeneratedFilesSheet 已接入。
+- 详细方案与实测见 [ANIMATION](ANIMATION.md)。
+
+### 8.10 品牌图标与交互细节（2026-11-07）
+
+- `components/BrandIcon.tsx`：`BrandIcon` 统一线性图标，`BrandMark` 原生 SVG 锦囊囊袋；
+  `IconButton` 支持 `icon`，旧 `glyph` 保留兼容。
+- 设置页/全部功能页按 id 映射图标；不再用汉字/Unicode 字符充当图标。
+- 首页顶栏：菜单 + BrandMark/锦囊 + 模型胶囊 + 运行模式胶囊；模式选择进 BottomSheet，
+  不再在顶栏堆连接状态和两个切换入口。
+- `TypewriterText` / `RotatingHint` 驱动首页问候；页面非顶层时暂停定时器。
+- `JumpButton` 自绘下箭头、弹簧显隐、流式中上下浮动；思考行图标旋转 + 三点跳动。
+- 用户气泡、Markdown 正文/代码块 `selectable`；AI 回复操作栏改成带文字的复制/分享胶囊。
+- 详细方案见 [BRAND-UI](BRAND-UI.md)。
 
 ## 9. 构建与验证
 
@@ -577,13 +630,32 @@ cd app/android && sh gradlew :app:assembleDebug
 app/                    RN + Expo；App.tsx 入口
   src/lib/              引擎客户端、host/notify/share/platform 封装
   src/protocol/         协议契约
+  src/pet/              桌宠规范（PetPack、状态机、Tiers 调度）
   src/state/store.ts    手写 store
   src/ui/               首页/聊天/抽屉/设置/输入区
   src/engine/           轻引擎：light/ fs/ shell/ docs/
-  android/              Expo prebuild + host/*.kt
+  android/              Expo prebuild + host/*.kt + system/FloatPetService.kt
 engine/                 mock 引擎 + 真 dsh 桥（real/）
 test/                   e2e / 审批卡 / 单元
 scripts/                探针、建桥、构建准备、真机脚本
 runtime/                rootfs 分层与 profile
 docs/                   本目录（archive/ 为旧文档）
 ```
+
+## 12. 电脑真实宿主桥与桌宠规范 (2026-11-08 增补)
+
+### 12.1 电脑真宿主接入与 HMAC Cookie 签名
+- 桌面版 DeepSeek Harness（Electron）在本地运行（如 62708 端口），其 API 需要携带有效签名 Cookie `dsh-auth-<hash>=v1.<payload>.<sig>`。
+- 桥接层从 `~/.dsh/.credentials.yaml` 读取 `client-connection/browser-session` 的 32 字节 base64url secret，使用 HMAC-SHA256 对 `{"version":1, "authority":"127.0.0.1:<port>", "issuedAt", "expiresAt"}` 进行签名，免除 launchToken 交互限制。
+- `detector.ts` 实现了毫秒级自动扫描监听端口并并发验证 `session/list`，自适应发现电脑 DSH。
+- 手机端发出的 `sessions.send` 直连真 DSH 的 `session/prompt`，并通过 WebSocket `session/follow` 多路流实时将思考流、工具调用块、输出文字回传给手机。
+
+### 12.2 局域网双模发现 (Dual-Mode Discovery)
+- **mDNS 硬件组播放行**：Android 原生端在 `LanDiscovery.kt` 中获取 `WifiManager.MulticastLock`，避免芯片省电策略过滤 UDP 5353 组播；
+- **C 段主动探活 (Subnet Probe)**：为应对家用路由器开启 AP 隔离或 IGMP 丢包，原生端并发向本机所在网段探测 8787 端口，实现 100% 局域网宿主识别。
+- **免密直连**：局域网连接默认放行，移除了冗余的 6 位配对码。
+
+### 12.3 数据驱动桌宠体系 (参考 dsh-go)
+- 详细规范见 [docs/PET-SPECIFICATION.md](PET-SPECIFICATION.md)；
+- 遵循 `app/assets/pets/<id>/pack.json` 资产规范：逐帧精灵表、`PetStateMachine` 任务负载阶梯（`tiers: working / juggling / sweeping`）、60 秒无任务自动入睡、边缘物理吸附（`EdgeSnap`）、触觉震动反馈与任务气泡。
+

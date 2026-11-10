@@ -8,7 +8,12 @@
  * 会把 './transport' 解析成 transport.native.ts 自己，形成 self require cycle
  * （真机上表现为 LogBox 的 "Require cycle" 警告）。所以单独放这个文件。
  */
-export const SSE_IDLE_TIMEOUT_MS = 45_000;
+/**
+ * 空闲超时：推理模型在长思考/长输出前可能几十秒没有新分片。
+ * 45s 在真机上会把正常的长报告误判成网络错误，这里放宽到 120s；
+ * 真正断网仍由 XHR 的 onerror 立即结束。
+ */
+export const SSE_IDLE_TIMEOUT_MS = 120_000;
 
 export interface SseRequest {
   url: string;

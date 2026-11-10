@@ -21,6 +21,16 @@ export interface HostStatus {
   pairCode?: string | null;
 }
 
+export interface DiscoveredHost {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  kind: 'phone' | 'desktop' | 'server' | string;
+  fingerprint?: string;
+  version?: string;
+}
+
 interface HostNativeModule {
   start(engineCmd: string | null, bridgeCmd: string | null, port: number): Promise<boolean>;
   stop(): Promise<boolean>;
@@ -38,6 +48,22 @@ interface HostNativeModule {
   deviceConditions?(): Promise<{ charging: boolean; wifi: boolean }>;
   /** 分享一个工作区文件（content:// URI，由 expo File.contentUri 生成） */
   shareFile?(contentUri: string, mime: string | null, title: string | null): Promise<boolean>;
+  /** M3.2 局域网发现 */
+  requestLanPermission?(): Promise<boolean>;
+  discoverLanHosts?(timeoutMs: number): Promise<DiscoveredHost[]>;
+  stopLanDiscovery?(): Promise<boolean>;
+  requestPinWidget?(): Promise<boolean>;
+  requestPinShortcut?(): Promise<boolean>;
+  requestAddTile?(): Promise<boolean>;
+  openAppSettings?(): Promise<boolean>;
+  getSystemEntryStatus?(): Promise<{ widgetCount: number; overlayAllowed: boolean; floatingPetActive?: boolean } | null>;
+  isOverlayPermissionGranted?(): Promise<boolean>;
+  requestOverlayPermission?(): Promise<boolean>;
+  setFloatingPetEnabled?(enabled: boolean, role: string | null, state: string | null): Promise<boolean>;
+  setFloatingPetVisible?(visible: boolean): Promise<boolean>;
+  getFloatingPetStatus?(): Promise<{ isShowing: boolean; allowed: boolean; role: string; state: string } | null>;
+  captureAndShareView?(reactTag: number, title: string | null): Promise<boolean>;
+  captureAndSaveView?(reactTag: number, title: string | null): Promise<string>;
 }
 
 const native: HostNativeModule | null =
@@ -71,6 +97,156 @@ export async function deviceConditions(): Promise<DeviceConditions | null> {
     return { charging: result.charging, wifi: result.wifi };
   } catch {
     return null;
+  }
+}
+
+export async function requestLanPermission(): Promise<boolean> {
+  if (!native?.requestLanPermission) return false;
+  try {
+    return await native.requestLanPermission();
+  } catch {
+    return false;
+  }
+}
+
+export async function discoverLanHosts(timeoutMs = 4000): Promise<DiscoveredHost[]> {
+  if (!native?.discoverLanHosts) return [];
+  try {
+    const list = await native.discoverLanHosts(timeoutMs);
+    return Array.isArray(list) ? list.filter((item) => item && item.host && item.port > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function stopLanDiscovery(): Promise<boolean> {
+  if (!native?.stopLanDiscovery) return false;
+  try {
+    return await native.stopLanDiscovery();
+  } catch {
+    return false;
+  }
+}
+
+export async function requestPinWidget(): Promise<boolean> {
+  if (!native?.requestPinWidget) return false;
+  try {
+    return await native.requestPinWidget();
+  } catch {
+    return false;
+  }
+}
+
+export async function requestPinShortcut(): Promise<boolean> {
+  if (!native?.requestPinShortcut) return false;
+  try {
+    return await native.requestPinShortcut();
+  } catch {
+    return false;
+  }
+}
+
+export async function openAppSettings(): Promise<boolean> {
+  if (!native?.openAppSettings) return false;
+  try {
+    return await native.openAppSettings();
+  } catch {
+    return false;
+  }
+}
+
+export async function requestAddTile(): Promise<boolean> {
+  if (!native?.requestAddTile) return false;
+  try {
+    return await native.requestAddTile();
+  } catch {
+    return false;
+  }
+}
+
+export async function systemEntryStatus(): Promise<{
+  widgetCount: number;
+  overlayAllowed: boolean;
+  floatingPetActive?: boolean;
+} | null> {
+  if (!native?.getSystemEntryStatus) return null;
+  try {
+    return await native.getSystemEntryStatus();
+  } catch {
+    return null;
+  }
+}
+
+export async function isOverlayPermissionGranted(): Promise<boolean> {
+  if (!native?.isOverlayPermissionGranted) return false;
+  try {
+    return await native.isOverlayPermissionGranted();
+  } catch {
+    return false;
+  }
+}
+
+export async function requestOverlayPermission(): Promise<boolean> {
+  if (!native?.requestOverlayPermission) return false;
+  try {
+    return await native.requestOverlayPermission();
+  } catch {
+    return false;
+  }
+}
+
+export async function setFloatingPetEnabled(
+  enabled: boolean,
+  role?: string,
+  state?: string,
+): Promise<boolean> {
+  if (!native?.setFloatingPetEnabled) return false;
+  try {
+    return await native.setFloatingPetEnabled(enabled, role ?? null, state ?? null);
+  } catch {
+    return false;
+  }
+}
+
+export async function setFloatingPetVisible(visible: boolean): Promise<boolean> {
+  if (!native?.setFloatingPetVisible) return false;
+  try {
+    return await native.setFloatingPetVisible(visible);
+  } catch {
+    return false;
+  }
+}
+
+export async function getFloatingPetStatus(): Promise<{
+  isShowing: boolean;
+  allowed: boolean;
+  role: string;
+  state: string;
+} | null> {
+  if (!native?.getFloatingPetStatus) return null;
+  try {
+    return await native.getFloatingPetStatus();
+  } catch {
+    return null;
+  }
+}
+
+export async function captureAndShareView(reactTag: number, title?: string): Promise<boolean> {
+  if (!native?.captureAndShareView) return false;
+  try {
+    return await native.captureAndShareView(reactTag, title ?? null);
+  } catch {
+    return false;
+  }
+}
+
+export async function captureAndSaveView(reactTag: number, title?: string): Promise<boolean> {
+  if (!native?.captureAndSaveView) return false;
+  try {
+    const res = await native.captureAndSaveView(reactTag, title ?? null);
+    return Boolean(res);
+  } catch {
+    return false;
   }
 }
 

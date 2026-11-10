@@ -8,8 +8,8 @@ import { Easing, Platform, StatusBar } from 'react-native';
  * useTheme()/useThemedStyles()，切主题时按 palette 重建 StyleSheet。
  */
 
-export type ThemeMode = 'system' | 'light' | 'dark';
-export type ResolvedTheme = 'light' | 'dark';
+export type ThemeMode = 'system' | 'light' | 'dark' | 'deepy' | 'violet' | 'emerald';
+export type ResolvedTheme = 'light' | 'dark' | 'deepy' | 'violet' | 'emerald';
 
 export interface SyntaxPalette {
   comment: string;
@@ -211,6 +211,51 @@ export const darkColors: Palette = {
   },
 };
 
+export const deepyColors: Palette = {
+  ...darkColors,
+  bg: '#0A1128',
+  bgElevated: '#0F1A3A',
+  glass: '#0F1A3A',
+  glassStrong: '#14234C',
+  glassPressed: '#1A2C5E',
+  bubble: '#132A55',
+  blue: '#38BDF8',
+  blueHover: '#7DD3FC',
+  blueSoft: 'rgba(56, 189, 248, 0.22)',
+  headerOverlay: 'rgba(10, 17, 40, 0.88)',
+  headerSolid: 'rgba(10, 17, 40, 0.98)',
+};
+
+export const violetColors: Palette = {
+  ...darkColors,
+  bg: '#0F0E17',
+  bgElevated: '#171624',
+  glass: '#171624',
+  glassStrong: '#222035',
+  glassPressed: '#2B2942',
+  bubble: '#2A1F45',
+  blue: '#A78BFA',
+  blueHover: '#C4B5FD',
+  blueSoft: 'rgba(167, 139, 250, 0.22)',
+  headerOverlay: 'rgba(15, 14, 23, 0.88)',
+  headerSolid: 'rgba(15, 14, 23, 0.98)',
+};
+
+export const emeraldColors: Palette = {
+  ...darkColors,
+  bg: '#061C14',
+  bgElevated: '#0B291E',
+  glass: '#0B291E',
+  glassStrong: '#12382A',
+  glassPressed: '#184736',
+  bubble: '#143828',
+  blue: '#34D399',
+  blueHover: '#6EE7B7',
+  blueSoft: 'rgba(52, 211, 153, 0.22)',
+  headerOverlay: 'rgba(6, 28, 20, 0.88)',
+  headerSolid: 'rgba(6, 28, 20, 0.98)',
+};
+
 export interface Semantic {
   surface: string;
   sidebar: string;
@@ -315,6 +360,26 @@ export const motion = {
     decelerate: Easing.out(Easing.cubic),
     accelerate: Easing.in(Easing.cubic),
     emphasis: Easing.inOut(Easing.quad),
+  },
+  spring: {
+    /** 页面 push/pop：约 300ms 收敛，临界阻尼，不 overshoot */
+    page: {
+      stiffness: 600,
+      damping: 44,
+      mass: 0.9,
+      overshootClamping: true,
+      restDisplacementThreshold: 0.5,
+      restSpeedThreshold: 0.5,
+    },
+    /** 抽屉/底部弹层：跟手松手后约 300ms 收敛 */
+    sheet: {
+      stiffness: 700,
+      damping: 46,
+      mass: 0.9,
+      overshootClamping: true,
+      restDisplacementThreshold: 0.5,
+      restSpeedThreshold: 0.5,
+    },
   },
 } as const;
 

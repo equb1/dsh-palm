@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Animated,
   Clipboard,
+  findNodeHandle,
   Image,
   Linking,
   Platform,
@@ -25,6 +26,10 @@ import {
   type Theme,
 } from './theme';
 import { highlight, type SyntaxKind } from './syntax';
+import { TableModal } from './chat/TableModal';
+import { BrandIcon } from './components';
+import { captureAndShareView, captureAndSaveView } from '../lib/host';
+import { store } from './useStore';
 
 type SyntaxStyles = Record<SyntaxKind, TextStyle>;
 
@@ -186,6 +191,11 @@ function parseInlineTokens(text: string): InlineToken[] {
 function handleOpenUrl(url?: string): void {
   if (!url) return;
   const target = url.trim();
+  // 网页链接全部在 App 内部 WebView 运行，不跳出 App
+  if (/^https?:\/\//i.test(target)) {
+    store.openInAppBrowser(target);
+    return;
+  }
   Linking.canOpenURL(target)
     .then((supported) => {
       if (supported) {
@@ -200,7 +210,7 @@ function handleOpenUrl(url?: string): void {
     });
 }
 
-function InlineText({
+function InlineTokenSpans({
   text,
   baseStyle,
   trailingCursor,
@@ -265,6 +275,22 @@ function InlineText({
         }
       })}
       {trailingCursor ? <StreamingCursor /> : null}
+    </Text>
+  );
+}
+
+function InlineText({
+  text,
+  baseStyle,
+  trailingCursor,
+}: {
+  text: string;
+  baseStyle?: object;
+  trailingCursor?: boolean;
+}): React.ReactElement {
+  return (
+    <Text style={baseStyle} selectable>
+      <InlineTokenSpans text={text} trailingCursor={trailingCursor} />
     </Text>
   );
 }
@@ -585,7 +611,7 @@ function CodeBlockView({ lang, code }: { lang: string; code: string }): React.Re
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.codeScroll}
       >
-        <Text style={styles.codeBlockText}>
+        <Text style={styles.codeBlockText} selectable>
           {tokens.map((token, i) =>
             token.kind === 'plain' ? (
               token.text
@@ -654,57 +680,145 @@ function TableView({
   rows: string[][];
 }): React.ReactElement {
   const { styles } = useMarkdownStyles();
+  const [modalOpen, setModalOpen] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+  const tableRef = React.useRef<React.ComponentRef<typeof View>>(null);
   const wide = header.length >= 4;
   const cellAlign = (col: number): TextStyleAlign => {
     return align[col] ?? 'left';
   };
 
-  const body = (
-    <View style={[styles.tableWrap, wide ? styles.tableWrapWide : null]}>
-      <View style={[styles.tableRow, styles.tableHeaderRow]}>
-        {header.map((cell, col) => (
-          <View
-            key={col}
-            style={[
-              styles.tableCell,
-              col === 0 ? styles.tableCellFirst : null,
-              wide ? styles.tableCellWide : { flex: 1 },
-            ]}
+  const toMarkdown = (): string => {
+    const delim = align.map((a) => (a === 'center' ? ':---:' : a === 'right' ? '---:' : ':---'));
+    const lines = [
+      `| ${header.join(' | ')} |`,
+      `| ${delim.join(' | ')} |`,
+      ...rows.map((row) => `| ${row.join(' | ')} |`),
+    ];
+    return lines.join('\n');
+  };
+
+  const handleCopy = () => {
+    Clipboard.setString(toMarkdown());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSaveImage = () => {
+    if (!tableRef.current) return;
+    const node = findNodeHandle(tableRef.current);
+    if (!node) return;
+    void captureAndSaveView(node, '表格').then((ok) => {
+      if (ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    });
+  };
+
+  const handleShareImage = () => {
+    if (!tableRef.current) return;
+    const node = findNodeHandle(tableRef.current);
+    if (!node) return;
+    void captureAndShareView(node, '表格分享');
+  };
+
+  return (
+    <View style={styles.tableCardContainer}>
+      {/* 顶部固定操作栏（严格对齐 WorkBuddy：左侧「表格」，右侧 4 个固定操作图标：复制、存图、全屏、分享） */}
+      <View style={styles.tableTopBar}>
+        <Text style={styles.tableTopTitle}>表格</Text>
+        <View style={styles.tableTopActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="复制表格内容"
+            onPress={handleCopy}
+            style={({ pressed }) => [styles.tableIconBtn, pressed && styles.tableIconBtnPressed]}
+            hitSlop={6}
           >
-            <InlineText
-              text={cell}
-              baseStyle={{ ...styles.tableHeaderText, textAlign: cellAlign(col) }}
-            />
-          </View>
-        ))}
+            <BrandIcon name={copied ? 'check' : 'copy'} size={15} color={copied ? '#10B981' : '#64748B'} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="保存表格图片到相册"
+            onPress={handleSaveImage}
+            style={({ pressed }) => [styles.tableIconBtn, pressed && styles.tableIconBtnPressed]}
+            hitSlop={6}
+          >
+            <BrandIcon name={saved ? 'check' : 'image'} size={15} color={saved ? '#10B981' : '#64748B'} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="全屏放大表格"
+            onPress={() => setModalOpen(true)}
+            style={({ pressed }) => [styles.tableIconBtn, pressed && styles.tableIconBtnPressed]}
+            hitSlop={6}
+          >
+            <BrandIcon name="external" size={15} color="#64748B" />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="分享表格长图"
+            onPress={handleShareImage}
+            style={({ pressed }) => [styles.tableIconBtn, pressed && styles.tableIconBtnPressed]}
+            hitSlop={6}
+          >
+            <BrandIcon name="share" size={15} color="#64748B" />
+          </Pressable>
+        </View>
       </View>
-      {rows.map((row, r) => (
-        <View key={r} style={[styles.tableRow, r % 2 === 1 ? styles.tableRowStripe : null]}>
-          {row.map((cell, col) => (
-            <View
-              key={col}
-              style={[
-                styles.tableCell,
-                col === 0 ? styles.tableCellFirst : null,
-                wide ? styles.tableCellWide : { flex: 1 },
-              ]}
-            >
-              <InlineText
-                text={cell}
-                baseStyle={{ ...styles.tableCellText, textAlign: cellAlign(col) }}
-              />
+
+      {/* 横向滚动表格正文：截图 Ref 仅挂载在包含所有列完整宽度的 tableGrid 上，不包含上方操作栏 */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tableScrollContent}>
+        <View ref={tableRef} collapsable={false} style={styles.tableGrid}>
+          <View style={[styles.tableRow, styles.tableHeaderRow]}>
+            {header.map((cell, col) => (
+              <View
+                key={col}
+                style={[
+                  styles.tableCell,
+                  col === 0 ? styles.tableCellFirst : null,
+                  wide ? styles.tableCellWide : { flex: 1 },
+                ]}
+              >
+                <InlineText
+                  text={cell}
+                  baseStyle={{ ...styles.tableHeaderText, textAlign: cellAlign(col) }}
+                />
+              </View>
+            ))}
+          </View>
+          {rows.map((row, r) => (
+            <View key={r} style={[styles.tableRow, r % 2 === 1 ? styles.tableRowStripe : null]}>
+              {row.map((cell, col) => (
+                <View
+                  key={col}
+                  style={[
+                    styles.tableCell,
+                    col === 0 ? styles.tableCellFirst : null,
+                    wide ? styles.tableCellWide : { flex: 1 },
+                  ]}
+                >
+                  <InlineText
+                    text={cell}
+                    baseStyle={{ ...styles.tableCellText, textAlign: cellAlign(col) }}
+                  />
+                </View>
+              ))}
             </View>
           ))}
         </View>
-      ))}
-    </View>
-  );
+      </ScrollView>
 
-  if (!wide) return body;
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      {body}
-    </ScrollView>
+      <TableModal
+        visible={modalOpen}
+        onClose={() => setModalOpen(false)}
+        header={header}
+        align={align}
+        rows={rows}
+      />
+    </View>
   );
 }
 
@@ -723,6 +837,144 @@ export interface MarkdownViewProps {
   isStreaming?: boolean;
   /** U7 对话字号倍率（1 = 标准） */
   fontScale?: number;
+  /** 选中重置标识：改变时强制卸载原生选择器，快速取消选中 */
+  selectionResetKey?: number;
+}
+
+type ProseBlockItem = Extract<BlockItem, { type: 'h1' | 'h2' | 'h3' | 'quote' | 'ul' | 'ol' | 'p' }>;
+
+type RenderSection =
+  | { kind: 'prose'; items: Array<{ block: ProseBlockItem; trailingCursor?: boolean }> }
+  | { kind: 'block'; block: BlockItem; trailingCursor?: boolean };
+
+function groupBlocksForContinuousSelection(
+  blocks: BlockItem[],
+  streaming: boolean,
+): RenderSection[] {
+  const sections: RenderSection[] = [];
+  let currentProse: Array<{ block: ProseBlockItem; trailingCursor?: boolean }> = [];
+
+  const flushProse = (): void => {
+    if (currentProse.length > 0) {
+      sections.push({ kind: 'prose', items: [...currentProse] });
+      currentProse = [];
+    }
+  };
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    const isLast = i === blocks.length - 1;
+    const isTrailing = streaming && isLast && block.type === 'p';
+
+    if (
+      block.type === 'p' ||
+      block.type === 'h1' ||
+      block.type === 'h2' ||
+      block.type === 'h3' ||
+      block.type === 'quote' ||
+      block.type === 'ul' ||
+      block.type === 'ol'
+    ) {
+      currentProse.push({ block, trailingCursor: isTrailing });
+    } else {
+      flushProse();
+      sections.push({ kind: 'block', block, trailingCursor: isTrailing });
+    }
+  }
+  flushProse();
+  return sections;
+}
+
+function ContinuousProseText({
+  items,
+  selectionResetKey,
+}: {
+  items: Array<{ block: ProseBlockItem; trailingCursor?: boolean }>;
+  selectionResetKey?: number;
+}): React.ReactElement {
+  const { styles } = useMarkdownStyles();
+
+  return (
+    <View style={styles.proseContainer}>
+      <Text key={selectionResetKey ? `sel-${selectionResetKey}` : undefined} style={styles.proseRootText} selectable>
+        {items.map((item, idx) => {
+          const { block, trailingCursor } = item;
+          const isNotFirst = idx > 0;
+          const leadingNewlines = isNotFirst ? '\n\n' : '';
+
+          switch (block.type) {
+            case 'h1':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <InlineTokenSpans text={block.text} baseStyle={styles.h1Text} />
+                </Text>
+              );
+            case 'h2':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <InlineTokenSpans text={block.text} baseStyle={styles.h2Text} />
+                </Text>
+              );
+            case 'h3':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <InlineTokenSpans text={block.text} baseStyle={styles.h3Text} />
+                </Text>
+              );
+            case 'quote':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <Text style={styles.quoteBar}>▌ </Text>
+                  <InlineTokenSpans text={block.text} baseStyle={styles.quoteText} />
+                </Text>
+              );
+            case 'ul':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  {block.items.map((li, lIdx) => (
+                    <Text key={lIdx}>
+                      {lIdx > 0 ? '\n' : ''}
+                      <Text style={styles.bullet}>• </Text>
+                      <InlineTokenSpans text={li} baseStyle={styles.paragraph} />
+                    </Text>
+                  ))}
+                </Text>
+              );
+            case 'ol':
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  {block.items.map((li, lIdx) => (
+                    <Text key={lIdx}>
+                      {lIdx > 0 ? '\n' : ''}
+                      <Text style={styles.orderNumber}>{`${lIdx + 1}. `}</Text>
+                      <InlineTokenSpans text={li} baseStyle={styles.paragraph} />
+                    </Text>
+                  ))}
+                </Text>
+              );
+            case 'p':
+            default:
+              return (
+                <Text key={idx}>
+                  {leadingNewlines}
+                  <InlineTokenSpans
+                    text={block.text}
+                    baseStyle={styles.paragraph}
+                    trailingCursor={trailingCursor}
+                  />
+                </Text>
+              );
+          }
+        })}
+      </Text>
+    </View>
+  );
 }
 
 const MarkdownBlock = React.memo(function MarkdownBlock({
@@ -808,64 +1060,48 @@ const MarkdownBlock = React.memo(function MarkdownBlock({
   }
 });
 
-const BlockList = React.memo(function BlockList({
-  blocks,
-  prefix,
-  streaming = false,
-  fontScale = 1,
-}: {
-  blocks: BlockItem[];
-  prefix: string;
-  streaming?: boolean;
-  fontScale?: number;
-}): React.ReactElement {
-  return (
-    <>
-      {blocks.map((block, index) => (
-        <MarkdownBlock
-          key={`${prefix}:${index}`}
-          block={block}
-          trailingCursor={streaming && index === blocks.length - 1 && block.type === 'p'}
-          fontScale={fontScale}
-        />
-      ))}
-    </>
-  );
-});
-
 function MarkdownViewImpl({
   text,
   style,
   streaming,
   isStreaming,
   fontScale = 1,
+  selectionResetKey,
 }: MarkdownViewProps): React.ReactElement {
   const theme = useTheme();
   const baseStyles = useThemedStyles(createStyles);
   const styles = React.useMemo(() => scaleStyles(baseStyles, fontScale), [baseStyles, fontScale]);
   const syntax = React.useMemo(() => syntaxStyles(theme.palette), [theme.palette]);
   const activeStreaming = Boolean(streaming || isStreaming);
-  const { stable, tail } = splitStableMarkdown(text);
-  const stableBlocks = React.useMemo(
-    () => (stable ? parseMarkdownBlocks(stable) : []),
-    [stable]
+
+  const blocks = React.useMemo(() => parseMarkdownBlocks(text), [text]);
+  const sections = React.useMemo(
+    () => groupBlocksForContinuousSelection(blocks, activeStreaming),
+    [blocks, activeStreaming],
   );
-  const tailBlocks = React.useMemo(() => (tail ? parseMarkdownBlocks(tail) : []), [tail]);
-  const tailEndsWithParagraph =
-    tailBlocks.length > 0 && tailBlocks[tailBlocks.length - 1]?.type === 'p';
-  const activeBlock = tailBlocks[tailBlocks.length - 1] ?? stableBlocks[stableBlocks.length - 1];
-  const lastIsParagraph = activeBlock?.type === 'p';
 
   return (
     <MarkdownStylesContext.Provider value={{ styles, syntax }}>
       <View style={[styles.root, style]}>
-        <BlockList blocks={stableBlocks} prefix="stable" fontScale={fontScale} />
-        <BlockList blocks={tailBlocks} prefix="tail" streaming={activeStreaming} fontScale={fontScale} />
-        {activeStreaming && (!tailEndsWithParagraph || !lastIsParagraph) ? (
-          <View style={styles.trailingCursorWrap}>
-            <StreamingCursor />
-          </View>
-        ) : null}
+        {sections.map((section, idx) => {
+          if (section.kind === 'prose') {
+            return (
+              <ContinuousProseText
+                key={`prose-${idx}`}
+                items={section.items}
+                selectionResetKey={selectionResetKey}
+              />
+            );
+          }
+          return (
+            <MarkdownBlock
+              key={`block-${idx}`}
+              block={section.block}
+              trailingCursor={section.trailingCursor}
+              fontScale={fontScale}
+            />
+          );
+        })}
       </View>
     </MarkdownStylesContext.Provider>
   );
@@ -876,6 +1112,16 @@ export const MarkdownView = React.memo(MarkdownViewImpl);
 const createStyles = ({ palette: c, semantic: s }: Theme) =>
   StyleSheet.create({
   root: { gap: space.sm },
+  proseContainer: {
+    marginVertical: 1,
+  },
+  proseRootText: {
+    color: c.text,
+  },
+  quoteBar: {
+    color: c.borderStrong,
+    fontWeight: '700',
+  },
   bold: { fontWeight: '700', color: c.text },
   italic: { fontStyle: 'italic', color: c.text },
   strike: { textDecorationLine: 'line-through', color: c.textFaint },
@@ -1044,6 +1290,81 @@ const createStyles = ({ palette: c, semantic: s }: Theme) =>
     fontStyle: 'italic',
   },
   /* 表格 */
+  tableCardContainer: {
+    marginVertical: 8,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tableTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  tableTopTitle: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tableTopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tableIconBtn: {
+    padding: 4,
+    borderRadius: radius.xs,
+  },
+  tableIconBtnPressed: {
+    opacity: 0.5,
+  },
+  tableScrollContent: {
+    paddingBottom: 2,
+  },
+  tableGrid: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+  },
+  tableHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: c.glassStrong,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: c.border,
+  },
+  tableCountText: {
+    color: c.textFaint,
+    fontSize: 10.5,
+    fontWeight: '500',
+  },
+  tableExpandBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.xs,
+    backgroundColor: c.blueSoft,
+  },
+  tableExpandText: {
+    color: c.blue,
+    fontSize: 10.5,
+    fontWeight: '600',
+  },
   tableWrap: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.borderStrong,

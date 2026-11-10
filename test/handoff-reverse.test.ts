@@ -186,3 +186,32 @@ describe('Handoff · 完整 → 轻（M2.2）', () => {
     assert.ok(snapshot.error);
   });
 });
+
+describe('Handoff · 电脑 → 手机（复制/接管）', () => {
+  it('导入用轻引擎预设、保留电脑标题与 seed 标记，不建 link', async () => {
+    const harness = makeStore();
+    const ok = await harness.store.continueComputerInPhone(FULL_ID);
+    assert.equal(ok, true);
+    const params = harness.params();
+    assert.ok(params);
+    assert.equal(params.presetId, 'light', '电脑的 standard 要落到轻引擎的 light');
+    assert.equal(params.title, '整理报告', '标题沿用电脑会话');
+    assert.match(String(params.handoffId), /^h_[0-9a-f]{8}$/);
+    assert.match(params.text, /\[dsh-handoff:h_[0-9a-f]{8}\]/);
+    assert.ok(params.replay && params.replay.turns.length > 0, '结构化回放要带上');
+
+    const snapshot = harness.store.getSnapshot();
+    assert.equal(snapshot.currentId, LIGHT_ID, '导入后前台切到新会话');
+    assert.equal(snapshot.links.length, 0, 'copy 语义：不建 ConversationLink');
+    assert.equal(snapshot.error, null);
+  });
+
+  it('不在电脑引擎上时直接拒绝，不调 import', async () => {
+    const harness = makeStore();
+    (harness.store as unknown as { patch: (next: unknown) => void }).patch({ engineKind: 'light' });
+    const ok = await harness.store.continueComputerInPhone(FULL_ID);
+    assert.equal(ok, false);
+    assert.equal(harness.params(), undefined);
+    assert.match(String(harness.store.getSnapshot().error), /电脑/);
+  });
+});

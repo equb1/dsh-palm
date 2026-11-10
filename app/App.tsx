@@ -12,7 +12,8 @@ import { SearchScreen } from './src/ui/SearchScreen';
 import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
 import { TerminalScreen } from './src/ui/TerminalScreen';
 import { PluginsScreen } from './src/ui/PluginsScreen';
-import { ScreenFade } from './src/ui/components/ScreenFade';
+import { ScreenStack } from './src/ui/components/ScreenStack';
+import { TopNoticeBanner, InAppBrowserModal } from './src/ui/components';
 import { store, useStore } from './src/ui/useStore';
 import { ThemeProvider, useTheme, useThemedStyles, type Theme } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
@@ -65,6 +66,23 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
 
   React.useEffect(() => {
     const handle = (url: string | null): void => {
+      if (url?.includes('source=widget') || url?.includes('source=shortcut') || url?.includes('source=pet_float')) {
+        const draftMatch = url.match(/[?&]draft=([^&]+)/);
+        const draftText = draftMatch?.[1] ? decodeURIComponent(draftMatch[1]) : '';
+        const autoSend = url.includes('autoSend=true');
+
+        if (url.includes('newChat=true') || state.currentId || draftText) {
+          store.closeSession();
+        }
+        if (draftText) {
+          if (autoSend) {
+            void store.startWith(draftText);
+          } else {
+            store.setPendingShareText(draftText);
+          }
+        }
+        return;
+      }
       // dshpalm://session?id=…&engine=full —— WebView / 外部把官方会话带回 RN（M2.1）
       const webSession = parseWebSessionDeepLink(url);
       if (webSession) {
@@ -96,6 +114,11 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
 
   React.useEffect(() => {
     const onBackPress = (): boolean => {
+      // 0. 内置应用网页浏览器：优先关闭浏览器
+      if (state.inAppBrowserUrl) {
+        store.closeInAppBrowser();
+        return true;
+      }
       // 1. 如果在设置页，返回首页
       if (state.view === 'settings') {
         store.closeSettings();
@@ -147,7 +170,7 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [state.view, state.connectModalOpen, state.detail]);
+  }, [state.view, state.connectModalOpen, state.detail, state.inAppBrowserUrl]);
 
   const screen =
     state.view === 'plugins' ? (
@@ -173,8 +196,18 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
     );
 
   // web 上收成一列手机宽度，两边留黑，看起来才像手机
-  const screenKey = `${state.view}:${state.detail?.id ?? ''}:${state.connectModalOpen ? 'connect' : ''}`;
-  const shown = <ScreenFade trigger={screenKey}>{screen}</ScreenFade>;
+  // 详情页只占栈里的一层：在聊天页里换会话不重复 push（否则越切越深）。
+  const screenKey =
+    state.detail && !state.connectModalOpen
+      ? 'main:detail'
+      : `${state.view}:${state.connectModalOpen ? 'connect' : ''}`;
+  const screenDepth =
+    state.view === 'main' && !state.detail && !state.connectModalOpen ? 0 : 1;
+  const shown = (
+    <ScreenStack screenKey={screenKey} depth={screenDepth}>
+      {screen}
+    </ScreenStack>
+  );
 
   const statusBar = <StatusBar barStyle={theme.resolved === 'dark' ? 'light-content' : 'dark-content'} />;
 
@@ -184,6 +217,7 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
         {statusBar}
         <View style={styles.webFrame}>
           {shown}
+          <TopNoticeBanner />
           {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
         </View>
       </View>
@@ -194,6 +228,8 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
     <View style={styles.root}>
       {statusBar}
       {shown}
+      <TopNoticeBanner />
+      <InAppBrowserModal />
       {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
     </View>
   );

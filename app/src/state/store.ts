@@ -53,7 +53,12 @@ import {
   pickAttachments,
 } from '../lib/attachments/intake';
 import { classify, hashPrefix } from '../lib/attachments/classify';
-import { mergeSessionRows, type SessionEngine, type SessionRow } from './sessionList';
+import {
+  mergeSessionRows,
+  sourceToEngine,
+  type SessionRow,
+  type SessionSource,
+} from './sessionList';
 import type { ThemeMode } from '../ui/theme/palette';
 import type { AttachmentEngine, AttachmentKind, IntakeSource } from '../lib/attachments/types';
 import {
@@ -209,10 +214,12 @@ export interface AppState {
   pairCode: string;
   caps: Capabilities | null;
   sessions: SessionSummary[];
-  /** 两个引擎各自的最近会话缓存：统一下拉列表用（M2.6） */
-  sessionCache: Record<SessionEngine, SessionSummary[]>;
+  /** 三个来源各自的最近会话缓存：统一下拉列表用 */
+  sessionCache: Record<SessionSource, SessionSummary[]>;
   currentId: string | null;
   detail: SessionDetail | null;
+  /** 详情页已先推入、正文还在后台拉取（转场期间显示骨架） */
+  detailLoading: boolean;
   approvals: Record<string, Approval>;
   error: string | null;
   busy: boolean;
@@ -234,12 +241,18 @@ export interface AppState {
   defaultPermission?: string;
   /** 这台设备的配对密钥（配对成功后自动存下来） */
   deviceKey: string | null;
-  /** 宿主注册过的工作区 */
+  /** 最近一次远程宿主（M3.2）：用于断线后重连和离线提示 */
+  remoteHost: { url: string; name: string; hostId: string; lastSeenAt: number } | null;
+  /** 宿主注册过的工作区（当前连接源） */
   workspaces: Workspace[];
+  /** 三个来源各自的工作区缓存，抽屉按 tab 展示 */
+  workspaceCache: Record<SessionSource, Workspace[]>;
   /** 已上传或暂存、等着跟下一条消息一起发的附件 */
   pendingAttachments: PendingAttachment[];
   /** 是否打开连接/诊断面板（本机模式下默认不挡首屏，直接进主页） */
   connectModalOpen: boolean;
+  /** 内置浏览器打开的 URL，为 null 时关闭 */
+  inAppBrowserUrl: string | null;
   /** DeepSeek 账号（未登录 / 已存凭据，含正在进行的登录尝试） */
   account: AccountState | null;
   /** 宿主上配置的模型提供商（自定义渠道） */
@@ -257,8 +270,8 @@ export interface AppState {
   /** 覆盖用的启动命令（空 = 用 Kotlin 里的默认值） */
   hostEngineCmd: string;
   hostBridgeCmd: string;
-  /** 当前连的是哪种引擎：远程宿主 / 本机轻引擎 */
-  engineKind: 'remote' | 'light' | null;
+  /** 当前连的是哪种引擎：另一台电脑 / 本机 proot / 本机轻引擎 */
+  engineKind: 'remote' | 'proot' | 'light' | null;
   /** EngineManager 快照：默认轻引擎，完整引擎按需切换 */
   engine: EngineSnapshot;
   /** 预热档位：触发式（默认）/ 智能 / 常备，持久化在 ui-cache */
@@ -282,6 +295,18 @@ export interface AppState {
   chatFontScale: number;
   /** U7 主题：跟随系统 / 浅色 / 深色（持久化在 UI cache） */
   themeMode: ThemeMode;
+  /** WorkBuddy 风格顶部下滑通知 */
+  inAppNotice: InAppNotice | null;
+}
+
+export interface InAppNotice {
+  id: string;
+  kind: 'done' | 'approval' | 'error';
+  title: string;
+  body: string;
+  sessionId: string;
+  engine: 'light' | 'full';
+  createdAt: number;
 }
 
 /**
@@ -290,7 +315,7 @@ export interface AppState {
  * 这台设备自己能起引擎（原生构建）时，桥就在本机 8788——开机即用的那条路；
  * Expo Go / web 没有本机宿主，退回电脑上跑桥的局域网地址。
  */
-const DEFAULT_URL = hostAvailable ? 'ws://127.0.0.1:8788/ws' : 'ws://192.168.1.3:8788/ws';
+const DEFAULT_URL = '';
 
 /** 完整引擎（proot）固定连本机桥，不能用最近一次远程地址 */
 const LOCAL_WS_URL = 'ws://127.0.0.1:8788/ws';
@@ -399,6 +424,8 @@ export class Store {
   private runStartedAt: number | null = null;
   /** 退出会话时留住 detail，重进时把 live 回合并回去，避免 history + live 两份 */
   private detailCache = new Map<string, SessionDetail>();
+  /** 会话打开序列号，防止快速切换会话时后发的 sessions.get 被先发的覆盖 */
+  private openSessionSeq = 0;
   /** 列表 preview 限流，避免每 token 都重建 sessions */
   private lastSessionPreviewAt = 0;
 
@@ -409,9 +436,10 @@ export class Store {
     pairCode: '',
     caps: hostAvailable ? LOCAL_DEFAULT_CAPS : null,
     sessions: [],
-    sessionCache: { light: [], full: [] },
+    sessionCache: { 'phone-light': [], 'phone-proot': [], computer: [] },
     currentId: null,
     detail: null,
+    detailLoading: false,
     approvals: {},
     error: null,
     busy: false,
@@ -423,9 +451,12 @@ export class Store {
     permissions: [],
     defaultPermission: undefined,
     deviceKey: null,
+    remoteHost: null,
     workspaces: [],
+    workspaceCache: { 'phone-light': [], 'phone-proot': [], computer: [] },
     pendingAttachments: [],
     connectModalOpen: false,
+    inAppBrowserUrl: null,
     account: null,
     providers: [],
     providerCatalog: [],
@@ -447,6 +478,7 @@ export class Store {
     collapseProcess: true,
     chatFontScale: 1,
     themeMode: 'system',
+    inAppNotice: null,
   };
 
   private readonly engineDeps: EngineDeps;
@@ -570,7 +602,13 @@ export class Store {
           await this.connectLocal();
           break;
         case 'stop-host':
-          await this.stopHostEffect();
+          // 只有用户在设置页显式手动停止（或低内存强制回收）时才停 host；
+          // 从完整模式切回轻模式时，让 Proot 在后台热驻留（Hot Standby），下次切回完整模式无需再漫长加载
+          if (this.state.engine.tier === 'always' || this.engineDeps.hostAvailable) {
+            // 保持热驻留，不杀 Proot
+          } else {
+            await this.stopHostEffect();
+          }
           break;
         case 'report':
           break;
@@ -815,14 +853,25 @@ export class Store {
     this.patch({ connectModalOpen: false });
   }
 
+  openInAppBrowser(url: string): void {
+    if (!url) return;
+    this.patch({ inAppBrowserUrl: url });
+  }
+
+  closeInAppBrowser(): void {
+    this.patch({ inAppBrowserUrl: null });
+  }
+
   private persistUiCache(): void {
     try {
       const payload = JSON.stringify({
         sessions: this.state.sessions.slice(0, 60),
         sessionCache: {
-          light: this.state.sessionCache.light.slice(0, 60),
-          full: this.state.sessionCache.full.slice(0, 60),
+          'phone-light': this.state.sessionCache['phone-light'].slice(0, 60),
+          'phone-proot': this.state.sessionCache['phone-proot'].slice(0, 60),
+          computer: this.state.sessionCache.computer.slice(0, 60),
         },
+        workspaceCache: this.state.workspaceCache,
         draftPresetId: this.state.draftPresetId,
         defaultModel: this.state.defaultModel,
         prewarmTier: this.state.prewarmTier,
@@ -833,6 +882,7 @@ export class Store {
         collapseProcess: this.state.collapseProcess,
         chatFontScale: this.state.chatFontScale,
         themeMode: this.state.themeMode,
+        remoteHost: this.state.remoteHost,
       });
       void writeHostUiCache(payload);
     } catch {
@@ -849,7 +899,10 @@ export class Store {
       if (rawCache) {
         const parsed = JSON.parse(rawCache) as {
           sessions?: SessionSummary[];
-          sessionCache?: Partial<Record<SessionEngine, SessionSummary[]>>;
+          sessionCache?: Partial<
+            Record<SessionSource | 'light' | 'full', SessionSummary[]>
+          >;
+          workspaceCache?: Partial<Record<SessionSource, Workspace[]>>;
           draftPresetId?: string | null;
           defaultModel?: ModelChoice;
           prewarmTier?: PrewarmTier;
@@ -860,16 +913,36 @@ export class Store {
           collapseProcess?: boolean;
           chatFontScale?: number;
           themeMode?: ThemeMode;
+          remoteHost?: { url: string; name: string; hostId: string; lastSeenAt: number } | null;
         };
         if (Array.isArray(parsed.sessions) && this.state.sessions.length === 0) {
           nextPatch.sessions = parsed.sessions;
         }
         if (parsed.sessionCache && typeof parsed.sessionCache === 'object') {
-          const light = parsed.sessionCache.light;
-          const full = parsed.sessionCache.full;
+          const cache = parsed.sessionCache;
+          const list = (value: unknown): SessionSummary[] =>
+            Array.isArray(value) ? (value as SessionSummary[]) : [];
+          // 旧版只有 light/full；full 分不清 proot/remote，直接丢弃避免串源
+          const phoneLight = list(cache['phone-light']).length
+            ? list(cache['phone-light'])
+            : list(cache.light);
           nextPatch.sessionCache = {
-            light: Array.isArray(light) && this.state.sessionCache.light.length === 0 ? light : this.state.sessionCache.light,
-            full: Array.isArray(full) && this.state.sessionCache.full.length === 0 ? full : this.state.sessionCache.full,
+            'phone-light':
+              phoneLight.length > 0 && this.state.sessionCache['phone-light'].length === 0
+                ? phoneLight
+                : this.state.sessionCache['phone-light'],
+            'phone-proot': list(cache['phone-proot']),
+            computer: list(cache.computer),
+          };
+        }
+        if (parsed.workspaceCache && typeof parsed.workspaceCache === 'object') {
+          const cache = parsed.workspaceCache;
+          const list = (value: unknown): Workspace[] =>
+            Array.isArray(value) ? (value as Workspace[]) : [];
+          nextPatch.workspaceCache = {
+            'phone-light': list(cache['phone-light']),
+            'phone-proot': list(cache['phone-proot']),
+            computer: list(cache.computer),
           };
         }
         if (Array.isArray(parsed.links) && this.state.links.length === 0) {
@@ -896,7 +969,10 @@ export class Store {
         if (
           parsed.themeMode === 'system' ||
           parsed.themeMode === 'light' ||
-          parsed.themeMode === 'dark'
+          parsed.themeMode === 'dark' ||
+          parsed.themeMode === 'deepy' ||
+          parsed.themeMode === 'violet' ||
+          parsed.themeMode === 'emerald'
         ) {
           nextPatch.themeMode = parsed.themeMode;
         }
@@ -909,6 +985,15 @@ export class Store {
         if (parsed.prewarmTier === 'trigger' || parsed.prewarmTier === 'smart' || parsed.prewarmTier === 'always') {
           nextPatch.prewarmTier = parsed.prewarmTier;
           this.emitEngine({ type: 'SET_TIER', tier: parsed.prewarmTier });
+        }
+        if (
+          parsed.remoteHost
+          && typeof parsed.remoteHost.url === 'string'
+          && !/^wss?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(parsed.remoteHost.url)
+          && typeof parsed.remoteHost.name === 'string'
+          && typeof parsed.remoteHost.hostId === 'string'
+        ) {
+          nextPatch.remoteHost = parsed.remoteHost;
         }
       }
       if (Object.keys(nextPatch).length > 0) this.patch(nextPatch);
@@ -951,14 +1036,35 @@ export class Store {
 
   async connect(url?: string): Promise<void> {
     const target = (url ?? this.state.url).trim();
-    this.patch({ url: target, error: null, conn: 'connecting' });
+    if (!target) {
+      this.setError('请输入电脑宿主地址');
+      return;
+    }
+    // 本机 proot 也走 127.0.0.1:8788；如果放进“电脑宿主”表单，会被误标成远程电脑
+    const hostPart = target
+      .replace(/^wss?:\/\//i, '')
+      .split('/')[0]!
+      .replace(/^\[|\]$/g, '')
+      .split(':')[0]!
+      .toLowerCase();
+    if (hostPart === '127.0.0.1' || hostPart === 'localhost' || hostPart === '::1') {
+      this.setError('这是本机完整引擎的地址，不是电脑宿主。请填电脑的局域网 IP（如 ws://192.168.1.3:8788/ws）。');
+      this.patch({ conn: 'closed', connectModalOpen: true });
+      return;
+    }
+    this.patch({ url: target, error: null, conn: 'connecting', connectModalOpen: true });
 
     this.closeEngines();
     const client = new EngineClient({ url: this.authEndpoint(target), autoReconnect: true });
     const ok = await this.attach(client, 'remote', 'remote');
     if (!ok) {
-      // 远程没连上：把轻引擎接回来，别让界面停在"无引擎"状态
-      await this.runEngineEffects(this.emitEngine({ type: 'LINK_LOST', error: this.state.error ?? '远程宿主没连上', now: this.now() }));
+      const errMsg = this.state.error || `连接失败：无法连接到 ${target}。请确认电脑已运行 npm run engine 且手机电脑在同一 Wi-Fi。`;
+      // 远程没连上：把轻引擎接回作为底层待命，但绝不关闭连接弹窗与错误提示
+      await this.runEngineEffects(this.emitEngine({ type: 'LINK_LOST', error: errMsg, now: this.now() }));
+      this.patch({ error: errMsg, conn: 'closed', connectModalOpen: true });
+    } else {
+      // 已经连上就不要再把连接页盖在会话上
+      this.patch({ connectModalOpen: false });
     }
   }
 
@@ -1005,8 +1111,7 @@ export class Store {
       this.emitEngine({ type: 'LIGHT_CONNECTING' });
       swapped = true;
       this.closeEngines();
-      this.patch({ url: LOCAL_WS_URL });
-      const attached = await this.attach(client, 'remote', 'proot', caps);
+      const attached = await this.attach(client, 'proot', 'proot', caps);
       this.suppressAutoOpen = false;
       if (!attached) throw new Error(this.state.error ?? '完整引擎握手失败');
       // 切成功之后旧会话才变只读：失败回退时 currentId 还在，用户能继续用
@@ -1055,7 +1160,8 @@ export class Store {
    * 但 store 以上（含所有界面）看到的仍是一模一样的协议。
    */
   async connectLight(setup: LightEngineSetup): Promise<void> {
-    this.patch({ conn: 'connecting', error: null });
+    const keepModalOpen = this.state.connectModalOpen;
+    this.patch({ conn: 'connecting', ...(keepModalOpen ? {} : { error: null }) });
     this.lightSetup = setup;
     this.emitEngine({ type: 'LIGHT_CONNECTING' });
     let host: LightHost | null = null;
@@ -1098,7 +1204,7 @@ export class Store {
    */
   private async attach(
     client: EngineTransport,
-    kind: 'remote' | 'light',
+    kind: 'remote' | 'proot' | 'light',
     link: EngineLink = kind === 'light' ? 'light' : 'remote',
     preconnectedCaps?: Capabilities,
   ): Promise<boolean> {
@@ -1113,14 +1219,39 @@ export class Store {
 
     try {
       const caps = preconnectedCaps ?? (await client.connect());
+      const capsWorkspaces = (caps as Capabilities & { workspaces?: Workspace[] }).workspaces ?? [];
+      const source =
+        kind === 'light' ? 'phone-light' : kind === 'proot' ? 'phone-proot' : 'computer';
+      const keepModalOpen = this.state.connectModalOpen;
+      const keepError = keepModalOpen && Boolean(this.state.error);
       this.patch({
         caps,
         conn: 'connected',
-        connectModalOpen: false,
-        error: null,
+        connectModalOpen: keepModalOpen,
+        error: keepError ? this.state.error : null,
+        workspaces:
+          capsWorkspaces.length > 0 ? capsWorkspaces : this.state.workspaceCache[source],
+        ...(capsWorkspaces.length > 0
+          ? {
+              workspaceCache: {
+                ...this.state.workspaceCache,
+                [source]: capsWorkspaces,
+              },
+            }
+          : {}),
         draftPresetId: this.state.draftPresetId ?? caps.presets[0]?.id ?? null,
       });
       await this.refreshSessions();
+      if (link === 'remote' && this.state.url.trim()) {
+        this.patch({
+          remoteHost: {
+            url: this.state.url.trim(),
+            name: caps.host.name,
+            hostId: caps.host.id,
+            lastSeenAt: Date.now(),
+          },
+        });
+      }
       void ensureNotificationPermission();
       // 连上就把模型/权限/工作区拉到本地：头部徽标和新会话要立刻可用
       void this.refreshModels();
@@ -1158,9 +1289,12 @@ export class Store {
       conn: 'closed',
       caps: hostAvailable ? LOCAL_DEFAULT_CAPS : null,
       detail: null,
+      detailLoading: false,
       currentId: null,
       account: null,
       engineKind: null,
+      // 断开后必须回到主路由，否则 settings/files 等页会盖住 ConnectScreen
+      view: 'main',
       connectModalOpen: true,
     });
     // 用户主动断开：只更新状态机，不自动重连（effects 不执行）
@@ -1173,7 +1307,7 @@ export class Store {
     if (!this.client) return;
     try {
       const { sessions: incoming } = await this.client.request('sessions.list', {});
-      const links = this.state.links;
+      const links = this.state.engineKind === 'remote' ? [] : this.state.links;
       const visible: SessionSummary[] = [];
       const seen = new Set<string>();
       for (const session of incoming) {
@@ -1244,8 +1378,8 @@ export class Store {
       }
       this.patch({
         sessions: visible,
-        ...(this.sessionEngine()
-          ? { sessionCache: { ...this.state.sessionCache, [this.sessionEngine()!]: visible } }
+        ...(this.sessionSource()
+          ? { sessionCache: { ...this.state.sessionCache, [this.sessionSource()!]: visible } }
           : {}),
         ...(detail ? { detail } : {}),
       });
@@ -1255,32 +1389,67 @@ export class Store {
     }
   }
 
-  private sessionEngine(): SessionEngine | null {
-    if (this.state.engineKind === 'light') return 'light';
-    if (this.state.engineKind === 'remote') return 'full';
+  private sessionSource(): SessionSource | null {
+    if (this.state.engineKind === 'light') return 'phone-light';
+    if (this.state.engineKind === 'proot') return 'phone-proot';
+    if (this.state.engineKind === 'remote') return 'computer';
     return null;
   }
 
-  /** M2.6：当前引擎列表 + 另一个引擎的缓存，合并后给抽屉用 */
+  /** 手机（轻+完整）和电脑三份来源合并，UI 再按「手机 / 电脑」分组 */
   sessionRows(): SessionRow[] {
-    const current = this.sessionEngine() ?? 'light';
-    const other: SessionEngine = current === 'light' ? 'full' : 'light';
-    return mergeSessionRows(
-      this.state.sessions,
-      current,
-      this.state.sessionCache[other],
-      other,
-    );
+    const current = this.sessionSource() ?? 'phone-light';
+    const cached = (Object.keys(this.state.sessionCache) as SessionSource[])
+      .filter((source) => source !== current)
+      .map((source) => ({ source, sessions: this.state.sessionCache[source] }));
+    return mergeSessionRows(this.state.sessions, current, cached);
   }
 
-  /** M2.6：点另一个引擎的会话先切引擎（完整会起 proot），再按原 id 打开 */
-  async openSessionRow(id: string, engine: SessionEngine): Promise<void> {
-    if (!this.client) return;
-    const current = this.sessionEngine();
-    if (current !== engine) {
-      const ok = await this.switchEngine(engine);
-      if (!ok) return;
+  async disconnectAndSwitchToLight(): Promise<void> {
+    this.closeEngines();
+    this.patch({
+      conn: 'closed',
+      engineKind: null,
+      connectModalOpen: false,
+      error: null,
+    });
+    this.emitEngine({ type: 'LINK_LOST', error: '已断开远程电脑', now: this.now() });
+    await this.connectLightEffect();
+  }
+
+  /** 点会话行：按来源切到对应引擎（轻 / 本机完整 / 电脑），再打开 */
+  async openSessionRow(id: string, source: SessionSource): Promise<void> {
+    const current = this.sessionSource();
+    if (current !== source) {
+      if (source === 'computer') {
+        const url = this.state.remoteHost?.url;
+        if (!url) {
+          this.setError('还没有连接过电脑宿主；先去连接页扫描或填地址。');
+          this.patch({ connectModalOpen: true });
+          return;
+        }
+        await this.connect(url);
+        if (this.state.engineKind !== 'remote') return;
+        this.patch({ connectModalOpen: false });
+      } else if (source === 'phone-light') {
+        if (this.state.engineKind === 'remote') {
+          await this.disconnectAndSwitchToLight();
+        } else if (this.state.engineKind !== 'light') {
+          const ok = await this.switchEngine('light');
+          if (!ok) return;
+        }
+      } else {
+        // phone-proot
+        if (this.state.engineKind === 'remote') {
+          await this.disconnectAndSwitchToLight();
+        }
+        if (this.state.engineKind !== 'proot') {
+          const ok = await this.switchEngine('full');
+          if (!ok) return;
+        }
+      }
     }
+    if (!this.client) return;
     await this.openSession(id);
   }
 
@@ -1297,7 +1466,7 @@ export class Store {
     // 显式传 null = 打开官方前端首页；不传才回落到当前会话
     const requested = 'sessionId' in options ? options.sessionId : this.state.currentId;
     const target = this.webSessionTargetFor(requested);
-    if (this.state.engineKind !== 'remote') {
+    if (this.state.engineKind !== 'remote' && this.state.engineKind !== 'proot') {
       const ok = await this.switchEngine('full');
       if (!ok) {
         throw new Error(this.state.error ?? '完整引擎没起来，打不开官方 Web 界面');
@@ -1319,7 +1488,9 @@ export class Store {
       if (link.activeSide === 'full' && link.fullSessionId) return { id: link.fullSessionId };
       return { note: '当前是轻引擎会话，官方 Web 前端只能打开完整引擎页面；已打开首页。' };
     }
-    if (this.state.engineKind === 'remote') return { id: logicalId };
+    if (this.state.engineKind === 'remote' || this.state.engineKind === 'proot') {
+      return { id: logicalId };
+    }
     return { note: '当前会话不在完整引擎，已打开官方 Web 前端首页。' };
   }
 
@@ -1339,7 +1510,11 @@ export class Store {
     else if (!this.engineStarted) await this.engineStart();
 
     const target: EngineTarget = engine === 'light' ? 'light' : 'full';
-    if (target === 'full' ? this.state.engineKind !== 'remote' : this.state.engineKind !== 'light') {
+    if (
+      target === 'full'
+        ? this.state.engineKind !== 'remote' && this.state.engineKind !== 'proot'
+        : this.state.engineKind !== 'light'
+    ) {
       const ok = await this.switchEngine(target);
       if (!ok) {
         const error =
@@ -1358,6 +1533,147 @@ export class Store {
     // openSession 只改 detail/currentId；这里成功后才把用户从设置/WebView 带回会话页
     this.patch({ view: 'main', connectModalOpen: false, error: null });
     return { ok: true };
+  }
+
+  /**
+   * 手机会话 → 电脑：在电脑 DSH 里建一条真实会话，并把本机历史压成 seed 发过去。
+   * 不是实时双向同步，是“复制/接管”；电脑侧之后可以独立继续。
+   */
+  async pushSessionToComputer(logicalId: string): Promise<boolean> {
+    const url = this.state.remoteHost?.url;
+    if (!url) {
+      this.setError('还没有连接过电脑宿主；先在连接页扫描或填地址。');
+      this.patch({ connectModalOpen: true });
+      return false;
+    }
+    let detail = this.state.detail?.id === logicalId ? this.state.detail : null;
+    if (!detail && this.client) {
+      try {
+        const res = await this.client.request('sessions.get', {
+          sessionId: this.physicalIdFor(logicalId),
+        });
+        detail = res.session;
+      } catch (error) {
+        this.fail(error);
+        return false;
+      }
+    }
+    if (!detail) {
+      this.setError('找不到要推送的会话内容');
+      return false;
+    }
+
+    const handoff = buildHandoff({
+      conversationId: logicalId,
+      reason: 'cross-device',
+      from: {
+        engine: this.state.engineKind === 'light' ? 'light' : 'full',
+        sessionId: detail.id,
+      },
+      presetId: detail.presetId,
+      history: turnDetailToHistory(detail.turns),
+      turns: detail.turns,
+    });
+    const seed = buildSeedText(handoff);
+
+    if (this.state.engineKind !== 'remote') {
+      await this.connect(url);
+      // connect 会改 store；TS 的控制流收窄不知道这一点，用 string 比较避免误报
+      if ((this.state.engineKind as string) !== 'remote') return false;
+    }
+
+    try {
+      // 手机的锦囊 id（light/…）在电脑宿主上不一定存在：有同名就用，没有落到它的第一个预设
+      const hostPresets = this.state.caps?.presets ?? [];
+      const presetId =
+        hostPresets.find((preset) => preset.id === detail.presetId)?.id ??
+        hostPresets[0]?.id ??
+        detail.presetId;
+      const created = await this.requestFull('sessions.create', {
+        presetId,
+        title: detail.title,
+      });
+      await this.requestFull('sessions.send', {
+        sessionId: created.session.id,
+        text: seed,
+      });
+      // 电脑 DSH 会拿 seed 的第一行自动起标题（`[dsh-handoff:…] 这是一次从…`）：
+      // 发完立刻改回手机这边的标题，电脑 tab 里才认得出是哪条。
+      await this.requestFull('sessions.rename', {
+        sessionId: created.session.id,
+        title: detail.title,
+      }).catch(() => undefined);
+      await this.refreshSessions();
+      return true;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
+  }
+
+  /**
+   * 电脑会话 → 手机：与「在电脑继续」反向的复制/接管。
+   *
+   * 和 pushSessionToComputer 不同，这里走轻引擎的 `sessions.import`：只重建历史 + seed，
+   * 不触发模型回合（用户自己接着问）；电脑侧会话保持原样，两边之后独立。
+   */
+  async continueComputerInPhone(remoteSessionId: string): Promise<boolean> {
+    if (this.state.engineKind !== 'remote') {
+      this.setError('先在「电脑」tab 打开这个会话，再发起「在手机继续」');
+      return false;
+    }
+    this.noteUserActivity();
+    let detail: SessionDetail;
+    try {
+      detail = (await this.requestFull('sessions.get', { sessionId: remoteSessionId })).session;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
+
+    const userText = lastUserTextFromDetail(detail);
+    const assistantText = lastAssistantTextFromDetail(detail);
+    const handoff = buildHandoff({
+      conversationId: remoteSessionId,
+      reason: 'continue_in_light',
+      from: { engine: 'full', sessionId: remoteSessionId },
+      presetId: detail.presetId,
+      history: turnDetailToHistory(detail.turns),
+      turns: detail.turns,
+      ...(userText ? { userText } : {}),
+      ...(assistantText ? { assistantText } : {}),
+      limit: 8,
+    });
+    const seed = buildReverseSeedText(handoff);
+
+    if (!(await this.switchToLightForHandoff())) {
+      this.setError('轻引擎没连上，反向交接已取消');
+      return false;
+    }
+    try {
+      // 电脑的 presetId（standard/…）在轻引擎里没有：优先轻引擎自己的 light
+      const lightPresets = this.state.caps?.presets ?? [];
+      const presetId =
+        lightPresets.find((preset) => preset.id === 'light')?.id ?? lightPresets[0]?.id ?? 'light';
+      const { session: imported } = await this.requestLight('sessions.import', {
+        presetId,
+        title: detail.title,
+        text: seed,
+        handoffId: handoff.handoffId,
+        seedMarker: handoff.seedMarker,
+        ...(handoff.replay ? { replay: handoff.replay } : {}),
+      });
+      // 直接把新会话推到前台：copy 语义，不建 ConversationLink（电脑侧不做只读绑定）
+      const { session: lightDetail } = await this.requestLight('sessions.get', {
+        sessionId: imported.id,
+      });
+      this.patch({ currentId: imported.id, detail: lightDetail, view: 'main', error: null });
+      await this.refreshSessions();
+      return true;
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
   }
 
   /** M2.6：完整会话 → 轻引擎继续（摘要 + 最近 8 轮 + 工具结果，原完整会话之后只读） */
@@ -1439,41 +1755,83 @@ export class Store {
   async openSession(id: string): Promise<void> {
     if (!this.client) return;
     this.noteUserActivity();
+    this.flushDeltas();
+    this.pendingDelta.clear();
+
+    const previousId = this.state.currentId;
+    const previousDetail = this.state.detail;
     const link = this.linkForSession(id);
     const logicalId = link?.id ?? id;
+
+    // 如果之前有打开的会话且不是当前要打开的，保存旧详情到缓存
+    if (previousDetail && previousId && previousId !== logicalId) {
+      this.detailCache.set(previousId, previousDetail);
+      const prevLink = this.linkForSession(previousId);
+      if (!prevLink || prevLink.activeSide === 'light') {
+        this.baseDetails.set(previousId, previousDetail);
+      }
+    }
+
     const cached = this.detailCache.get(logicalId);
     this.detailCache.delete(logicalId);
-    // 重进会话先把 currentId/detail 切过去，避免 sessions.get 期间到达的流式帧被丢
-    this.patch(
-      cached
-        ? { busy: true, error: null, currentId: logicalId, detail: cached }
-        : { busy: true, error: null },
-    );
+    const seq = ++this.openSessionSeq;
+
+    // 先推一个空壳详情：点击后右侧页面立刻滑入，标题/输入框先到位，
+    // sessions.get 在转场动画期间并行拉取；不要让用户等 IPC 再开始转场。
+    const summary = this.state.sessions.find((s) => s.id === logicalId || s.id === id);
+    const fallback: SessionDetail = summary
+      ? { ...summary, turns: [], contract: { tools: [], net: 'allow' } }
+      : {
+          id: logicalId,
+          title: '会话',
+          presetId: this.state.draftPresetId ?? 'standard',
+          workspaceId: '',
+          hostId: this.state.caps?.host.id ?? 'local',
+          status: 'idle',
+          updatedAt: Date.now(),
+          unread: 0,
+          preview: '',
+          turns: [],
+          contract: { tools: [], net: 'allow' },
+        };
+    this.patch({
+      busy: true,
+      error: null,
+      currentId: logicalId,
+      detail: cached ?? fallback,
+      detailLoading: !cached,
+    });
 
     if (link) {
-      await this.openLinkedSession(link, cached);
+      await this.openLinkedSession(link, cached, seq);
+      if (this.openSessionSeq === seq) {
+        this.patch({ detailLoading: false });
+      }
       return;
     }
 
     try {
       const { session } = await this.client.request('sessions.get', { sessionId: id });
-      let turns = session.turns;
+      if (this.openSessionSeq !== seq) return;
+      let turns = normalizeTurns(session.turns);
       const active = session.status === 'running' || session.status === 'waiting_approval';
-      const live = active
-        ? cached?.turns.find((t) => t.role === 'assistant' && t.status === 'streaming')
-        : undefined;
-      if (live) turns = overlayLiveTurn(turns, live);
-      turns = normalizeTurns(turns);
-      this.patch({ detail: { ...session, turns }, currentId: id, busy: false });
+      if (!active) {
+        turns = turns.map((t) => (t.status === 'streaming' ? { ...t, status: 'done' as const } : t));
+      }
+      this.patch({ detail: { ...session, turns }, currentId: id, busy: false, detailLoading: false });
       // 重新打开会话时把还没回答的提问捞回来（真引擎那边由桥维护）
       const { approvals } = await this.client.request('approvals.list', { sessionId: id });
+      if (this.openSessionSeq !== seq) return;
       const map: Record<string, Approval> = {};
       for (const a of approvals) {
         if (a.sessionId === id) map[a.id] = a;
       }
       this.patch({ approvals: map });
     } catch (err) {
-      this.fail(err);
+      if (this.openSessionSeq === seq) {
+        this.patch({ detailLoading: false });
+        this.fail(err);
+      }
     }
   }
 
@@ -1483,7 +1841,11 @@ export class Store {
    * - active full 但 proot 已停 → 只读显示缓存，绝不在 light 里重放；
    * - active light → 正常拉轻引擎详情。
    */
-  private async openLinkedSession(link: ConversationLink, cached?: SessionDetail): Promise<void> {
+  private async openLinkedSession(
+    link: ConversationLink,
+    cached?: SessionDetail,
+    seq?: number,
+  ): Promise<void> {
     const base = this.baseDetails.get(link.id) ?? cached ?? null;
     const logicalId = link.id;
     try {
@@ -1492,6 +1854,7 @@ export class Store {
           const { session } = await this.client!.request('sessions.get', {
             sessionId: link.fullSessionId,
           });
+          if (seq !== undefined && this.openSessionSeq !== seq) return;
           const merged = mergeDetail(link, base, session);
           this.patch({ detail: merged ?? session, currentId: logicalId, busy: false });
           if (merged) this.detailCache.set(logicalId, merged);
@@ -1499,6 +1862,7 @@ export class Store {
             const { approvals } = await this.client!.request('approvals.list', {
               sessionId: link.fullSessionId,
             });
+            if (seq !== undefined && this.openSessionSeq !== seq) return;
             const map: Record<string, Approval> = {};
             for (const approval of approvals) map[approval.id] = approval;
             this.patch({ approvals: map });
@@ -1512,11 +1876,13 @@ export class Store {
             const { session } = await this.client!.request('sessions.get', {
               sessionId: link.lightSessionId,
             });
+            if (seq !== undefined && this.openSessionSeq !== seq) return;
             detail = mergeDetail(link, session, null);
           } catch {
             /* 连轻侧快照也拿不到时保持当前 detail */
           }
         }
+        if (seq !== undefined && this.openSessionSeq !== seq) return;
         this.patch({ detail: detail ?? this.state.detail, currentId: logicalId, busy: false });
         return;
       }
@@ -1525,30 +1891,36 @@ export class Store {
         const { session } = await this.client!.request('sessions.get', {
           sessionId: link.lightSessionId,
         });
+        if (seq !== undefined && this.openSessionSeq !== seq) return;
         let turns = normalizeTurns(session.turns);
         const active = session.status === 'running' || session.status === 'waiting_approval';
-        const live = active
-          ? cached?.turns.find((t) => t.role === 'assistant' && t.status === 'streaming')
-          : undefined;
-        if (live) turns = overlayLiveTurn(turns, live);
+        if (!active) {
+          turns = turns.map((t) => (t.status === 'streaming' ? { ...t, status: 'done' as const } : t));
+        }
         const detail = mergeDetail(link, { ...session, turns }, null) ?? session;
         this.patch({ detail, currentId: logicalId, busy: false });
         const { approvals } = await this.client!.request('approvals.list', {
           sessionId: link.lightSessionId,
         });
+        if (seq !== undefined && this.openSessionSeq !== seq) return;
         const map: Record<string, Approval> = {};
         for (const approval of approvals) map[approval.id] = approval;
         this.patch({ approvals: map });
         return;
       }
       // 完整链路上打开一个 active-light 逻辑会话：只读缓存
+      if (seq !== undefined && this.openSessionSeq !== seq) return;
       this.patch({ detail: base ?? this.state.detail, currentId: logicalId, busy: false });
     } catch (err) {
-      this.fail(err);
+      if (seq === undefined || this.openSessionSeq === seq) {
+        this.fail(err);
+      }
     }
   }
 
   closeSession(): void {
+    this.flushDeltas();
+    this.pendingDelta.clear();
     const { detail, currentId } = this.state;
     if (detail && currentId) {
       this.detailCache.set(currentId, detail);
@@ -1556,7 +1928,7 @@ export class Store {
       // 只有轻引擎侧的 detail 才值得作为 merge 基底；完整侧不要反向覆盖
       if (!link || link.activeSide === 'light') this.baseDetails.set(currentId, detail);
     }
-    this.patch({ detail: null, currentId: null });
+    this.patch({ detail: null, currentId: null, detailLoading: false });
   }
 
   async createSession(presetId: string, workspaceId?: string): Promise<void> {
@@ -1731,6 +2103,11 @@ export class Store {
       // 分享方没给读权限 / 文件被删：别让未捕获的 Promise 抛到红屏，给人话提示
       this.setError(err instanceof Error ? err.message : '读取分享内容失败');
     }
+  }
+
+  setPendingShareText(text: string): void {
+    if (!text) return;
+    this.patch({ pendingShare: { text } });
   }
 
   /** 首页取走分享来的文字（取完清掉，只填一次输入框） */
@@ -2147,6 +2524,34 @@ export class Store {
       await this.client.request('sessions.stop', { sessionId: this.physicalIdFor(currentId) });
     } catch (err) {
       this.fail(err);
+    }
+  }
+
+  /** 长按历史用户回合回退并重跑：截断后端与前端的历史，填入输入框并发送 */
+  async rewindAndRerun(turnId: string, text: string): Promise<boolean> {
+    const { currentId, detail } = this.state;
+    if (!currentId || !detail || !this.client) return false;
+    const physicalId = this.physicalIdFor(currentId);
+    this.patch({ busy: true, error: null });
+    try {
+      if (detail.status === 'running' || detail.status === 'waiting_approval') {
+        await this.stop().catch(() => undefined);
+      }
+      try {
+        const res = await this.client.request('sessions.rewind', { sessionId: physicalId, turnId });
+        this.patch({ detail: res.session, busy: false });
+      } catch {
+        // 如果远端宿主未实现 sessions.rewind，前端本地做 turns 截断
+        const turnIndex = detail.turns.findIndex((t) => t.id === turnId);
+        if (turnIndex >= 0) {
+          const nextTurns = detail.turns.slice(0, turnIndex);
+          this.patch({ detail: { ...detail, turns: nextTurns }, busy: false });
+        }
+      }
+      return await this.send(text);
+    } catch (err) {
+      this.fail(err);
+      return false;
     }
   }
 
@@ -2629,9 +3034,31 @@ export class Store {
     if (!this.client) return;
     try {
       const { workspaces } = await this.client.request('workspaces.list', {});
-      this.patch({ workspaces });
+      const source = this.sessionSource();
+      this.patch({
+        workspaces,
+        ...(source
+          ? { workspaceCache: { ...this.state.workspaceCache, [source]: workspaces } }
+          : {}),
+      });
     } catch {
       /* ignore */
+    }
+  }
+
+  /** 新建工作区：完整引擎可创建在 /root/work 下，轻引擎显式不支持 */
+  async createWorkspace(path: string): Promise<boolean> {
+    if (!this.client) return false;
+    const name = path.trim();
+    if (!name) return false;
+    try {
+      const { workspace } = await this.client.request('workspaces.create', { path: name });
+      const workspaces = [...this.state.workspaces.filter((item) => item.id !== workspace.id), workspace];
+      this.patch({ workspaces, error: null });
+      return true;
+    } catch (error) {
+      this.setError(humanizeError(error));
+      return false;
     }
   }
 
@@ -2849,7 +3276,8 @@ export class Store {
     this.startIdleSweeper();
     await this.runEngineEffects(effects);
     if (this.state.engine.mode !== 'light') return;
-    if (this.state.engine.tier === 'always') void this.warmLocalHost();
+    if (this.engineDeps.hostAvailable) void this.warmLocalHost();
+    else if (this.state.engine.tier === 'always') void this.warmLocalHost();
     else void this.maybeSmartPrewarm();
   }
 
@@ -2926,7 +3354,12 @@ export class Store {
     if (before) this.emitEngine({ type: 'HOST_STATUS', host: before });
     const alreadyReady = before?.engine === 'ready' && before?.bridge === 'ready';
     // 已热着：纯预热直接成功；切换时由 switchEngine 接着 connectLocal()
-    if (alreadyReady) return true;
+    if (alreadyReady) {
+      if (!switching && this.state.engine.mode === 'light') {
+        void this.refreshProotSessionCache();
+      }
+      return true;
+    }
     const started = await this.engineDeps
       .startHost({
         engineCmd: this.state.hostEngineCmd.trim() || undefined,
@@ -2955,7 +3388,12 @@ export class Store {
       if (!status) continue;
       // HostRuntime 自己会重试，failed 只是暂时状态：这里继续等，不立刻判死
       this.emitEngine({ type: 'HOST_STATUS', host: status });
-      if (status.engine === 'ready' && status.bridge === 'ready') return true;
+      if (status.engine === 'ready' && status.bridge === 'ready') {
+        if (!switching && this.state.engine.mode === 'light') {
+          void this.refreshProotSessionCache();
+        }
+        return true;
+      }
     }
     const timeoutError = `完整引擎 ${Math.round(timeoutMs / 1000)} 秒内没就绪，已回到轻引擎`;
     this.patch({ error: timeoutError });
@@ -2968,6 +3406,32 @@ export class Store {
       }),
     );
     return false;
+  }
+
+  /** 轻引擎运行且 proot 已就绪时，静默拉取 proot 的会话列表填充抽屉缓存 */
+  private async refreshProotSessionCache(): Promise<void> {
+    if (this.state.engine.mode !== 'light') return;
+    try {
+      const client = new EngineClient({ url: this.authEndpoint(LOCAL_WS_URL), autoReconnect: false });
+      await withTimeout(client.connect(), 3000, 'proot connect');
+      const res = (await withTimeout(
+        client.request('sessions.list', {}),
+        3000,
+        'sessions.list',
+      )) as { sessions?: SessionSummary[] };
+      client.close();
+      if (Array.isArray(res?.sessions)) {
+        this.patch({
+          sessionCache: {
+            ...this.state.sessionCache,
+            'phone-proot': res.sessions,
+          },
+        });
+        this.persistUiCache();
+      }
+    } catch {
+      // 预热静默拉取失败不打扰用户
+    }
   }
 
   /**
@@ -3040,7 +3504,13 @@ export class Store {
           await this.connectLocal();
           break;
         case 'stop-host':
-          await this.stopHostEffect();
+          // 只有用户在设置页显式手动停止（或低内存强制回收）时才停 host；
+          // 从完整模式切回轻模式时，让 Proot 在后台热驻留（Hot Standby），下次切回完整模式无需再漫长加载
+          if (this.state.engine.tier === 'always' || this.engineDeps.hostAvailable) {
+            // 保持热驻留，不杀 Proot
+          } else {
+            await this.stopHostEffect();
+          }
           break;
         case 'report':
           break;
@@ -3291,28 +3761,91 @@ export class Store {
     this.patch({ error: null });
   }
 
-  /** App 不在前台时才发系统通知：在看着界面就别打扰 */
+  showInAppNotice(notice: Omit<InAppNotice, 'id' | 'createdAt'>): void {
+    const id = `notice-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    this.patch({
+      inAppNotice: {
+        ...notice,
+        id,
+        createdAt: Date.now(),
+      },
+    });
+  }
+
+  dismissInAppNotice(): void {
+    this.patch({ inAppNotice: null });
+  }
+
+  handleInAppNoticeClick(): void {
+    const notice = this.state.inAppNotice;
+    if (!notice) return;
+    this.patch({ inAppNotice: null, view: 'main', connectModalOpen: false });
+    void this.openSessionRow(
+      notice.sessionId,
+      notice.engine === 'light'
+        ? 'phone-light'
+        : this.state.engineKind === 'remote'
+          ? 'computer'
+          : 'phone-proot',
+    );
+  }
+
+  /** App 在前台时若不在该会话则弹顶部通知；不在前台时发系统通知 */
   private notifyApproval(approval: Approval): void {
-    if (isAppActive()) return;
     if (this.notifiedApprovals.has(approval.id)) return;
     this.notifiedApprovals.add(approval.id);
     const title = approval.kind === 'question' ? '有个问题等你回答' : '需要你确认操作';
     const body = approval.summary ? `${approval.title}：${approval.summary}` : approval.title;
-    void notifyEvent(title, body, `approval:${approval.sessionId}:${approval.id}`);
+    const engine: 'light' | 'full' = this.state.engineKind === 'light' ? 'light' : 'full';
+
+    if (isAppActive()) {
+      if (this.state.currentId !== approval.sessionId || this.state.view !== 'main') {
+        this.showInAppNotice({
+          kind: 'approval',
+          title,
+          body,
+          sessionId: approval.sessionId,
+          engine,
+        });
+      }
+      return;
+    }
+
+    void notifyEvent(title, body, `approval:${approval.sessionId}:${approval.id}`, {
+      sessionId: approval.sessionId,
+      approvalId: approval.id,
+      engine,
+    });
   }
 
   private notifyRunFinished(data: { sessionId: string; reason: string; preview?: string; error?: string }): void {
-    if (isAppActive()) return;
     if (data.reason === 'stopped') return;
     const session =
       this.state.sessions.find((s) => s.id === data.sessionId) ??
       (this.state.detail?.id === data.sessionId ? this.state.detail : undefined);
     const sessionTitle = session?.title ?? '会话';
+    const engine: 'light' | 'full' = this.state.engineKind === 'light' ? 'light' : 'full';
+
+    if (isAppActive()) {
+      // 在前台：只要当前屏幕不是该会话，就弹顶部下滑通知卡片
+      if (this.state.currentId !== data.sessionId || this.state.view !== 'main') {
+        this.showInAppNotice({
+          kind: data.reason === 'error' ? 'error' : 'done',
+          title: data.reason === 'error' ? `会话出错 · ${sessionTitle}` : `回复完成 · ${sessionTitle}`,
+          body: data.reason === 'error' ? (data.error || '执行过程中遇到错误，点击查看') : (data.preview || '已完成本轮回复，点击查看'),
+          sessionId: data.sessionId,
+          engine,
+        });
+      }
+      return;
+    }
+
     if (data.reason === 'error') {
       void notifyEvent(
         `会话出错 · ${sessionTitle}`,
         data.error || '执行过程中遇到错误，点击查看详情',
         `run:${data.sessionId}`,
+        { sessionId: data.sessionId, engine },
       );
       return;
     }
@@ -3320,6 +3853,7 @@ export class Store {
       `回复完成 · ${sessionTitle}`,
       data.preview || '已完成本轮回复，点击查看',
       `run:${data.sessionId}`,
+      { sessionId: data.sessionId, engine },
     );
   }
 
@@ -3408,6 +3942,9 @@ export class Store {
       case 'session.created':
       case 'session.updated': {
         const session = data.session as SessionSummary;
+        if (session.status !== 'running' && session.status !== 'waiting_approval') {
+          this.detailCache.delete(session.id);
+        }
         const sessions = this.state.sessions.slice();
         const i = sessions.findIndex((s) => s.id === session.id);
         if (i >= 0) sessions[i] = session;
@@ -3427,7 +3964,11 @@ export class Store {
       }
 
       case 'block.appended': {
-        if (!detail || data.sessionId !== currentId) return;
+        if (data.sessionId !== currentId) {
+          this.detailCache.delete(data.sessionId);
+          return;
+        }
+        if (!detail) return;
         const raw = data.turn as Turn;
         const blocks: Turn['blocks'] = [];
         for (const b of raw.blocks) {
@@ -3442,19 +3983,40 @@ export class Store {
       case 'block.delta': {
         if (!detail || data.sessionId !== currentId) return;
         // 流式热路径：就地追加，靠 version 触发重渲染，避免每个 token 复制整棵树
-        const turn = detail.turns.find((t) => t.id === data.turnId);
-        const block = turn?.blocks.find((b) => b.id === data.blockId) as
+        let turn = detail.turns.find((t) => t.id === data.turnId);
+        if (!turn && data.runId) {
+          turn = detail.turns.find((t) => t.runId === data.runId);
+        }
+        if (!turn) {
+          turn = {
+            id: data.turnId,
+            runId: data.runId,
+            role: 'assistant',
+            createdAt: Date.now(),
+            blocks: [],
+            status: 'streaming',
+          };
+          detail.turns.push(turn);
+        }
+        let block = turn.blocks.find((b) => b.id === data.blockId) as
           | Extract<Block, { kind: 'text' | 'thinking' }>
           | undefined;
-        if (!block) return;
+        const currentBlock: Extract<Block, { kind: 'text' | 'thinking' }> =
+          block ?? {
+            kind: data.blockId.includes('thinking') ? 'thinking' : 'text',
+            id: data.blockId,
+            text: '',
+          };
+        if (!block) {
+          turn.blocks.push(currentBlock);
+        }
         if (data.op === 'replace') {
           this.pendingDelta.delete(data.blockId);
-          const turnIndex = detail.turns.findIndex((t) => t.id === data.turnId);
-          const turn = detail.turns[turnIndex];
-          const blockIndex = turn?.blocks.findIndex((b) => b.id === data.blockId) ?? -1;
-          if (!turn || blockIndex < 0) return;
+          const turnIndex = detail.turns.findIndex((t) => t.id === turn.id);
+          const blockIndex = turn.blocks.findIndex((b) => b.id === data.blockId);
+          if (turnIndex < 0 || blockIndex < 0) return;
           const blocks = turn.blocks.slice();
-          blocks[blockIndex] = { ...block, text: data.text };
+          blocks[blockIndex] = { ...currentBlock, text: data.text };
           const turns = detail.turns.slice();
           turns[turnIndex] = { ...turn, blocks };
           this.patch({ detail: { ...detail, turns } });
@@ -3468,7 +4030,11 @@ export class Store {
       }
 
       case 'block.updated': {
-        if (!detail || data.sessionId !== currentId) return;
+        if (data.sessionId !== currentId) {
+          this.detailCache.delete(data.sessionId);
+          return;
+        }
+        if (!detail) return;
         const turnIndex = detail.turns.findIndex((t) => t.id === data.turnId);
         const turn = detail.turns[turnIndex];
         if (!turn) return;
@@ -3596,6 +4162,7 @@ export class Store {
 
       case 'run.finished': {
         this.flushDeltas();
+        this.detailCache.delete(data.sessionId);
         this.reportRunActive(false);
         const d = this.state.detail;
         this.notifyRunFinished(data as { sessionId: string; reason: string });

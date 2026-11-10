@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="桌宠">
+  <rect width="48" height="48" rx="14" fill="#4B67B4"/>
+  <path d="M10 28c0-7 6-12 14-12s14 5 14 12c0 6-6 9-14 9s-14-3-14-9z" fill="none" stroke="#F4F7FF" stroke-width="2.2"/>
+  <path d="M30 16c2-4 6-5 8-4-1 2-2 4-5 5" fill="none" stroke="#F4F7FF" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="19" cy="27" r="1.8" fill="#F4F7FF"/>
+  <circle cx="29" cy="27" r="1.8" fill="#F4F7FF"/>
+  <path d="M21 32c2 1.5 4 1.5 6 0" fill="none" stroke="#BFD0FF" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

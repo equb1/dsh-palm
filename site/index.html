@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>锦囊 · dsh-palm — 把 DeepSeek Harness 装进口袋</title>
+  <meta name="description" content="锦囊是运行在 Android 手机上的 DeepSeek Harness 宿主：默认本机轻引擎秒开，需要真 Linux 时按需拉起 proot 完整引擎。">
+  <meta name="theme-color" content="#2B3245">
+  <meta property="og:title" content="锦囊 · dsh-palm">
+  <meta property="og:description" content="把 DeepSeek Harness 装进口袋。Android 本机宿主，轻引擎秒开，按需 proot。">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://equb1.github.io/dsh-palm/">
+  <meta property="og:image" content="https://equb1.github.io/dsh-palm/assets/icon-512.png">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    try {
+      var savedTheme = localStorage.getItem('jinang-theme');
+      document.documentElement.dataset.theme = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'auto';
+    } catch (error) {
+      document.documentElement.dataset.theme = 'auto';
+    }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="site-nav">
+    <a class="brand" href="#top" aria-label="锦囊 · dsh-palm 首页">
+      <img src="assets/icon-192.png" alt="" width="32" height="32">
+      <span class="brand-name">锦囊</span>
+      <span class="brand-sub">dsh-palm</span>
+    </a>
+    <nav class="nav-links" aria-label="页面导航">
+      <a href="#features">功能</a>
+      <a href="#architecture">架构</a>
+      <a href="#install">安装</a>
+      <a href="#limits">边界</a>
+    </nav>
+    <div class="nav-actions">
+      <a class="nav-github" href="https://github.com/equb1/dsh-palm" target="_blank" rel="noreferrer">GitHub</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换配色：跟随系统">
+        <span class="theme-dot" aria-hidden="true"></span>
+        <span class="theme-label">跟随系统</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="pulse" aria-hidden="true"></span>Android 本机宿主 · 开源 · 非官方</p>
+          <p class="hero-brand">锦囊 <span>dsh-palm</span></p>
+          <h1>把 DeepSeek Harness<br><span>装进口袋</span></h1>
+          <p class="lede">默认在手机里跑轻量 TypeScript 引擎，打开即用；需要真 Linux、Python 或后台长任务时，再按需拉起 proot 完整引擎。电脑是可选的另一台宿主。</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/equb1/dsh-palm/releases/latest" data-download>
+              下载 Android APK
+              <span class="btn-arrow" aria-hidden="true">→</span>
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/equb1/dsh-palm" target="_blank" rel="noreferrer">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 .7a11.5 11.5 0 00-3.64 22.41c.58.1.79-.25.79-.56v-2.17c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.78 1.19 1.78 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.57-.29-5.27-1.28-5.27-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.4-5.28 5.69.41.36.78 1.06.78 2.14v3.18c0 .31.21.67.8.56A11.5 11.5 0 0012 .7z"/></svg>
+              Star on GitHub
+            </a>
+          </div>
+          <ul class="hero-badges" aria-label="项目信息">
+            <li><span class="badge-dot android" aria-hidden="true"></span>Android · arm64</li>
+            <li><span class="badge-dot license" aria-hidden="true"></span>AGPL-3.0</li>
+            <li><span class="badge-dot source" aria-hidden="true"></span>源码可构建</li>
+          </ul>
+          <p class="hero-note">免费开源 · 不隶属于 DeepSeek · 版本与安装包以 GitHub Releases 为准</p>
+        </div>
+
+        <div class="hero-visual">
+          <div class="float-chip chip-engine" aria-hidden="true"><span class="chip-dot"></span>轻引擎 · 已就绪</div>
+          <div class="float-chip chip-workspace" aria-hidden="true">工作区 /workspace</div>
+          <div class="float-chip chip-theme" aria-hidden="true">深色主题</div>
+
+          <figure class="phone-figure">
+            <div class="phone" aria-hidden="true">
+              <div class="phone-screen">
+                <div class="phone-status">
+                  <span>9:41</span>
+                  <span class="status-icons"><i></i><i></i><i></i></span>
+                </div>
+                <div class="phone-appbar">
+                  <span class="app-menu">≡</span>
+                  <span class="app-brand">
+                    <img src="assets/icon-192.png" alt="" width="22" height="22">
+                    <b>锦囊</b>
+                  </span>
+                  <span class="engine-pill"><i></i>轻引擎</span>
+                </div>
+                <div class="phone-chat">
+                  <div class="msg user">把这份会议纪要整理成周报，并生成 docx。</div>
+                  <div class="think-row"><span class="spark">✦</span> 正在梳理要点 <span class="dots"><i></i><i></i><i></i></span></div>
+                  <div class="tool-row">
+                    <span class="tool-icon">⌘</span>
+                    <span class="tool-name">write_file</span>
+                    <code>/workspace/docs/周报.docx</code>
+                    <span class="tool-ok">✓</span>
+                  </div>
+                  <div class="approval-card">
+                    <div class="approval-title"><span>!</span> 需要你的确认</div>
+                    <p>允许写入工作区文件？</p>
+                    <code>/workspace/docs/周报.docx</code>
+                    <div class="approval-actions"><span class="approve">允许</span><span class="deny">拒绝</span></div>
+                  </div>
+                  <div class="msg ai">
+                    已生成周报，包含本周进展、风险与下周计划。
+                    <span class="file-chip">docx · 周报.docx</span>
+                  </div>
+                </div>
+                <div class="phone-composer">
+                  <div class="composer-meta"><span>工作区内修改</span><span>默认锦囊</span></div>
+                  <div class="composer-box">
+                    <span class="composer-hint">给锦囊发消息</span>
+                    <span class="composer-plus">+</span>
+                    <span class="composer-send">↑</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <figcaption>界面示意，不含真实账号或聊天数据</figcaption>
+          </figure>
+        </div>
+      </div>
+
+      <ul class="hero-strip" aria-label="能力关键词">
+        <li>轻引擎默认</li>
+        <li>proot 按需</li>
+        <li>官方账号 OAuth</li>
+        <li>插件兼容矩阵</li>
+        <li>深色主题</li>
+        <li>LAN 发现</li>
+      </ul>
+    </section>
+
+    <section class="section" id="features">
+      <div class="section-head">
+        <p class="kicker">能力</p>
+        <h2>一台手机，完整宿主</h2>
+        <p>该快的时候快，该真的时候真。轻引擎负责随身问答与文档，完整引擎负责真正的 Linux 环境。</p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature feature-wide">
+          <img class="feature-icon" src="assets/icons/engine.svg" alt="" width="48" height="48">
+          <div class="feature-copy">
+            <h3>轻引擎秒开，完整引擎按需</h3>
+            <p>默认轻引擎在 App 进程内运行，冷启动不等待 proot；代码、后台任务、pptx 与 Office 编辑需要真环境时，再切到完整引擎。</p>
+          </div>
+          <div class="engine-toggle" aria-hidden="true">
+            <span class="on"><b>轻引擎</b><small>默认</small></span>
+            <span><b>完整引擎</b><small>按需</small></span>
+          </div>
+        </article>
+
+        <article class="feature">
+          <img class="feature-icon" src="assets/icons/office.svg" alt="" width="48" height="48">
+          <h3>Python 与 Office 随身</h3>
+          <p>完整引擎自带 Python 3.12 与 python-docx、openpyxl、python-pptx；轻引擎可直接创建和读取 docx / xlsx。</p>
+          <p class="feature-meta">pptx 与编辑走完整引擎</p>
+        </article>
+
+        <article class="feature">
+          <img class="feature-icon" src="assets/icons/stream.svg" alt="" width="48" height="48">
+          <h3>流式、审批、提问</h3>
+          <p>思考和正文流式出现；工具调用先确认，信息不足时用提问卡澄清；支持插话、停止与权限切换。</p>
+          <p class="feature-meta">审批 / 提问 / 插话</p>
+        </article>
+
+        <article class="feature">
+          <img class="feature-icon" src="assets/icons/folder.svg" alt="" width="48" height="48">
+          <h3>文件、工作区、只读终端</h3>
+          <p>浏览、重命名、删除工作区文件；轻/完整引擎共用同一目录；只读终端能查看环境，写操作会被沙箱拒绝。</p>
+          <p class="feature-meta">共用 /workspace</p>
+        </article>
+
+        <article class="feature">
+          <img class="feature-icon" src="assets/icons/moon.svg" alt="" width="48" height="48">
+          <h3>深色主题</h3>
+          <p>跟随系统，或手动切换浅色 / 深色；聊天、审批、文件、终端和代码块保持一致。</p>
+          <p class="feature-meta">跟随系统 · 手动切换</p>
+        </article>
+
+        <article class="feature">
+          <img class="feature-icon" src="assets/icons/plugin.svg" alt="" width="48" height="48">
+          <h3>插件兼容矩阵</h3>
+          <p>内置 305 个包的离线兼容矩阵，按 L0–L3 标注运行方式与判定理由；实验室提供 L0 WebView 入口，L3 走 proot。</p>
+          <p class="feature-meta">L0–L3 分级</p>
+        </article>
+
+        <article class="feature">
+          <img class="feature-icon" src="assets/icons/wifi.svg" alt="" width="48" height="48">
+          <h3>局域网与电脑宿主</h3>
+          <p>同一 Wi-Fi 下发现电脑宿主，扫描或手填地址；断线后可重连上次宿主，把手机接到电脑上的真 dsh。</p>
+          <p class="feature-meta">mDNS + NSD 扫描</p>
+        </article>
+
+        <article class="feature">
+          <img class="feature-icon" src="assets/icons/widget.svg" alt="" width="48" height="48">
+          <h3>从系统任何地方进入</h3>
+          <p>QS 磁贴、桌面小组件、通知直达会话或审批；常驻通知也能一键回到锦囊。</p>
+          <p class="feature-meta">QS / 小组件 / 通知</p>
+        </article>
+
+        <article class="feature">
+          <img class="feature-icon" src="assets/icons/account.svg" alt="" width="48" height="48">
+          <h3>官方账号与模型渠道</h3>
+          <p>浏览器 PKCE OAuth 登录官方账号；账号模式自动拉模型目录，也可配置兼容渠道与自定义提供商。</p>
+          <p class="feature-meta">OAuth · 43 个目录 + 自定义</p>
+        </article>
+
+        <article class="feature feature-wide feature-pet">
+          <img class="feature-icon" src="assets/icons/pet.svg" alt="" width="48" height="48">
+          <div class="feature-copy">
+            <h3>桌宠陪跑</h3>
+            <p>内置 deepy / maid 两套逐帧素材与 12 态状态机；思考、工作、审批等待会切换动作，桌面悬浮窗为实验能力。</p>
+          </div>
+          <div class="pet-demo" aria-hidden="true">
+            <img src="assets/icons/pet.svg" alt="" width="52" height="52">
+            <span>thinking</span>
+            <span>working</span>
+            <span>approval</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section section-alt" id="architecture">
+      <div class="section-head">
+        <p class="kicker">架构</p>
+        <h2>一条协议，两种引擎</h2>
+        <p>UI 不直接碰引擎。轻引擎走进程内调用，完整引擎走 WebSocket 桥；两边实现同一套会话、审批和工具协议，共用工作区。</p>
+      </div>
+
+      <div class="arch-diagram" role="img" aria-label="React Native App 通过进程内 LocalEngineClient 连接轻量 TypeScript 引擎，或通过 WebSocket 桥连接 proot 里的 dsh；两者共享工作区。">
+        <div class="arch-top">
+          <span class="arch-tag">UI</span>
+          <strong>React Native App</strong>
+          <span>只认协议，不关心引擎</span>
+        </div>
+
+        <div class="arch-branches">
+          <div class="arch-branch">
+            <div class="branch-line" aria-hidden="true"></div>
+            <div class="arch-card arch-light">
+              <span class="arch-kicker">默认</span>
+              <strong>LocalEngineClient</strong>
+              <span>LightHost · TypeScript · 进程内</span>
+              <em>秒开 · 无 WebSocket</em>
+            </div>
+            <p class="arch-caption">流式 / 工具 / 文档 / 生图</p>
+          </div>
+
+          <div class="arch-branch">
+            <div class="branch-line" aria-hidden="true"></div>
+            <div class="arch-card">
+              <span class="arch-kicker">远程或本机</span>
+              <strong>EngineClient · WS</strong>
+              <span>单文件桥 :8788</span>
+            </div>
+            <div class="branch-arrow" aria-hidden="true"></div>
+            <div class="arch-card arch-full">
+              <span class="arch-kicker">按需</span>
+              <strong>proot · dsh web :8787</strong>
+              <span>Ubuntu 24.04 · Node 24</span>
+              <em>真 Linux · Python / Office</em>
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-base">
+          <div>
+            <strong>HostService</strong>
+            <span>Android 前台服务 → proot / Node / 桥</span>
+          </div>
+          <div>
+            <strong>共享工作区</strong>
+            <span>&lt;filesDir&gt;/workspace ↔ /root/work</span>
+          </div>
+          <div>
+            <strong>原生能力</strong>
+            <span>分享 / 通知 / 相机 / SecureStore</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="arch-note">proot 冷启动约 14 秒，空闲会回收；轻引擎目标 300ms 内就绪。密钥与 <code>~/.dsh</code> 放在 rootfs 外，换镜像不丢。实现细节见 <a href="https://github.com/equb1/dsh-palm/blob/main/docs/TECHNICAL.md" target="_blank" rel="noreferrer">docs/TECHNICAL.md</a>。</p>
+    </section>
+
+    <section class="section" id="install">
+      <div class="section-head">
+        <p class="kicker">开始使用</p>
+        <h2>安装与构建</h2>
+        <p>直接装 APK，或者从源码构建。APK 自带运行时，不需要电脑在旁边。</p>
+      </div>
+
+      <div class="download-panel">
+        <img src="assets/icon-192.png" alt="" width="64" height="64">
+        <div class="download-copy">
+          <h3>下载 Android APK</h3>
+          <p>从 GitHub Releases 获取最新包。首次启动会解压 rootfs / Python 层，大约 15–25 秒，之后打开即用。</p>
+          <p class="download-note" id="download-note" aria-live="polite">下载由 GitHub Releases 提供，版本以页面为准。</p>
+        </div>
+        <a class="btn btn-primary" href="https://github.com/equb1/dsh-palm/releases/latest" data-download>前往 Releases</a>
+      </div>
+
+      <ul class="install-notes">
+        <li><strong>Android arm64</strong>，当前主要在 Android 16 真机验证。</li>
+        <li><strong>轻引擎</strong>需要模型渠道或官方账号；没配置时 App 会引导设置。</li>
+        <li><strong>完整引擎</strong>按需启动，空闲自动回收；跑脚本前先确认会话权限。</li>
+      </ul>
+
+      <div class="build-grid">
+        <div class="terminal">
+          <div class="terminal-bar">
+            <span>源码构建 Android</span>
+            <button class="copy-btn" type="button" data-copy="#build-command">复制</button>
+          </div>
+          <pre><code id="build-command">npm install
+npm --prefix app install
+npm run verify
+
+bash scripts/setup-android.sh
+cd app/android && sh gradlew :app:assembleDebug</code></pre>
+        </div>
+
+        <div class="terminal">
+          <div class="terminal-bar">
+            <span>浏览器预览界面</span>
+            <button class="copy-btn" type="button" data-copy="#preview-command">复制</button>
+          </div>
+          <pre><code id="preview-command">npm run engine
+npm --prefix app run web</code></pre>
+          <p class="terminal-note">需要 Node 22.13+；Android 构建还需要 JDK 21 与 Android SDK。gradlew 没有可执行位时用 <code>sh gradlew</code>。</p>
+        </div>
+      </div>
+
+      <div class="docs">
+        <a class="doc-card" href="https://github.com/equb1/dsh-palm/blob/main/docs/REQUIREMENTS.md" target="_blank" rel="noreferrer">
+          <span class="doc-label">需求</span>
+          <strong>REQUIREMENTS</strong>
+          <span>定位、能力矩阵、插件分层、里程碑与验收。</span>
+        </a>
+        <a class="doc-card" href="https://github.com/equb1/dsh-palm/blob/main/docs/TECHNICAL.md" target="_blank" rel="noreferrer">
+          <span class="doc-label">技术</span>
+          <strong>TECHNICAL</strong>
+          <span>架构、协议、轻引擎、proot、路由、登录与构建。</span>
+        </a>
+        <a class="doc-card" href="https://github.com/equb1/dsh-palm/blob/main/docs/PITFALLS.md" target="_blank" rel="noreferrer">
+          <span class="doc-label">踩坑</span>
+          <strong>PITFALLS</strong>
+          <span>现象 → 原因 → 处理 → 验证。</span>
+        </a>
+        <a class="doc-card" href="https://github.com/equb1/dsh-palm/blob/main/docs/AI-TASKS.md" target="_blank" rel="noreferrer">
+          <span class="doc-label">任务</span>
+          <strong>AI-TASKS</strong>
+          <span>任务状态、工程债、分支与提交规则、常用命令。</span>
+        </a>
+        <a class="doc-card" href="https://github.com/equb1/dsh-palm/blob/main/docs/RELEASE.md" target="_blank" rel="noreferrer">
+          <span class="doc-label">发布</span>
+          <strong>RELEASE</strong>
+          <span>签名、首装、覆盖升级与回滚流程。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="section section-alt" id="limits">
+      <div class="section-head">
+        <p class="kicker">边界</p>
+        <h2>先说清楚不做什么</h2>
+        <p>锦囊是正在迭代的 Android 宿主。下面这些边界比宣传语更重要。</p>
+      </div>
+
+      <div class="limit-grid">
+        <div class="limit-card">
+          <h3>Android 优先</h3>
+          <p>当前聚焦 Android arm64；iOS 尚未支持。</p>
+        </div>
+        <div class="limit-card">
+          <h3>完整引擎有成本</h3>
+          <p>proot 冷启动约 14 秒、常驻内存较高，空闲会回收；它不是默认路径。</p>
+        </div>
+        <div class="limit-card">
+          <h3>局域网还未加密</h3>
+          <p>LAN 发现与重连已可用；端到端加密、relay / WebRTC 仍在路线图。</p>
+        </div>
+        <div class="limit-card">
+          <h3>文档能力有边界</h3>
+          <p>PDF 解析与生成暂缓；旧 .doc / .ppt、render / recalc 需要桌面端或后续能力。</p>
+        </div>
+        <div class="limit-card">
+          <h3>插件不是全量可跑</h3>
+          <p>兼容矩阵给出运行方式；L1 未完成、L2 无独立运行时、L4 依赖电脑。</p>
+        </div>
+        <div class="limit-card">
+          <h3>非官方项目</h3>
+          <p>与 DeepSeek 无隶属关系；DeepSeek Harness 及相关名称归其权利人所有。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-brand">
+      <img src="assets/icon-192.png" alt="" width="36" height="36">
+      <div>
+        <strong>锦囊 · dsh-palm</strong>
+        <span>把 DeepSeek Harness 装进口袋</span>
+      </div>
+    </div>
+    <p class="footer-links">
+      <a href="https://github.com/equb1/dsh-palm" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://github.com/equb1/dsh-palm/releases/latest" target="_blank" rel="noreferrer">Releases</a>
+      <a href="https://github.com/equb1/dsh-palm/blob/main/docs/REQUIREMENTS.md" target="_blank" rel="noreferrer">文档</a>
+      <a href="https://github.com/equb1/dsh-palm/blob/main/LICENSE" target="_blank" rel="noreferrer">AGPL-3.0</a>
+    </p>
+    <p class="footer-disclaimer">非官方项目，与 DeepSeek 无隶属关系。页面不含追踪脚本，不加载第三方资源。</p>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

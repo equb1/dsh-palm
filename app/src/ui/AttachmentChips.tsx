@@ -2,7 +2,8 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { AttachmentEngine, AttachmentKind } from '../lib/attachments/types';
-import { radius, space, typography, useThemedStyles, type Theme } from './theme';
+import { BrandIcon, type BrandIconName } from './components/BrandIcon';
+import { radius, space, typography, useTheme, useThemedStyles, type Theme } from './theme';
 
 export type { AttachmentEngine, AttachmentKind };
 
@@ -19,12 +20,12 @@ export interface AttachmentChipsProps {
   onPress?: (id: string) => void;
 }
 
-const KIND_GLYPH: Record<AttachmentKind, string> = {
-  image: '🖼',
-  document: '📄',
-  file: '📄',
-  video: '🎬',
-  audio: '🎵',
+const KIND_ICON: Record<AttachmentKind, BrandIconName> = {
+  image: 'image',
+  document: 'fileText',
+  file: 'folder',
+  video: 'video',
+  audio: 'audio',
 };
 const ENGINE_LABEL: Record<AttachmentEngine, string> = { light: '轻', full: '完整' };
 
@@ -37,6 +38,7 @@ export function AttachmentChips({
   onRemove,
   onPress,
 }: AttachmentChipsProps): React.ReactElement | null {
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   if (items.length === 0) return null;
 
@@ -50,7 +52,7 @@ export function AttachmentChips({
       {items.map((item) => {
         const main = (
           <View style={styles.main}>
-            <Text style={styles.glyph}>{KIND_GLYPH[item.kind]}</Text>
+            <BrandIcon name={KIND_ICON[item.kind] ?? 'file'} size={14} color={palette.textDim} />
             <Text style={styles.name} numberOfLines={1}>
               {item.name}
             </Text>
@@ -86,7 +88,7 @@ export function AttachmentChips({
                 onPress={() => onRemove(item.id)}
                 style={({ pressed }) => [styles.remove, pressed && styles.pressed]}
               >
-                <Text style={styles.removeGlyph}>×</Text>
+                <BrandIcon name="close" size={13} color={palette.textDim} strokeWidth={2} />
               </Pressable>
             ) : null}
           </View>

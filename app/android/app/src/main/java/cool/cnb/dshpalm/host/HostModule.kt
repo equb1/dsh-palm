@@ -1,14 +1,38 @@
 package cool.cnb.dshpalm.host
 
 import android.app.Activity
+import android.app.AppOpsManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.StatusBarManager
+import android.appwidget.AppWidgetManager
 import android.content.ClipData
+import android.content.ComponentName
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.media.MediaScannerConnection
+import android.os.Environment
+import android.provider.MediaStore
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import com.facebook.react.uimanager.UIManagerHelper
+import java.io.File
+import java.io.FileOutputStream
 import android.net.Uri
 import android.os.Build
+import android.os.Process
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.BaseActivityEventListener
@@ -136,6 +160,304 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         }
     }
 
+    // ---- M3.2 LAN 发现 ----
+
+    @Volatile private var lanDiscovery: LanDiscovery? = null
+
+    /**
+     * Android 13+ 的附近 Wi-Fi 权限；部分 Android 16 ROM 还没有
+     * ACCESS_LOCAL_NETWORK，用 NEARBY_WIFI_DEVICES 覆盖 NSD。
+     */
+    @ReactMethod
+    fun requestLanPermission(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT < 33) {
+                promise.resolve(true)
+                return
+            }
+            val permission = "android.permission.NEARBY_WIFI_DEVICES"
+            if (ctx.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+                promise.resolve(true)
+                return
+            }
+            val activity = ctx.currentActivity
+            if (activity == null) {
+                promise.resolve(false)
+                return
+            }
+            pendingLanPermission = promise
+            activity.requestPermissions(arrayOf(permission), LAN_PERM_REQ)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    /** 扫描 `_dsh-palm._tcp`；4 秒后返回当前发现的列表。 */
+    @ReactMethod
+    fun discoverLanHosts(timeoutMs: Double, promise: Promise) {
+        try {
+            lanDiscovery?.stop(null) // 旧实例先释放
+        } catch (_: Throwable) {
+            // ignore
+        }
+        val discovery = LanDiscovery(ctx)
+        lanDiscovery = discovery
+        discovery.start(if (timeoutMs > 0) timeoutMs.toLong() else 4_000L, promise)
+    }
+
+    @ReactMethod
+    fun stopLanDiscovery(promise: Promise) {
+        try {
+            lanDiscovery?.stop(promise) ?: promise.resolve(true)
+            lanDiscovery = null
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    // ---- M3.3 系统入口 ----
+
+    @ReactMethod
+    fun requestPinWidget(promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null || Build.VERSION.SDK_INT < 26) {
+            promise.resolve(false)
+            return
+        }
+        activity.runOnUiThread {
+            try {
+                val manager = activity.getSystemService(AppWidgetManager::class.java)
+                if (manager == null || !manager.isRequestPinAppWidgetSupported) {
+                    promise.resolve(false)
+                    return@runOnUiThread
+                }
+                val provider = ComponentName(activity, cool.cnb.dshpalm.system.DshWidgetProvider::class.java)
+                val callbackIntent = Intent(activity, cool.cnb.dshpalm.system.DshWidgetProvider::class.java).apply {
+                    action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                }
+                val successCallback = PendingIntent.getBroadcast(
+                    activity,
+                    4705,
+                    callbackIntent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                val success = manager.requestPinAppWidget(provider, null, successCallback)
+                promise.resolve(success)
+            } catch (t: Throwable) {
+                promise.resolve(false)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun requestPinShortcut(promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            promise.resolve(false)
+            return
+        }
+        activity.runOnUiThread {
+            try {
+                val shortcutManager = activity.getSystemService(ShortcutManager::class.java)
+                if (shortcutManager == null || !shortcutManager.isRequestPinShortcutSupported) {
+                    promise.resolve(false)
+                    return@runOnUiThread
+                }
+                val intent = Intent(activity, cool.cnb.dshpalm.MainActivity::class.java).apply {
+                    action = Intent.ACTION_VIEW
+                    data = Uri.parse("dshpalm://session?source=shortcut")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val pinShortcutInfo = ShortcutInfo.Builder(activity, "dsh_fast_session")
+                    .setShortLabel("锦囊")
+                    .setLongLabel("锦囊 - 本地 AI")
+                    .setIcon(Icon.createWithResource(activity, cool.cnb.dshpalm.R.mipmap.ic_launcher))
+                    .setIntent(intent)
+                    .build()
+
+                val callbackIntent = shortcutManager.createShortcutResultIntent(pinShortcutInfo)
+                val successCallback = PendingIntent.getBroadcast(
+                    activity,
+                    4704,
+                    callbackIntent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                val success = shortcutManager.requestPinShortcut(pinShortcutInfo, successCallback.intentSender)
+                promise.resolve(success)
+            } catch (t: Throwable) {
+                promise.resolve(false)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun openAppSettings(promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null) {
+            promise.resolve(false)
+            return
+        }
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", activity.packageName, null)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            activity.startActivity(intent)
+            promise.resolve(true)
+        } catch (t: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun requestAddTile(promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null || Build.VERSION.SDK_INT < 33) {
+            promise.resolve(false)
+            return
+        }
+        activity.runOnUiThread {
+            try {
+                val manager = activity.getSystemService(StatusBarManager::class.java)
+                if (manager == null) {
+                    promise.resolve(false)
+                    return@runOnUiThread
+                }
+                val component = ComponentName(activity, cool.cnb.dshpalm.system.DshTileService::class.java)
+                val icon = Icon.createWithResource(activity, cool.cnb.dshpalm.R.drawable.ic_dsh_tile)
+                manager.requestAddTileService(component, "锦囊", icon, activity.mainExecutor) { result ->
+                    promise.resolve(
+                        result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED
+                            || result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED,
+                    )
+                }
+            } catch (t: Throwable) {
+                promise.resolve(false)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun getSystemEntryStatus(promise: Promise) {
+        try {
+            val manager = AppWidgetManager.getInstance(ctx)
+            val widgetCount =
+                manager.getAppWidgetIds(ComponentName(ctx, cool.cnb.dshpalm.system.DshWidgetProvider::class.java)).size
+            val overlay = canDrawOverlays(ctx)
+            promise.resolve(
+                Arguments.createMap().apply {
+                    putInt("widgetCount", widgetCount)
+                    putBoolean("overlayAllowed", overlay)
+                    putBoolean("floatingPetActive", cool.cnb.dshpalm.system.FloatPetService.isShowing)
+                },
+            )
+        } catch (_: Throwable) {
+            promise.resolve(null)
+        }
+    }
+
+    @ReactMethod
+    fun isOverlayPermissionGranted(promise: Promise) {
+        promise.resolve(canDrawOverlays(ctx))
+    }
+
+    /**
+     * 部分 ROM（ColorOS）Settings.canDrawOverlays 仍返回 false，
+     * 但 AppOps 已经 allow；以 AppOps 兜底，避免用户开了权限还被拦。
+     */
+    private fun canDrawOverlays(context: android.content.Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        if (android.provider.Settings.canDrawOverlays(context)) return true
+        return try {
+            val ops = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ops.unsafeCheckOpNoThrow(
+                    AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                    Process.myUid(),
+                    context.packageName,
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                ops.checkOpNoThrow(
+                    AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                    Process.myUid(),
+                    context.packageName,
+                )
+            }
+            mode == AppOpsManager.MODE_ALLOWED
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    @ReactMethod
+    fun requestOverlayPermission(promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            promise.resolve(false)
+            return
+        }
+        try {
+            val intent = Intent(
+                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${activity.packageName}")
+            ).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            activity.startActivity(intent)
+            promise.resolve(true)
+        } catch (t: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun setFloatingPetEnabled(enabled: Boolean, role: String?, state: String?, promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null) {
+            promise.resolve(false)
+            return
+        }
+        activity.runOnUiThread {
+            try {
+                if (enabled) {
+                    // 不在这里硬拦权限：部分 ROM Settings/AppOps 查询会误报；
+                    // 真正 addView 失败时服务会自己 stopSelf，JS 侧再提示。
+                    cool.cnb.dshpalm.system.FloatPetService.start(activity, role ?: "deepy", state ?: "sleeping")
+                    promise.resolve(true)
+                } else {
+                    cool.cnb.dshpalm.system.FloatPetService.stop(activity)
+                    promise.resolve(true)
+                }
+            } catch (t: Throwable) {
+                promise.resolve(false)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun setFloatingPetVisible(visible: Boolean, promise: Promise) {
+        try {
+            cool.cnb.dshpalm.system.FloatPetService.setVisible(ctx, visible)
+            promise.resolve(true)
+        } catch (_: Throwable) {
+            promise.resolve(false)
+        }
+    }
+
+    @ReactMethod
+    fun getFloatingPetStatus(promise: Promise) {
+        val allowed = canDrawOverlays(ctx)
+        promise.resolve(
+            Arguments.createMap().apply {
+                putBoolean("isShowing", cool.cnb.dshpalm.system.FloatPetService.isShowing)
+                putBoolean("allowed", allowed)
+                putString("role", cool.cnb.dshpalm.system.FloatPetService.currentRole)
+                putString("state", cool.cnb.dshpalm.system.FloatPetService.currentState)
+            }
+        )
+    }
+
     /**
      * 请求通知权限（Android 13+）。
      * 结果是异步的：这次返回当前状态，用户点完「允许」后下次调用才变 true。
@@ -165,6 +487,25 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
     /** 发一条本地通知（任务完成 / 待审批 / 提问）。tag 相同会覆盖同一条。 */
     @ReactMethod
     fun notifyEvent(title: String, body: String, tag: String?, promise: Promise) {
+        notifyEventInternal(title, body, tag, null, promise)
+    }
+
+    /**
+     * 带目标路由的通知（M3.3）：点通知直接回到具体会话/审批卡。
+     * 保留 notifyEvent 旧签名，老 JS 仍可工作。
+     */
+    @ReactMethod
+    fun notifyEventEx(title: String, body: String, tag: String?, route: ReadableMap?, promise: Promise) {
+        notifyEventInternal(title, body, tag, route, promise)
+    }
+
+    private fun notifyEventInternal(
+        title: String,
+        body: String,
+        tag: String?,
+        route: ReadableMap?,
+        promise: Promise,
+    ) {
         try {
             // 原生层强校验：如果当前 Activity 正在前台且拥有焦点，绝不弹系统通知（防止刚切回前台瞬间误弹）
             val activity = ctx.currentActivity
@@ -178,15 +519,24 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
                 return
             }
             ensureEventChannel(manager)
-            val sessionId = extractSessionIdFromTag(tag)
+            val tagSessionId = extractSessionIdFromTag(tag)
+            val sessionId = readString(route, "sessionId") ?: tagSessionId
+            val approvalId = readString(route, "approvalId") ?: extractApprovalIdFromTag(tag)
+            val engine = readString(route, "engine")
             val notifyId = (tag ?: title).hashCode()
+            val uri = Uri.parse("dshpalm://session").buildUpon().apply {
+                if (!sessionId.isNullOrBlank()) appendQueryParameter("id", sessionId)
+                if (!engine.isNullOrBlank()) appendQueryParameter("engine", engine)
+                if (!approvalId.isNullOrBlank()) appendQueryParameter("approval", approvalId)
+                appendQueryParameter("source", "notification")
+            }.build()
             val intent = Intent(ctx, cool.cnb.dshpalm.MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                action = Intent.ACTION_MAIN
-                addCategory(Intent.CATEGORY_LAUNCHER)
-                if (!sessionId.isNullOrBlank()) {
-                    putExtra(EXTRA_NOTIFY_SESSION_ID, sessionId)
-                }
+                action = Intent.ACTION_VIEW
+                data = uri
+                if (!sessionId.isNullOrBlank()) putExtra(EXTRA_NOTIFY_SESSION_ID, sessionId)
+                if (!approvalId.isNullOrBlank()) putExtra(EXTRA_NOTIFY_APPROVAL_ID, approvalId)
+                if (!engine.isNullOrBlank()) putExtra(EXTRA_NOTIFY_ENGINE, engine)
             }
             val pending = PendingIntent.getActivity(
                 ctx,
@@ -194,7 +544,13 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
                 intent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            val notification = Notification.Builder(ctx, EVENT_CHANNEL)
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Notification.Builder(ctx, EVENT_CHANNEL)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(ctx)
+            }
+            val notification = builder
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(Notification.BigTextStyle().bigText(body))
@@ -231,6 +587,12 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         // 支持 "run:<sessionId>" 或 "approval:<sessionId>:<approvalId>"
         val parts = tag.split(":")
         return if (parts.size >= 2 && parts[1].startsWith("session-")) parts[1] else null
+    }
+
+    private fun extractApprovalIdFromTag(tag: String?): String? {
+        if (tag.isNullOrBlank()) return null
+        val parts = tag.split(":")
+        return if (parts.size >= 3 && parts[1].startsWith("session-")) parts[2] else null
     }
 
     private fun ensureEventChannel(manager: NotificationManager) {
@@ -467,8 +829,8 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         putString("hash", ref.hash)
     }
 
-    private fun readString(map: ReadableMap, key: String): String? {
-        if (!map.hasKey(key) || map.isNull(key)) return null
+    private fun readString(map: ReadableMap?, key: String): String? {
+        if (map == null || !map.hasKey(key) || map.isNull(key)) return null
         return runCatching { map.getString(key) }.getOrNull()
     }
 
@@ -561,11 +923,226 @@ class HostModule(private val ctx: ReactApplicationContext) : ReactContextBaseJav
         }
     }
 
+    /**
+     * 根据 ReactTag 获取底层的 Android View。
+     * 兼容 Fabric (New Architecture)、Paper 以及 Modal 对话框中的视图。
+     */
+    private fun resolveViewByTag(tag: Int): View? {
+        val activity = ctx.currentActivity
+        // 1. Fabric UIManager
+        try {
+            val fabric = UIManagerHelper.getUIManager(ctx, com.facebook.react.uimanager.common.UIManagerType.FABRIC)
+            val v = fabric?.resolveView(tag)
+            if (v != null) return v
+        } catch (_: Throwable) {}
+
+        // 2. Default UIManager
+        try {
+            val defaultUi = UIManagerHelper.getUIManager(ctx, com.facebook.react.uimanager.common.UIManagerType.DEFAULT)
+            val v = defaultUi?.resolveView(tag)
+            if (v != null) return v
+        } catch (_: Throwable) {}
+
+        // 3. Activity 窗口根视图递归匹配
+        if (activity != null) {
+            val decor = activity.window?.decorView
+            if (decor != null) {
+                val direct = decor.findViewById<View>(tag)
+                if (direct != null) return direct
+                val recursive = findViewByTagRecursive(decor, tag)
+                if (recursive != null) return recursive
+            }
+        }
+        return null
+    }
+
+    private fun findViewByTagRecursive(root: View, tag: Int): View? {
+        if (root.id == tag) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                val child = root.getChildAt(i)
+                val found = findViewByTagRecursive(child, tag)
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+
+    private fun computeFullBounds(view: View): Pair<Int, Int> {
+        var maxRight = if (view.width > 0) view.width else view.measuredWidth
+        var maxBottom = if (view.height > 0) view.height else view.measuredHeight
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val child = view.getChildAt(i)
+                if (child.visibility != View.GONE) {
+                    val (childW, childH) = computeFullBounds(child)
+                    val r = child.left + maxOf(child.width, childW)
+                    val b = child.top + maxOf(child.height, childH)
+                    if (r > maxRight) maxRight = r
+                    if (b > maxBottom) maxBottom = b
+                }
+            }
+        }
+        return Pair(maxRight, maxBottom)
+    }
+
+    /**
+     * 将目标视图以其完整度量宽高绘制成高清位图（不受父级滚动视口截断）。
+     */
+    private fun renderViewToBitmap(view: View): Bitmap {
+        var (w, h) = computeFullBounds(view)
+        if (w <= 0 || h <= 0) {
+            view.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            w = if (view.measuredWidth > 0) view.measuredWidth else 1080
+            h = if (view.measuredHeight > 0) view.measuredHeight else 1920
+            view.layout(0, 0, w, h)
+            val full = computeFullBounds(view)
+            w = maxOf(w, full.first)
+            h = maxOf(h, full.second)
+        }
+        val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+        view.draw(canvas)
+        return bitmap
+    }
+
+    /**
+     * 将位图保存到系统相册 Pictures/DSH 中，无需额外外部存储写入权限（Android 10+）。
+     */
+    private fun saveBitmapToPictures(activity: Activity, bitmap: Bitmap, title: String?): String {
+        val filename = "DSH_${title?.takeIf { it.isNotBlank() } ?: "Capture"}_${System.currentTimeMillis()}.png"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/DSH")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val resolver = activity.contentResolver
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                ?: throw IllegalStateException("无法创建媒体库记录")
+            resolver.openOutputStream(uri).use { out ->
+                if (out != null) {
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    out.flush()
+                }
+            }
+            contentValues.clear()
+            contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(uri, contentValues, null, null)
+            return uri.toString()
+        } else {
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "DSH").apply { mkdirs() }
+            val file = File(dir, filename)
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                out.flush()
+            }
+            MediaScannerConnection.scanFile(activity, arrayOf(file.absolutePath), arrayOf("image/png"), null)
+            return file.absolutePath
+        }
+    }
+
+    /**
+     * 将任意 React Native 原生 View 截取为 PNG 高清图片并保存到系统相册。
+     */
+    @ReactMethod
+    fun captureAndSaveView(reactTag: Double, title: String?, promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null) {
+            promise.reject("save_failed", "当前窗口不可用")
+            return
+        }
+        activity.runOnUiThread {
+            try {
+                val tag = reactTag.toInt()
+                val view = resolveViewByTag(tag)
+                if (view == null) {
+                    promise.reject("save_failed", "找不到视图节点")
+                    return@runOnUiThread
+                }
+                val bitmap = renderViewToBitmap(view)
+                val path = saveBitmapToPictures(activity, bitmap, title)
+                Toast.makeText(activity, "已保存到系统相册", Toast.LENGTH_SHORT).show()
+                promise.resolve(path)
+            } catch (t: Throwable) {
+                promise.reject("save_failed", t.message ?: "保存图片失败", t)
+            }
+        }
+    }
+
+    /**
+     * 将任意 React Native 原生 View 截取为 PNG 高清长图并唤起系统分享。
+     */
+    @ReactMethod
+    fun captureAndShareView(reactTag: Double, title: String?, promise: Promise) {
+        val activity = ctx.currentActivity
+        if (activity == null) {
+            promise.reject("capture_failed", "当前窗口不可用")
+            return
+        }
+        activity.runOnUiThread {
+            try {
+                val tag = reactTag.toInt()
+                val view = resolveViewByTag(tag)
+                if (view == null) {
+                    promise.reject("capture_failed", "找不到视图节点")
+                    return@runOnUiThread
+                }
+                val bitmap = renderViewToBitmap(view)
+
+                val exportDir = File(activity.cacheDir, "shared_images").apply { mkdirs() }
+                val imageFile = File(exportDir, "dsh_share_${System.currentTimeMillis()}.png")
+                FileOutputStream(imageFile).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    out.flush()
+                }
+
+                val contentUri = FileProvider.getUriForFile(
+                    activity,
+                    "${activity.packageName}.FileSystemFileProvider",
+                    imageFile
+                )
+                val label = title?.takeIf { it.isNotBlank() } ?: "分享内容"
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "image/png"
+                    putExtra(Intent.EXTRA_STREAM, contentUri)
+                    putExtra(Intent.EXTRA_TITLE, label)
+                    clipData = ClipData.newUri(activity.contentResolver, label, contentUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(send, "分享「$label」").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                activity.startActivity(chooser)
+                promise.resolve(true)
+            } catch (t: Throwable) {
+                promise.reject("capture_failed", t.message ?: "生成分享图片失败", t)
+            }
+        }
+    }
+
     companion object {
+        @Volatile private var pendingLanPermission: Promise? = null
+
+        /** MainActivity 转发权限结果；只处理本地网络权限。 */
+        fun onLanPermissionResult(granted: Boolean) {
+            val promise = pendingLanPermission ?: return
+            pendingLanPermission = null
+            promise.resolve(granted)
+        }
+
         private const val TAG = "DshPalmHost"
         private const val EVENT_CHANNEL = "dsh-palm-events"
         private const val EXTRA_NOTIFY_SESSION_ID = "dsh_session_id"
+        private const val EXTRA_NOTIFY_APPROVAL_ID = "dsh_approval_id"
+        private const val EXTRA_NOTIFY_ENGINE = "dsh_engine"
         private const val PICK_FILE_REQ = 4712
+        private const val LAN_PERM_REQ = 4713
         private const val UI_CACHE_FILE = "ui-cache.json"
     }
 

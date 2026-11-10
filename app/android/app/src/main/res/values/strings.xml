@@ -1,3 +1,5 @@
 <resources>
   <string name="app_name">Crabstack</string>
+  <string name="dsh_widget_desc">蟹栈宿主状态与快捷入口</string>
+  <string name="dsh_widget_status">轻引擎</string>
 </resources>

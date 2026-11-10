@@ -1,5 +1,7 @@
 import React from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import { BottomSheet } from './components/BottomSheet';
 
 import type { ModelChoice, ModelOption } from '../protocol';
 import { store, useStore } from './useStore';
@@ -70,14 +72,11 @@ export function ModelSheet(): React.ReactElement {
     selected?.provider === model.provider && selected?.model === model.id;
 
   return (
-    <Modal
+    <BottomSheet
       visible={state.modelSheetOpen}
-      transparent
-      animationType="slide"
-      onRequestClose={() => store.closeModelSheet()}
+      onClose={() => store.closeModelSheet()}
+      sheetStyle={styles.sheet}
     >
-      <Pressable style={styles.backdrop} onPress={() => store.closeModelSheet()}>
-        <Pressable style={styles.sheet} onPress={() => undefined}>
           <View style={styles.head}>
             <Text style={styles.title}>模型</Text>
             <Pressable accessibilityRole="button" onPress={() => store.closeModelSheet()} style={styles.close}>
@@ -159,9 +158,7 @@ export function ModelSheet(): React.ReactElement {
               </>
             )}
           </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </BottomSheet>
   );
 }
 

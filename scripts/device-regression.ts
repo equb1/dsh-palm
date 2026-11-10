@@ -66,20 +66,45 @@ async function main(): Promise<void> {
   });
 
   await step('文件操作菜单', async () => {
-    assert.ok(tryTap('docs'), '点不到 docs 目录');
-    assert.ok(await waitFor('weekly.docx', 10), 'docs 目录里没有 weekly.docx');
+    // 旧 fixture 在 docs/；新装/共享进来的文件在 uploads/。两处都接受。
+    const openedDocs = tryTap('docs');
+    if (!openedDocs) assert.ok(tryTap('uploads'), '点不到 docs/uploads 目录');
+    assert.ok(await waitFor('weekly.docx', 10), '目录里没有 weekly.docx');
     assert.ok(tryTap('weekly.docx 操作'), '点不到文件操作');
     assert.ok(await waitFor('重命名', 10), '文件操作菜单没出现');
     assert.ok(hasText('分享'), '菜单缺分享');
     assert.ok(hasText('删除'), '菜单缺删除');
     screenshot('ui-regression-file-menu');
     assert.ok(tryTap('打开目录 工作区'), '回不到文件根目录');
-    assert.ok(await waitFor('uploads', 10), '文件根目录没出现');
+    assert.ok((await waitFor('uploads', 5)) || (await waitFor('docs', 5)), '文件根目录没出现');
   });
 
   await step('返回首页', async () => {
     keyevent('BACK');
     assert.ok(await waitFor('需要我做点什么？', 10), '返回后没回首页');
+  });
+
+  await step('全文搜索', async () => {
+    // 此时还在默认轻引擎；先取抽屉第一条会话标题，保证搜索词一定存在于当前引擎。
+    assert.ok(tryTap('打开会话列表'), '抽屉按钮没找到');
+    assert.ok(await waitFor('全文', 10), '抽屉里没有全文入口');
+    const row = dumpNodes().find(
+      (node) => typeof node.desc === 'string' && node.desc.startsWith('会话：') && node.desc.length > 3,
+    );
+    const title = row?.desc?.slice(3)?.trim();
+    assert.ok(title, '抽屉里没有可搜索的会话');
+    assert.ok(tryTap('全文'), '点不到全文搜索');
+    assert.ok(await waitFor('搜索会话', 10), '搜索页没出现');
+    assert.ok(tryTap('搜索全部会话正文'), '点不到搜索输入框');
+    typeText(title);
+    // 中文输入法会把 input text 留在候选栏，补一个空格提交，再等正文搜索
+    keyevent('SPACE');
+    assert.ok(await waitFor('处匹配', 15), `正文搜索没有结果（${title}）`);
+    screenshot('ui-regression-search');
+    hideKeyboard();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    keyevent('BACK');
+    assert.ok(await waitFor('需要我做点什么？', 10), '搜索返回后没回首页');
   });
 
   await step('设置首页 6 组', async () => {
@@ -121,24 +146,6 @@ async function main(): Promise<void> {
     }
     keyevent('BACK');
     assert.ok(await waitFor('搜索设置', 10), '引擎页返回设置失败');
-  });
-
-  await step('全文搜索', async () => {
-    keyevent('BACK');
-    assert.ok(await waitFor('需要我做点什么？', 10), '设置返回后没回首页');
-    assert.ok(tryTap('打开会话列表'), '抽屉按钮没找到');
-    assert.ok(await waitFor('全文', 10), '抽屉里没有全文入口');
-    assert.ok(tryTap('全文'), '点不到全文搜索');
-    assert.ok(await waitFor('搜索会话', 10), '搜索页没出现');
-    typeText('python');
-    // 中文输入法会把 input text 留在候选栏，补一个空格提交，再等正文搜索
-    keyevent('SPACE');
-    assert.ok(await waitFor('处匹配', 15), '正文搜索没有结果');
-    screenshot('ui-regression-search');
-    hideKeyboard();
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    keyevent('BACK');
-    assert.ok(await waitFor('需要我做点什么？', 10), '搜索返回后没回首页');
   });
 
   console.log('\n真机 UI 回归通过（E5 第一步）');

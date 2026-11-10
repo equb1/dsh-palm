@@ -23,6 +23,8 @@ export interface HostInfo {
   name: string;
   platform: string;
   engineVersion: string;
+  /** 配对页展示的短指纹（不是密钥） */
+  fingerprint?: string;
 }
 
 /** 客户端连上来后必须读取；界面按这个渲染，禁止按平台硬编码 */
@@ -383,6 +385,8 @@ export interface EventPayloads {
   'engine.status': { state: 'starting' | 'ready' | 'stopped' | 'error'; detail?: string };
   'session.created': { session: SessionSummary };
   'session.updated': { session: SessionSummary };
+  /** 首次配对成功；hostId 用于把设备密钥写到对应宿主名下 */
+  'device.paired': { key: string; hostId?: string };
   'run.started': { sessionId: string; runId: string; turnId: string };
   'block.appended': { sessionId: string; runId: string; turn: Turn };
   'block.delta': {
@@ -642,7 +646,7 @@ export interface RequestParams {
   'sessions.setPreset': { sessionId: string; presetId: string };
   /** 列出宿主机上可用的模型 */
   'models.list': Record<string, never>;
-  /** 注册/新建一个工作区（path 必须在宿主上存在） */
+  /** 注册/新建一个工作区（完整引擎会创建 /root/work 下的相对路径） */
   'workspaces.create': { path: string };
   /** 上传一个附件，拿到回执后可以带进 sessions.send */
   'attachments.upload': { sessionId: string; data: string; name?: string };
@@ -713,7 +717,7 @@ export interface RequestParams {
    */
   'web.session': Record<string, never>;
 
-  /** 工作区文件浏览（U8，轻引擎实现；完整引擎未接） */
+  /** 工作区文件浏览（U8；轻引擎 / 完整引擎均实现） */
   'fs.list': { path?: string };
   'fs.rename': { path: string; to: string };
   'fs.delete': { path: string };
@@ -722,11 +726,13 @@ export interface RequestParams {
   'sessions.rename': { sessionId: string; title: string };
   'sessions.pin': { sessionId: string; pinned: boolean };
   'sessions.archive': { sessionId: string; archived: boolean };
-  /** 删除会话（E3，轻引擎实现；完整引擎暂不支持） */
+  /** 删除会话（E3；完整引擎直接删 dsh 会话目录，运行中拒绝） */
   'sessions.delete': { sessionId: string };
-  /** 正文搜索（E3，轻引擎实现；完整引擎暂不支持） */
+  /** 回退会话到指定用户回合前（重跑某轮对话） */
+  'sessions.rewind': { sessionId: string; turnId: string };
+  /** 正文搜索（E3；完整引擎扫本地会话日志） */
   'sessions.search': { query: string; limit?: number };
-  /** 只读终端（U8，轻引擎实现；写操作会被沙箱拒绝） */
+  /** 只读终端（U8；写操作会被沙箱拒绝） */
   'shell.run': { command: string };
 }
 
@@ -772,6 +778,7 @@ export interface RequestResults {
   'sessions.pin': { ok: true };
   'sessions.archive': { ok: true };
   'sessions.delete': { ok: true };
+  'sessions.rewind': { session: SessionDetail; removedText?: string };
   'sessions.search': { results: SessionSearchHit[] };
   'shell.run': {
     stdout: string;

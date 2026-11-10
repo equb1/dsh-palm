@@ -25,6 +25,8 @@ function attemptText(phase: string | undefined, errorCode: string | undefined): 
         : errorCode === 'expired'
           ? '授权超时了，重新点一次登录'
           : '登录没完成，重新试一次';
+    case 'cancelled':
+      return '已取消授权；需要时重新点一次登录';
     default:
       return null;
   }

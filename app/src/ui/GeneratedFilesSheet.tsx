@@ -5,7 +5,9 @@
  * 视觉沿用 `ModelSheet` 的底部弹层。
  */
 import React from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { BottomSheet } from './components/BottomSheet';
 
 import { openWorkspaceFile, shareWorkspaceFile } from '../lib/fileActions';
 import {
@@ -67,9 +69,7 @@ export function GeneratedFilesSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => undefined}>
+    <BottomSheet visible={visible} onClose={onClose} sheetStyle={styles.sheet}>
           <View style={styles.head}>
             <Text style={styles.title}>生成文件</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="关闭生成文件面板" onPress={onClose} style={styles.close}>
@@ -128,9 +128,7 @@ export function GeneratedFilesSheet({
           <Text style={styles.footer}>
             “打开”交给系统查看器；“分享”走系统分享面板（带临时读权限）。文件仍保存在工作区 /workspace 下。
           </Text>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </BottomSheet>
   );
 }
 

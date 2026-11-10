@@ -136,10 +136,16 @@ export function canSwitch(state: EngineSnapshot, target?: EngineTarget): { ok: b
   if (state.busy) return { ok: false, reason: '正在执行回合，等这一轮结束再切换引擎' };
   if (state.pendingApprovals > 0) return { ok: false, reason: '还有审批/提问等着处理，处理完再切换引擎' };
   if (state.mode === 'starting-proot') return { ok: false, reason: '完整引擎正在启动，请稍候' };
-  if (state.link === 'remote') return { ok: false, reason: '当前连着另一台电脑的宿主，先断开再切换引擎' };
+  if (state.link === 'remote' && target !== 'light') {
+    return { ok: false, reason: '当前连着另一台电脑的宿主，先断开再切换引擎' };
+  }
   const wanted = target ?? (state.mode === 'full' ? 'light' : 'full');
-  if (wanted === 'full' && state.mode === 'full') return { ok: false, reason: '已经是完整引擎' };
-  if (wanted === 'light' && state.mode === 'light') return { ok: false, reason: '已经是轻引擎' };
+  if (wanted === 'full' && state.mode === 'full' && (state.link === 'remote' || state.link === 'proot')) {
+    return { ok: false, reason: '已经是完整引擎' };
+  }
+  if (wanted === 'light' && state.mode === 'light' && state.link === 'light') {
+    return { ok: false, reason: '已经是轻引擎' };
+  }
   return { ok: true };
 }
 
@@ -159,6 +165,8 @@ export function badgeFor(state: EngineSnapshot): EngineBadgeInfo {
     if (pct > 0) return { kind: 'remote', label: `完整 ${pct}%` };
     return { kind: 'remote', label: '完整 启动中' };
   }
+  // 连电脑宿主和本机完整引擎都是 mode=full；角标必须按 link 区分，否则电脑被标成「完整」
+  if (state.link === 'remote') return { kind: 'remote', label: '电脑' };
   if (state.mode === 'full') return { kind: 'remote', label: '完整' };
   return { kind: 'light', label: '轻' };
 }
@@ -233,7 +241,8 @@ export function reduceEngine(state: EngineSnapshot, event: EngineEvent): EngineS
           ['warm-host'],
         );
       }
-      // 回轻引擎：先确保轻引擎连上，再停宿主（effects 顺序即执行顺序）
+      // 回轻引擎：先确保轻引擎连上。如果常备档位（always），宿主保持热着随时秒切；否则停宿主
+      const effects: EngineEffect[] = state.tier === 'always' ? ['connect-light'] : ['connect-light', 'stop-host'];
       return step(
         state,
         {
@@ -243,7 +252,7 @@ export function reduceEngine(state: EngineSnapshot, event: EngineEvent): EngineS
           error: null,
           idleSince: idleStart(state, event.now),
         },
-        ['connect-light', 'stop-host'],
+        effects,
       );
     }
 

@@ -2,6 +2,28 @@ import React from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { motion, radius, space, useTheme, useThemedStyles, type Palette, type Theme } from '../theme';
+import { BrandIcon, type BrandIconName } from '../components/BrandIcon';
+
+const SETTING_ICONS: Record<string, BrandIconName> = {
+  account: 'user',
+  key: 'key',
+  providers: 'layers',
+  'light-engine': 'zap',
+  'full-engine': 'box',
+  theme: 'moon',
+  font: 'type',
+  collapse: 'collapse',
+  notify: 'bell',
+  battery: 'battery',
+  widget: 'grid',
+  tile: 'panel',
+  overlay: 'circleDot',
+  engine: 'cpu',
+  'host-info': 'server',
+  lab: 'flask',
+  version: 'info',
+  export: 'upload',
+};
 
 /**
  * 设置首页的分组行（U4）。
@@ -79,7 +101,7 @@ export function SettingsTile({ row }: { row: SettingsRow }): React.ReactElement 
         style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
       >
         <View style={[styles.icon, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.iconGlyph, { color: tone.fg }]}>{row.icon}</Text>
+          <BrandIcon name={SETTING_ICONS[row.id] ?? 'circleDot'} size={17} color={tone.fg} />
         </View>
         <View style={styles.titles}>
           <Text style={styles.title} numberOfLines={1}>

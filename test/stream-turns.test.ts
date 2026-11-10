@@ -400,3 +400,78 @@ test('block.updated 不修改旧 detail 数组，并标记文本 block done', ()
     '半段',
   );
 });
+
+test('后台会话收到 block.appended / run.finished 时清理 detailCache，避免切回时被旧回合覆盖', () => {
+  const active = assistant({
+    id: 'turn-old',
+    runId: 'run:1',
+    blocks: [{ kind: 'thinking', id: 'b-old', text: '旧思考' }],
+  });
+  const { store, feed } = setupStore([active]);
+  const detailCache = (store as unknown as { detailCache: Map<string, SessionDetail> }).detailCache;
+  detailCache.set('session-bg', {
+    id: 'session-bg',
+    title: '后台会话',
+    presetId: 'standard',
+    workspaceId: 'ws',
+    hostId: 'host',
+    status: 'running',
+    updatedAt: 10,
+    unread: 0,
+    preview: '',
+    turns: [active],
+    contract: { tools: [], net: 'allow' },
+  });
+
+  feed('block.appended', {
+    sessionId: 'session-bg',
+    runId: 'run:2',
+    turn: assistant({ id: 'turn-new', runId: 'run:2' }),
+  });
+  assert.equal(detailCache.has('session-bg'), false);
+
+  detailCache.set('session-bg', {
+    id: 'session-bg',
+    title: '后台会话',
+    presetId: 'standard',
+    workspaceId: 'ws',
+    hostId: 'host',
+    status: 'running',
+    updatedAt: 10,
+    unread: 0,
+    preview: '',
+    turns: [active],
+    contract: { tools: [], net: 'allow' },
+  });
+
+  feed('run.finished', {
+    sessionId: 'session-bg',
+    runId: 'run:2',
+    reason: 'done',
+  });
+  assert.equal(detailCache.has('session-bg'), false);
+});
+
+test('block.delta 遇到尚未初始化的 block 时自愈补齐', async () => {
+  const active = assistant({
+    id: 'turn-active',
+    runId: 'run:1',
+    blocks: [],
+  });
+  const { store, feed } = setupStore([active]);
+  feed('block.delta', {
+    sessionId: 'session-1',
+    turnId: 'turn-active',
+    blockId: 'run:1:live:0:b0-thinking',
+    op: 'append',
+    text: '正在深入思考...',
+  });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const detail = store.getSnapshot().detail!;
+  const turn = detail.turns.find((t) => t.id === 'turn-active');
+  assert.ok(turn);
+  const block = turn.blocks.find((b) => b.id === 'run:1:live:0:b0-thinking');
+  assert.ok(block);
+  assert.equal(block.kind, 'thinking');
+  assert.equal(block.text, '正在深入思考...');
+});

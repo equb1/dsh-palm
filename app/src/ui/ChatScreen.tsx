@@ -23,8 +23,10 @@ import { ModelSheet } from './ModelSheet';
 import { GeneratedFilesSheet } from './GeneratedFilesSheet';
 import { collectGeneratedFiles } from '../lib/generatedFiles';
 import { TurnView, JumpButton } from './chat';
+import { ChatSkeleton } from './Skeletons';
 import type { AttachmentKind } from '../lib/attachments/types';
-import { radius, space, topInset, useThemedStyles, type Theme } from './theme';
+import { BrandIcon } from './components';
+import { radius, space, topInset, useTheme, useThemedStyles, type Theme } from './theme';
 
 /* ------------------------------------------------------------------ *
  * 会话页
@@ -37,12 +39,16 @@ function TurnSeparator(): React.ReactElement {
 
 export function ChatScreen({ session }: { session: SessionDetail }): React.ReactElement {
   const state = useStore();
+  const { palette } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [draft, setDraft] = React.useState('');
   const [showJump, setShowJump] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
+  const [selectionResetKey, setSelectionResetKey] = React.useState(0);
+  const [initialPositioned, setInitialPositioned] = React.useState(false);
   // 浮动顶栏：先量高度给正文留位，列表滚起来再加底色/描边（玻璃感用半透明近似，不引原生 blur）
-  const [headerH, setHeaderH] = React.useState(0);
+  // 先给顶栏一个稳定高度，避免首帧 onLayout 后列表整体下跳；实际高度仍以 onLayout 为准。
+  const [headerH, setHeaderH] = React.useState(Math.round(topInset + 52));
   const [scrolled, setScrolled] = React.useState(false);
   const listRef = React.useRef<FlatList<Turn>>(null);
   const following = React.useRef(true);
@@ -105,6 +111,41 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     }
   }
 
+  // 智能重型会话判定：轮数多、文字量巨大（如架构评审报告、长 Markdown）、或正在异步拉取详情
+  const totalCharacters = React.useMemo(() => {
+    let count = 0;
+    for (const t of turns) {
+      if (Array.isArray(t.blocks)) {
+        for (const b of t.blocks) {
+          if ('text' in b && typeof b.text === 'string') count += b.text.length;
+        }
+      }
+    }
+    return count;
+  }, [turns]);
+
+  const isHeavySession = turns.length > 4 || totalCharacters > 1200 || state.detailLoading;
+  const [transitionReady, setTransitionReady] = React.useState(!isHeavySession);
+
+  React.useEffect(() => {
+    if (!isHeavySession) {
+      setTransitionReady(true);
+      return;
+    }
+    setTransitionReady(false);
+    let active = true;
+    const frame = requestAnimationFrame(() => {
+      const timer = setTimeout(() => {
+        if (active) setTransitionReady(true);
+      }, 120);
+      return () => clearTimeout(timer);
+    });
+    return () => {
+      active = false;
+      cancelAnimationFrame(frame);
+    };
+  }, [session.id, isHeavySession]);
+
   // 系统分享进来的文件已由 store 收进待发列表，这里不用再单独处理
   const hasText = draft.trim().length > 0;
 
@@ -137,7 +178,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   }, []);
 
   React.useEffect(() => {
-    const onShow = (): void => scrollToLatest(false);
+    const onShow = (): void => scrollToLatest(true);
     const willShowSub = Keyboard.addListener('keyboardWillShow', onShow);
     const didShowSub = Keyboard.addListener('keyboardDidShow', onShow);
     return () => {
@@ -147,20 +188,40 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     };
   }, [scrollToLatest]);
 
+  React.useEffect(() => {
+    setInitialPositioned(false);
+  }, [session.id]);
+
   const handleListLayout = React.useCallback(
     (event: LayoutChangeEvent): void => {
       viewportHeight.current = event.nativeEvent.layout.height;
-      scrollToLatest(false);
+      if (!initialPositioned) {
+        if (!state.detailLoading && turns.length > 0 && contentHeight.current > 0 && viewportHeight.current > 0) {
+          const offset = Math.max(0, contentHeight.current - viewportHeight.current);
+          listRef.current?.scrollToOffset({ offset, animated: false });
+          setInitialPositioned(true);
+        }
+      } else {
+        scrollToLatest(false);
+      }
     },
-    [scrollToLatest],
+    [initialPositioned, scrollToLatest, state.detailLoading, turns.length],
   );
 
   const handleContentSizeChange = React.useCallback(
     (_width: number, height: number): void => {
       contentHeight.current = height;
-      scrollToLatest(false);
+      if (!initialPositioned) {
+        if (!state.detailLoading && turns.length > 0 && contentHeight.current > 0 && viewportHeight.current > 0) {
+          const offset = Math.max(0, contentHeight.current - viewportHeight.current);
+          listRef.current?.scrollToOffset({ offset, animated: false });
+          setInitialPositioned(true);
+        }
+      } else {
+        scrollToLatest(false);
+      }
     },
-    [scrollToLatest],
+    [initialPositioned, scrollToLatest, state.detailLoading, turns.length],
   );
 
   const handleScroll = React.useCallback(
@@ -211,6 +272,22 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
 
   const handleToggleThinking = React.useCallback((): void => {}, []);
 
+  const pendingRewind = React.useRef<{ turnId: string } | null>(null);
+
+  const handlePressUserTurn = React.useCallback(
+    (turn: Turn, text: string): void => {
+      // 点击只回填，不立刻重跑；点发送时才截断并重试这一轮
+      pendingRewind.current = { turnId: turn.id };
+      setDraft(text);
+    },
+    [],
+  );
+
+  // 换会话时丢掉待重试的回合，避免发到新会话里
+  React.useEffect(() => {
+    pendingRewind.current = null;
+  }, [session.id]);
+
   const send = (): void => {
     const hasAttachments = state.pendingAttachments.length > 0;
     if (running && !hasText && !hasAttachments) {
@@ -219,10 +296,34 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
     }
     if (!hasText && !hasAttachments) return;
     if (readOnly) {
+      if (link) {
+        const target = link.activeSide === 'full' ? 'full' : 'light';
+        void store.switchEngine(target).then((ok) => {
+          if (ok) {
+            void store.openSession(link.id).then(() => {
+              void store.send(text);
+            });
+          }
+        });
+        return;
+      }
       store.setError('已切换引擎，这个会话只读；回首页新建会话继续。');
       return;
     }
     const text = draft.trim();
+    const rewind = pendingRewind.current;
+    if (rewind) {
+      // 有回填标记：这一次发送先回退到该回合之前，再带上（可编辑的）文本重试
+      pendingRewind.current = null;
+      void store.rewindAndRerun(rewind.turnId, text).then((ok) => {
+        if (ok) setDraft((current) => (current === draft ? '' : current));
+        else {
+          pendingRewind.current = rewind;
+          setDraft((current) => (current.trim().length > 0 ? current : text));
+        }
+      });
+      return;
+    }
     // 发送成功才清空草稿；失败时把用户这句话放回去
     void store.send(text).then((ok) => {
       if (ok) setDraft((current) => (current === draft ? '' : current));
@@ -231,31 +332,59 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
   };
 
   const renderTurn = React.useCallback(
-    ({ item, index }: { item: Turn; index: number }): React.ReactElement => (
-      <TurnView
-        turn={item}
-        approvals={state.approvals}
-        onToggleThinking={handleToggleThinking}
-        expandProcess={!state.collapseProcess}
-        fontScale={state.chatFontScale}
-        fallbackDurationMs={
-          index === lastAssistantIndex && item.status !== 'streaming' && session.updatedAt > item.createdAt
-            ? session.updatedAt - item.createdAt
-            : undefined
+    ({ item, index }: { item: Turn; index: number }): React.ReactElement => {
+      let previousUserText: string | undefined;
+      if (item.role === 'assistant') {
+        for (let i = index - 1; i >= 0; i--) {
+          const t = session.turns[i];
+          if (t && t.role === 'user') {
+            previousUserText = t.blocks
+              .map((b) => (b.kind === 'text' ? b.text : ''))
+              .join('')
+              .trim();
+            break;
+          }
         }
-      />
-    ),
-    [handleToggleThinking, lastAssistantIndex, session.updatedAt, state.approvals, state.collapseProcess],
+      }
+      return (
+        <TurnView
+          turn={item}
+          approvals={state.approvals}
+          onToggleThinking={handleToggleThinking}
+          onPressUserTurn={handlePressUserTurn}
+          expandProcess={!state.collapseProcess}
+          fontScale={state.chatFontScale}
+          selectionResetKey={selectionResetKey}
+          previousUserText={previousUserText}
+          sessionTitle={session.title}
+          fallbackDurationMs={
+            index === lastAssistantIndex && item.status !== 'streaming' && session.updatedAt > item.createdAt
+              ? session.updatedAt - item.createdAt
+              : undefined
+          }
+        />
+      );
+    },
+    [handlePressUserTurn, handleToggleThinking, lastAssistantIndex, selectionResetKey, session.turns, session.updatedAt, session.title, state.approvals, state.chatFontScale, state.collapseProcess],
   );
 
   const renderEmpty = React.useCallback(
     (): React.ReactElement => (
       <View style={styles.emptyChat}>
-        <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
-        <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
+        {state.detailLoading ? (
+          <>
+            <Text style={styles.emptyChatTitle}>正在打开会话…</Text>
+            <Text style={styles.emptyChatText}>消息马上到</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.emptyChatTitle}>{preset?.name ?? '新会话'}</Text>
+            <Text style={styles.emptyChatText}>{preset?.tagline ?? '说点什么开始'}</Text>
+          </>
+        )}
       </View>
     ),
-    [preset?.name, preset?.tagline, styles],
+    [preset?.name, preset?.tagline, state.detailLoading, styles],
   );
 
   return (
@@ -267,31 +396,39 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           setHeaderH((current) => (current === next ? current : next));
         }}
       >
-        <IconButton glyph="‹" label="返回会话列表" onPress={() => store.closeSession()} />
-        <Pill style={styles.titlePill}>
+        <IconButton icon="back" label="返回会话列表" onPress={() => store.closeSession()} />
+        <View style={styles.headerCenter}>
           <Text style={styles.titleText} numberOfLines={1}>
             {session.title}
           </Text>
-        </Pill>
-        <Pill onPress={() => store.openModelSheet()} style={styles.presetPill}>
-          <Text style={styles.presetText} numberOfLines={1}>
-            {shortModelName ?? '模型'}
-            {effortName ? ` · ${effortName}` : ''}
-          </Text>
-        </Pill>
-        <EngineBadge
-          kind={engineBadge.kind}
-          label={engineBadge.label}
-          onPress={
-            engineSwitch.ok
-              ? () => {
-                  void store.switchEngine(state.engine.mode === 'light' ? 'full' : 'light');
-                }
-              : undefined
-          }
-        />
-        <IconButton glyph="▤" label="生成文件" onPress={() => setFilesOpen(true)} />
-        <View style={{ flex: 1 }} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`模型选择：${shortModelName ?? '模型'}`}
+            onPress={() => store.openModelSheet()}
+            style={({ pressed }) => [styles.headerSubtitleRow, pressed && { opacity: 0.7 }]}
+            hitSlop={6}
+          >
+            <Text style={styles.presetText} numberOfLines={1}>
+              {shortModelName ?? '模型'}
+              {effortName ? ` · ${effortName}` : ''}
+            </Text>
+            <BrandIcon name="chevronDown" size={10} color={palette.textFaint} />
+          </Pressable>
+        </View>
+        <View style={styles.headerRight}>
+          <EngineBadge
+            kind={engineBadge.kind}
+            label={engineBadge.label}
+            onPress={
+              engineSwitch.ok
+                ? () => {
+                    void store.switchEngine(state.engine.mode === 'light' ? 'full' : 'light');
+                  }
+                : undefined
+            }
+          />
+          <IconButton icon="folderOpen" label="生成文件" onPress={() => setFilesOpen(true)} />
+        </View>
       </View>
 
       <SmoothKeyboardAvoid style={[styles.bodyWrap, { marginTop: headerH }]}>
@@ -301,49 +438,54 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
           </Pressable>
         ) : null}
         <View style={styles.listWrap}>
-          <FlatList
-            ref={listRef}
-            style={styles.list}
-            data={turns}
-            renderItem={renderTurn}
-            keyExtractor={(turn, index) => `${turn.id ?? turn.runId ?? 'turn'}#${index}`}
-            extraData={state.approvals}
-            ItemSeparatorComponent={TurnSeparator}
-            ListEmptyComponent={renderEmpty}
-            contentContainerStyle={styles.listContent}
-            onLayout={handleListLayout}
-            onContentSizeChange={handleContentSizeChange}
-            onScroll={handleScroll}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-            onScrollBeginDrag={handleScrollBeginDrag}
-            onMomentumScrollBegin={handleMomentumBegin}
-            onScrollEndDrag={handleScrollSettled}
-            onMomentumScrollEnd={handleScrollSettled}
-            scrollEventThrottle={16}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            initialNumToRender={12}
-            maxToRenderPerBatch={8}
-            windowSize={9}
-            updateCellsBatchingPeriod={32}
-            removeClippedSubviews={false}
-            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-          />
-
-          {showJump ? (
-            <View style={styles.jumpWrap}>
-              <JumpButton
-                running={running}
-                onPress={() => {
-                  following.current = true;
-                  userDragging.current = false;
-                  setShowJump(false);
-                  scrollToLatest(true, true);
-                }}
-              />
+          {!transitionReady ? (
+            <View style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
+              <ChatSkeleton />
             </View>
-          ) : null}
+          ) : (
+            <FlatList
+              ref={listRef}
+              style={[styles.list, turns.length > 0 && !initialPositioned && { opacity: 0 }]}
+              data={turns}
+              renderItem={renderTurn}
+              keyExtractor={(turn, index) => `${turn.id ?? turn.runId ?? 'turn'}#${index}`}
+              extraData={state.approvals}
+              ItemSeparatorComponent={TurnSeparator}
+              ListEmptyComponent={renderEmpty}
+              contentContainerStyle={styles.listContent}
+              onLayout={handleListLayout}
+              onContentSizeChange={handleContentSizeChange}
+              onScroll={handleScroll}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              onScrollBeginDrag={handleScrollBeginDrag}
+              onMomentumScrollBegin={handleMomentumBegin}
+              onScrollEndDrag={handleScrollSettled}
+              onMomentumScrollEnd={handleScrollSettled}
+              scrollEventThrottle={16}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              initialNumToRender={6}
+              maxToRenderPerBatch={6}
+              windowSize={7}
+              updateCellsBatchingPeriod={32}
+              removeClippedSubviews={false}
+              maintainVisibleContentPosition={initialPositioned ? { minIndexForVisible: 0 } : undefined}
+            />
+          )}
+
+          <View style={styles.jumpWrap} pointerEvents="box-none">
+            <JumpButton
+              visible={showJump}
+              running={running}
+              onPress={() => {
+                following.current = true;
+                userDragging.current = false;
+                setShowJump(false);
+                scrollToLatest(true, true);
+              }}
+            />
+          </View>
         </View>
 
         {Boolean(state.error) ? (
@@ -448,10 +590,26 @@ const createStyles = ({ palette: c }: Theme) =>
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
   },
+  headerCenter: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+  headerSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+  },
   titlePill: { flexShrink: 1, paddingVertical: 3 },
-  titleText: { color: c.text, fontSize: 14, fontWeight: '600' },
+  titleText: { color: c.text, fontSize: 14.5, fontWeight: '600' },
   presetPill: { flexShrink: 1 },
-  presetText: { color: c.textDim, fontSize: 12 },
+  presetText: { color: c.textDim, fontSize: 11.5 },
   readOnly: {
     color: c.warn,
     fontSize: 11.5,

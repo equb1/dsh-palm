@@ -34,9 +34,10 @@ export function splitZstdFrames(data: Buffer): Buffer[] {
   return frames;
 }
 
-/** 读出所有记录（`{ type:'event', event:{...} }`） */
-export function readSessionLog(path: string): RealRecord[] {
-  const frames = splitZstdFrames(readFileSync(path));
+/** 从已读出的文件内容里解记录（搜索用异步读，避免阻塞事件循环） */
+export function readSessionLogBuffer(data: Buffer): RealRecord[] {
+  // 压缩日志是多个 zstd 帧；测试/旧宿主也可能是未压缩的 .jsonl。
+  const frames = data.includes(Buffer.from([0x28, 0xb5, 0x2f, 0xfd])) ? splitZstdFrames(data) : [data];
   const out: RealRecord[] = [];
   for (const frame of frames) {
     for (const line of frame.toString('utf8').split('\n')) {
@@ -51,4 +52,9 @@ export function readSessionLog(path: string): RealRecord[] {
     }
   }
   return out;
+}
+
+/** 读出所有记录（`{ type:'event', event:{...} }`） */
+export function readSessionLog(path: string): RealRecord[] {
+  return readSessionLogBuffer(readFileSync(path));
 }
