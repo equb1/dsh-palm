@@ -195,7 +195,7 @@ export class Agent {
 
   private systemPrompt(session: StoredSession): string {
     return [
-      '你是「锦囊」（dsh-palm）手机轻引擎里的助手。你运行在用户手机上的一个沙箱里，',
+      '你是「Crabstack」（dsh-palm）手机轻引擎里的助手。你运行在用户手机上的一个沙箱里，',
       '能读写一个真实的工作区 /workspace，并能执行受限的 bash 命令。',
       '',
       `工作区：${toDisplayPath('/')}`,

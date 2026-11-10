@@ -163,10 +163,10 @@ export function LaunchOverlay({ state }: Props): React.ReactElement | null {
             ]}
           />
           <Animated.View style={[styles.emblem, { transform: [{ scale: badgeScale }] }]}>
-            <Text style={styles.emblemGlyph}>锦</Text>
+            <Text style={styles.emblemGlyph}>蟹</Text>
           </Animated.View>
         </View>
-        <Text style={styles.title}>锦囊</Text>
+        <Text style={styles.title}>Crabstack</Text>
         <Text style={styles.subtitle}>DeepSeek Harness · 掌上智能体工作台</Text>
       </View>
 

@@ -26,10 +26,10 @@ export function ConnectScreen(): React.ReactElement {
         <ScrollView contentContainerStyle={styles.scrollOuter} keyboardShouldPersistTaps="handled">
           <View style={styles.content}>
             <View style={styles.mark}>
-              <Text style={styles.markText}>锦</Text>
+              <Text style={styles.markText}>蟹</Text>
             </View>
-            <Text style={styles.title}>锦囊</Text>
-            <Text style={styles.subtitle}>装进口袋的智能体</Text>
+            <Text style={styles.title}>Crabstack</Text>
+            <Text style={styles.subtitle}>装进口袋的智能体工作台</Text>
 
             {booting ? (
               <View style={styles.bootBox}>
