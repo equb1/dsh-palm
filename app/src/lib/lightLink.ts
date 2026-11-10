@@ -16,6 +16,18 @@ export type DeepLink =
 
 const PREFIX = 'dshpalm://';
 
+/**
+ * 桌面小组件「快速提问」深链：
+ *   dshpalm://session?source=widget_quick&draft=…&autoSend=true
+ * 也兼容旧的小组件草稿链接（source=widget 且带 draft）。
+ * 这类链接在冷启动时必须锁定轻引擎，不能为了一个问题拉起 proot。
+ */
+export function isWidgetQuickAskLink(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  if (raw.includes('source=widget_quick')) return true;
+  return raw.includes('source=widget') && /[?&]draft=/.test(raw);
+}
+
 export function parseDeepLink(raw: string | null | undefined): DeepLink | null {
   if (!raw || !raw.startsWith(PREFIX)) return null;
   const rest = raw.slice(PREFIX.length);

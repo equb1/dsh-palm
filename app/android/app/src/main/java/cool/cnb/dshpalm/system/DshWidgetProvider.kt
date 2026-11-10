@@ -13,7 +13,10 @@ import cool.cnb.dshpalm.R
 import cool.cnb.dshpalm.host.HostRuntime
 
 /**
- * M3.3：桌面小组件。
+ * M3.3：桌面小组件（Crabstack / 蟹栈）。
+ *
+ * - 点搜索框：弹出独立任务栈的 QuickSearchActivity，直接在小寄卡片里提问；
+ * - 点 Logo / 右侧 ＋：打开 App（＋ 直接新会话）。
  *
  * 只显示宿主状态和一个入口，不把会话正文/文件写进 RemoteViews。
  * 状态更新由 HostService 的 statusListener 主动推；系统 30 分钟一次的
@@ -36,17 +39,18 @@ class DshWidgetProvider : AppWidgetProvider() {
         }
 
         private fun statusText(status: HostRuntime.Status): String = when {
-            status.engine == "failed" || status.bridge == "failed" -> status.error ?: "引擎出错"
-            status.engine == "ready" && status.bridge == "ready" -> "已就绪 · 点一下打开"
+            status.engine == "failed" || status.bridge == "failed" -> status.error ?: "完整引擎出错（轻引擎仍可用）"
+            status.engine == "ready" && status.bridge == "ready" -> "就绪 · 点搜索框秒问小寄"
             status.phase.isNotBlank() -> status.phase
-            else -> "轻引擎"
+            else -> "轻引擎 · 秒开秒答"
         }
 
         private fun views(context: Context, text: String): RemoteViews =
             RemoteViews(context.packageName, R.layout.dsh_widget).apply {
-                setTextViewText(R.id.widget_title, "问问锦囊… 搜索或输入问题")
+                setTextViewText(R.id.widget_title, "问问小寄… 秒开秒答")
                 setTextViewText(R.id.widget_status, text)
-                setOnClickPendingIntent(R.id.widget_root, openQuickSearch(context))
+                setOnClickPendingIntent(R.id.widget_root, openApp(context))
+                setOnClickPendingIntent(R.id.widget_logo, openApp(context))
                 setOnClickPendingIntent(R.id.widget_search_box, openQuickSearch(context))
                 setOnClickPendingIntent(R.id.widget_btn_new, openApp(context, newChat = true))
             }

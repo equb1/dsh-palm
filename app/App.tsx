@@ -17,7 +17,7 @@ import { TopNoticeBanner, InAppBrowserModal } from './src/ui/components';
 import { store, useStore } from './src/ui/useStore';
 import { ThemeProvider, useTheme, useThemedStyles, type Theme } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
-import { parseDeepLink } from './src/lib/lightLink';
+import { isWidgetQuickAskLink, parseDeepLink } from './src/lib/lightLink';
 import { parseWebSessionDeepLink } from './src/lib/webFrontend';
 import type { AppState as DshAppState } from './src/state/store';
 
@@ -41,12 +41,20 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
     document.body.style.backgroundColor = theme.palette.webOuter;
   }, [theme.resolved, theme.palette.webOuter]);
 
-  // 冷启动：恢复本地缓存 → 连轻引擎（冷启动到可输入 <1s，proot 不自动连接）
+  // 冷启动：恢复本地缓存 → 连轻引擎（冷启动到可输入 <1s，proot 不自动连接）。
+  // 先看一眼 initial URL：桌面小组件提问要锁定轻引擎，不能因为历史「先用完整模式」去拉 proot。
   const autoStarted = React.useRef(false);
   React.useEffect(() => {
     if (autoStarted.current) return;
     autoStarted.current = true;
-    void store.engineStart().catch(() => undefined);
+    void Linking.getInitialURL()
+      .then((url) => {
+        if (isWidgetQuickAskLink(url)) store.noteLightBootRequest();
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        void store.engineStart().catch(() => undefined);
+      });
   }, []);
 
   // dshpalm://pair?url=ws://192.168.1.7:8788/ws&code=246810 —— 扫码/外部唤起走这里
@@ -67,6 +75,8 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
   React.useEffect(() => {
     const handle = (url: string | null): void => {
       if (url?.includes('source=widget') || url?.includes('source=shortcut') || url?.includes('source=pet_float')) {
+        // 与冷启动 effect 双保险：只有「带草稿的小组件提问」锁定轻引擎
+        if (isWidgetQuickAskLink(url)) store.noteLightBootRequest();
         const draftMatch = url.match(/[?&]draft=([^&]+)/);
         const draftText = draftMatch?.[1] ? decodeURIComponent(draftMatch[1]) : '';
         const autoSend = url.includes('autoSend=true');
@@ -76,7 +86,13 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
         }
         if (draftText) {
           if (autoSend) {
-            void store.startWith(draftText);
+            // 桌面小组件提问固定走轻引擎；失败时把原话放回输入框，绝不静默丢消息
+            void store
+              .startWith(draftText, { preferLight: true })
+              .then((ok) => {
+                if (!ok) store.setPendingShareText(draftText);
+              })
+              .catch(() => store.setPendingShareText(draftText));
           } else {
             store.setPendingShareText(draftText);
           }

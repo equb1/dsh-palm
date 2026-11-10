@@ -43,11 +43,14 @@ class QuickSearchActivity : Activity() {
         fun doSend() {
             val text = input.text.toString().trim()
             if (text.isNotEmpty()) {
-                val encoded = URLEncoder.encode(text, "UTF-8")
+                // URLEncoder 会把空格变成 '+'，RN 侧只做 decodeURIComponent，必须换成 %20
+                val encoded = URLEncoder.encode(text, "UTF-8").replace("+", "%20")
                 val intent = Intent(this, MainActivity::class.java).apply {
                     action = Intent.ACTION_VIEW
                     data = Uri.parse("dshpalm://session?source=widget_quick&draft=$encoded&autoSend=true")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
                 startActivity(intent)
             }

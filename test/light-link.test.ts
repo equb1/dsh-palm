@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { parseDeepLink } from '../app/src/lib/lightLink';
+import { isWidgetQuickAskLink, parseDeepLink } from '../app/src/lib/lightLink';
 
 describe('dshpalm 深链', () => {
   it('pair：url + code', () => {
@@ -59,5 +59,23 @@ describe('dshpalm 深链', () => {
   it('base URL 尾部斜杠会被规整', () => {
     const link = parseDeepLink('dshpalm://light?base=http%3A%2F%2F127.0.0.1%3A8799%2Fv1%2F&model=m&key=k');
     assert.equal(link?.kind === 'light' ? link.setup.baseURL : null, 'http://127.0.0.1:8799/v1');
+  });
+});
+
+describe('桌面小组件快速提问链接', () => {
+  it('widget_quick 与旧的带 draft 链接都算快速提问', () => {
+    assert.equal(
+      isWidgetQuickAskLink('dshpalm://session?source=widget_quick&draft=%E4%BD%A0%E5%A5%BD&autoSend=true'),
+      true,
+    );
+    assert.equal(isWidgetQuickAskLink('dshpalm://session?source=widget&draft=hi&autoSend=true'), true);
+  });
+
+  it('单纯打开 App / 新会话 / 桌宠回 App 不算', () => {
+    assert.equal(isWidgetQuickAskLink('dshpalm://session?source=widget&newChat=false&focus=true'), false);
+    assert.equal(isWidgetQuickAskLink('dshpalm://session?source=widget&newChat=true'), false);
+    assert.equal(isWidgetQuickAskLink('dshpalm://session?source=pet_float'), false);
+    assert.equal(isWidgetQuickAskLink('dshpalm://session?source=tile'), false);
+    assert.equal(isWidgetQuickAskLink(null), false);
   });
 });

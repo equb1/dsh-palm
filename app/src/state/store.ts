@@ -522,6 +522,8 @@ export class Store {
 
   /* ------------------------ EngineManager 内部状态 ------------------------ */
   private engineStarted = false;
+  /** 桌面小组件冷启动：本次启动优先轻引擎，即使用户之前选过「先用完整模式」 */
+  private preferLightBoot = false;
   /** 冷启动初始化只跑一次；深链要等它结束再切引擎，避免和 BOOT 抢链路 */
   private engineStartInFlight: Promise<void> | null = null;
   /** 每次冷启动最多自动弹一次配置页，避免用户切到完整模式后还被反复打断 */
@@ -2312,11 +2314,23 @@ export class Store {
     return id ? this.state.sessionPins[id] ?? null : null;
   }
 
-  async startWith(text: string): Promise<boolean> {
+  async startWith(
+    text: string,
+    options: { preferLight?: boolean } = {},
+  ): Promise<boolean> {
     const trimmed = text.trim();
     const hasAttachments = this.state.pendingAttachments.length > 0;
     if (!trimmed && !hasAttachments) return false;
+    // 桌面小组件 / 冷启动深链可能比 engineStart 更早触发：先等缓存恢复和引擎连接，
+    // 否则 client 还是 null，消息会被静默吞掉（桌面提问“打开了 App 却没有会话”）。
+    if (this.engineStartInFlight) await this.engineStartInFlight;
+    else if (!this.engineStarted) await this.engineStart();
     this.noteUserActivity();
+    // 桌面快速提问固定走轻引擎：秒开秒答，不为了一个短问题拉起 proot。
+    if (options.preferLight && this.state.engine.mode !== 'light') {
+      const switched = await this.switchEngine('light');
+      if (!switched) return false;
+    }
     if (!this.client || this.state.conn !== 'connected') {
       if (this.state.engine.mode === 'starting-proot') {
         this.setError('完整引擎正在启动，请稍候片刻再发送');
@@ -2327,13 +2341,15 @@ export class Store {
       }
       return false;
     }
+    // 小组件可能在 App 停在设置/文件页时触发：连接成功后再切回主界面，消息和回复才可见
+    if (options.preferLight) this.patch({ view: 'main', connectModalOpen: false });
     // 预路由在创建会话之前：错误/不支持时不建会话、不丢草稿
     const route = routeTurn({
       text: trimmed,
       attachments: this.routeAttachments(),
-      manualPin: null,
+      manualPin: options.preferLight ? 'light' : null,
       activeFull: this.state.engine.mode === 'full',
-      autoRoute: this.state.autoRoute,
+      autoRoute: options.preferLight ? false : this.state.autoRoute,
       engine: this.state.engine,
     });
     if (route.target === 'blocked-unsupported') {
@@ -3231,6 +3247,11 @@ export class Store {
 
   /* ------------------------ EngineManager ------------------------ */
 
+  /** 桌面小组件快速提问：标记本次冷启动优先轻引擎，不因历史「先用完整模式」拉 proot */
+  noteLightBootRequest(): void {
+    this.preferLightBoot = true;
+  }
+
   /**
    * 冷启动入口：恢复本地缓存 → 通知权限 → 连轻引擎。
    *
@@ -3257,7 +3278,7 @@ export class Store {
       const saved = await this.engineDeps.loadLightConfig().catch(() => null);
       if (!saved) {
         const skipped = await this.engineDeps.loadLightSetupSkipped().catch(() => false);
-        if (skipped && this.engineDeps.hostAvailable) {
+        if (skipped && this.engineDeps.hostAvailable && !this.preferLightBoot) {
           this.emitEngine({ type: 'BOOT', tier: this.state.prewarmTier, now: this.now() });
           this.startIdleSweeper();
           const ok = await this.switchEngine('full');
@@ -3276,6 +3297,8 @@ export class Store {
     this.startIdleSweeper();
     await this.runEngineEffects(effects);
     if (this.state.engine.mode !== 'light') return;
+    // 桌面小组件快速提问只做短问答：不预热 proot，避免「问一句话却拉起完整引擎」
+    if (this.preferLightBoot) return;
     if (this.engineDeps.hostAvailable) void this.warmLocalHost();
     else if (this.state.engine.tier === 'always') void this.warmLocalHost();
     else void this.maybeSmartPrewarm();

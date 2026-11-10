@@ -66,11 +66,16 @@
       android:name=".system.FloatPetService"
       android:exported="false" />
 
-    <!-- 桌面小组件半透明快速输入浮层 -->
+    <!-- 桌面小组件半透明快速输入浮层：
+         独立 taskAffinity + singleInstance，避免把后台的 MainActivity 任务栈一起拉到前台 -->
     <activity
       android:name=".system.QuickSearchActivity"
       android:theme="@style/Theme.Dsh.TranslucentDialog"
       android:exported="false"
+      android:taskAffinity=""
+      android:launchMode="singleInstance"
+      android:excludeFromRecents="true"
+      android:noHistory="true"
       android:windowSoftInputMode="stateVisible|adjustResize" />
 
     <!-- M3.3：快捷设置磁贴 -->
