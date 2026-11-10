@@ -179,6 +179,9 @@ export function InAppBrowserModal(): React.ReactElement | null {
             style={styles.webView}
             javaScriptEnabled
             domStorageEnabled
+            sharedCookiesEnabled
+            thirdPartyCookiesEnabled
+            setSupportMultipleWindows={false}
             allowsBackForwardNavigationGestures
             onNavigationStateChange={(nav) => {
               setCanGoBack(nav.canGoBack);

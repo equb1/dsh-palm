@@ -54,10 +54,9 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
   const signedIn = account?.status === 'credential-stored';
   const waiting = accountAttempt?.phase === 'waiting-browser' || accountAttempt?.phase === 'initializing';
   const accountNote = attemptText(accountAttempt?.phase, accountAttempt?.errorCode);
-  /** 轻引擎下登录要先起完整引擎，给按钮一个即时反馈，别让用户以为没反应 */
+  /** 点登录后到内置授权页弹出来之间给个即时反馈 */
   const [signInBusy, setSignInBusy] = React.useState(false);
-  const startingFull = state.engine.mode === 'starting-proot';
-  const lightMode = state.engineKind === 'light';
+  const remote = state.engineKind === 'remote';
 
   // 账号：进页面拉一次；有登录尝试时 1 秒一次（真引擎的授权页要等宿主生成）
   React.useEffect(() => {
@@ -91,7 +90,8 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
               </Pill>
             </View>
             <Text style={styles.hint}>
-              推荐：用账号登录，和 dsh 官方一致，不用申请 Key。授权在系统浏览器里完成，令牌留在宿主上，App 不保存。
+              用 DeepSeek 账号登录，和 dsh 官方一致，不用申请 API Key。授权在 App 内置浏览器里完成，
+              轻引擎和完整引擎都能直接用。
             </Text>
 
             <Text style={styles.label}>手机号（仅本机显示）</Text>
@@ -122,8 +122,10 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
 
             {accountNote ? <Text style={styles.hint}>{accountNote}</Text> : null}
 
-            {!state.caps ? (
-              <Text style={styles.hint}>还没连上宿主，连上后才能用账号登录。</Text>
+            {remote ? (
+              <Text style={styles.hint}>
+                当前连的是电脑宿主：账号请在电脑上的 dsh 里登录，这里只显示状态。
+              </Text>
             ) : (
               <View style={styles.actions}>
                 {signedIn ? (
@@ -166,8 +168,8 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
                   </>
                 ) : (
                   <Btn
-                    label={signInBusy || startingFull ? '正在启动完整引擎…' : '用 DeepSeek 账号登录'}
-                    disabled={signInBusy || startingFull}
+                    label={signInBusy ? '正在打开授权页…' : '用 DeepSeek 账号登录'}
+                    disabled={signInBusy}
                     onPress={() => {
                       setSignInBusy(true);
                       void store.startAccountSignIn().finally(() => setSignInBusy(false));
@@ -178,26 +180,11 @@ export function AccountScreen({ onClose }: { onClose: () => void }): React.React
               </View>
             )}
 
-            {signInBusy || startingFull ? (
+            {!signedIn && !remote ? (
               <Text style={styles.hint}>
-                账号登录走完整引擎（proot）的浏览器 OAuth：正在启动完整引擎，首次可能要 30–60 秒；
-                启动完成后会自动打开授权页。
+                登录在 App 内置浏览器里完成，不需要完整引擎，也不需要 API Key。
+                如果当前是轻引擎且还没登录，登录后会直接用账号 token 连接。
               </Text>
-            ) : null}
-
-            {lightMode && !signedIn && !signInBusy && !startingFull ? (
-              <>
-                <Text style={styles.hint}>
-                  不想等完整引擎？轻引擎可以直接填 API Key（Base URL + 模型 + Key）使用，
-                  不需要账号登录。
-                </Text>
-                <Btn
-                  label="配置轻引擎渠道（API Key）"
-                  kind="ghost"
-                  onPress={() => store.openLightSetup()}
-                  style={{ flex: 1 }}
-                />
-              </>
             ) : null}
           </View>
 

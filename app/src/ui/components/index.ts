@@ -29,3 +29,4 @@ export type { PickerOption, PickerSheetProps } from './PickerSheet';
 export { TopNoticeBanner } from './TopNoticeBanner';
 export { CompanionPet } from './CompanionPet';
 export { InAppBrowserModal } from './InAppBrowserModal';
+export { AccountAuthModal } from './AccountAuthModal';

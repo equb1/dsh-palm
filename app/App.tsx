@@ -13,7 +13,7 @@ import { WorkspaceScreen } from './src/ui/WorkspaceScreen';
 import { TerminalScreen } from './src/ui/TerminalScreen';
 import { PluginsScreen } from './src/ui/PluginsScreen';
 import { ScreenStack } from './src/ui/components/ScreenStack';
-import { TopNoticeBanner, InAppBrowserModal } from './src/ui/components';
+import { TopNoticeBanner, InAppBrowserModal, AccountAuthModal } from './src/ui/components';
 import { store, useStore } from './src/ui/useStore';
 import { ThemeProvider, useTheme, useThemedStyles, type Theme } from './src/ui/theme';
 import { hostAvailable } from './src/lib/host';
@@ -230,6 +230,7 @@ function AppShell({ state }: { state: DshAppState }): React.ReactElement {
       {shown}
       <TopNoticeBanner />
       <InAppBrowserModal />
+      <AccountAuthModal />
       {hostAvailable && state.engine.mode === 'starting-proot' ? <LaunchOverlay state={state} /> : null}
     </View>
   );

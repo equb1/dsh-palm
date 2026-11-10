@@ -15,7 +15,13 @@ import {
   type HostStatus,
 } from '../lib/host';
 import { loadHostCommands, saveHostCommands } from '../lib/hostCmd';
-import { loadAccountToken } from '../lib/accountToken';
+import { clearAccountToken, loadAccountToken, saveAccountToken } from '../lib/accountToken';
+import {
+  exchangeDeepseekCode,
+  parseAuthCallback,
+  startDeepseekAuth,
+  type DeepseekAuthAttempt,
+} from '../lib/deepseekAuth';
 import { humanizeError } from '../lib/errors';
 import { modelReadiness } from '../lib/readiness';
 import {
@@ -261,6 +267,15 @@ export interface AppState {
   inAppBrowserUrl: string | null;
   /** DeepSeek 账号（未登录 / 已存凭据，含正在进行的登录尝试） */
   account: AccountState | null;
+  /** 轻引擎自己发起的 DeepSeek 登录（内置 WebView 授权） */
+  accountAuth: {
+    authorizeUrl: string;
+    authorizeId: string;
+    verifier: string;
+    state: string;
+    redirectUri: string;
+    expiresAt: number;
+  } | null;
   /** 宿主上配置的模型提供商（自定义渠道） */
   providers: ProviderRow[];
   /** 内置提供商目录（第三方） */
@@ -470,6 +485,7 @@ export class Store {
     connectModalOpen: false,
     inAppBrowserUrl: null,
     account: null,
+    accountAuth: null,
     providers: [],
     providerCatalog: [],
     pendingShare: null,
@@ -532,8 +548,6 @@ export class Store {
    * 发起的尝试也会被这台手机打开 —— 用户点到已经取消/过期的链接就会看到"授权失败"。
    */
   private pendingSignIn = false;
-  /** 用户是在轻引擎下点的登录：登完自动切回轻引擎（账号 token 会被轻引擎复用） */
-  private signInReturnToLight = false;
   /** 这次登录是不是我们打开的 App 内置浏览器：登录成功后自动关掉 */
   private authBrowserOpened = false;
   /** 已经弹过通知的审批，避免重连/重放时重复打扰 */
@@ -2384,27 +2398,27 @@ export class Store {
    * 这里只负责把宿主给的 authorizeUrl 交给内置浏览器。
    */
   async startAccountSignIn(): Promise<void> {
-    // 账号登录走完整引擎的浏览器 OAuth；轻引擎在线时先切到完整引擎。
-    // 切换完成后要等桥真正连上（不是只看 mode === 'full'），否则用户会看到
-    // “引擎还没连上”这种没意义的提示。
-    const startedFromLight = this.state.engineKind === 'light';
-    this.signInReturnToLight = startedFromLight;
-    if (startedFromLight) {
-      const ok = await this.switchEngine('full');
-      if (!ok) {
-        this.signInReturnToLight = false;
-        this.setError('账号登录需要完整引擎，但完整引擎没启动起来。可以先用「轻引擎渠道」填 API Key。');
-        return;
+    // 轻引擎（或还没连引擎）：直接在 App 内走 DeepSeek PKCE 登录，不需要 proot。
+    // 平台接口和 dsh 宿主是同一套，回调由内置 WebView 拦截。
+    // 只有完整引擎 / 远程宿主才走宿主的浏览器 OAuth（token 要落到宿主上）。
+    const hostFlow = this.state.engineKind === 'proot' || this.state.engineKind === 'remote';
+    if (!hostFlow) {
+      this.patch({ error: null, accountAuth: null });
+      try {
+        const attempt: DeepseekAuthAttempt = await startDeepseekAuth();
+        this.patch({ accountAuth: attempt });
+      } catch (err) {
+        this.fail(err);
       }
+      return;
     }
+    // 完整引擎：走宿主的浏览器 OAuth（授权页同样在内置浏览器里打开）
     if (!(await this.waitForClient())) {
-      this.signInReturnToLight = false;
       this.setError('完整引擎还没连接就绪，请稍后再点一次登录。');
       return;
     }
     const client = this.client;
     if (!client) {
-      this.signInReturnToLight = false;
       this.setError('完整引擎连接已断开，请重试。');
       return;
     }
@@ -2421,6 +2435,47 @@ export class Store {
     }
   }
 
+  /**
+   * 内置 WebView 的授权回调：用 code 换 token（轻引擎登录）。
+   * 由 AccountAuthModal 在拦截到 redirectUri 时调用。
+   */
+  async completeAccountAuth(callbackUrl: string): Promise<void> {
+    const attempt = this.state.accountAuth;
+    if (!attempt) return;
+    const parsed = parseAuthCallback(callbackUrl);
+    if (!parsed.code) {
+      this.patch({ accountAuth: null });
+      this.setError(parsed.error ? `DeepSeek 登录没有完成：${parsed.error}` : '授权回调里没有 code，请重新登录。');
+      return;
+    }
+    if (parsed.state !== attempt.state) {
+      this.patch({ accountAuth: null });
+      this.setError('授权回调校验失败（state 不匹配），请重新登录。');
+      return;
+    }
+    try {
+      const { token } = await exchangeDeepseekCode(attempt, parsed.code);
+      await saveAccountToken(token);
+      this.patch({
+        accountAuth: null,
+        account: {
+          status: 'credential-stored',
+          attempt: null,
+          links: {
+            usageUrl: 'https://platform.deepseek.com/usage',
+            topUpUrl: 'https://platform.deepseek.com/top_up',
+          },
+        },
+      });
+      void this.refreshModels();
+      void this.refreshCredentials();
+      if (this.state.conn !== 'connected') await this.connectLightEffect();
+    } catch (err) {
+      this.patch({ accountAuth: null });
+      this.fail(err);
+    }
+  }
+
   /** 手动重开当前这次的授权页（浏览器被关掉时用） */
   openAccountAuthPage(): void {
     const attempt = this.state.account?.attempt;
@@ -2430,8 +2485,8 @@ export class Store {
   async cancelAccountSignIn(): Promise<void> {
     const attempt = this.state.account?.attempt;
     this.pendingSignIn = false;
-    this.signInReturnToLight = false;
     this.authBrowserOpened = false;
+    this.patch({ accountAuth: null });
     if (!this.client || !attempt) return;
     try {
       const { account } = await this.client.request('account.cancelSignIn', { attemptId: attempt.id });
@@ -2442,7 +2497,14 @@ export class Store {
   }
 
   async signOutAccount(): Promise<void> {
-    if (!this.client) return;
+    // 轻引擎的 token 存在 SecureStore，先清掉；完整引擎再走宿主 signOut
+    await clearAccountToken();
+    if (!this.client) {
+      this.patch({
+        account: { status: 'signed-out', attempt: null, links: { usageUrl: '', topUpUrl: '' } },
+      });
+      return;
+    }
     try {
       const { account } = await this.client.request('account.signOut', {});
       this.applyAccount(account);
@@ -2462,13 +2524,6 @@ export class Store {
       void this.refreshModels();
       void this.refreshCredentials();
     }
-    // 从轻引擎发起、登录成功后自动切回轻引擎：轻引擎会重新读 .credentials.yaml 里的 token
-    if (isSignedIn && this.signInReturnToLight) {
-      this.signInReturnToLight = false;
-      setTimeout(() => {
-        if (this.state.engineKind !== 'light') void this.switchEngine('light');
-      }, 900);
-    }
     // 登录成功：把 App 内置的授权页收掉（留 0.8s 让用户看到“授权成功”）
     if (isSignedIn && this.authBrowserOpened) {
       this.authBrowserOpened = false;
@@ -2476,7 +2531,6 @@ export class Store {
         if (this.state.inAppBrowserUrl) this.patch({ inAppBrowserUrl: null });
       }, 800);
     }
-    if (account.status === 'signed-out') this.signInReturnToLight = false;
     const attempt = account.attempt;
     if (attempt?.phase !== 'waiting-browser' || !attempt.authorizeUrl) return;
     // 不是本机发起的、已经过期的尝试，一律不自动开浏览器 —— 那只会给用户一个"授权失败"
