@@ -51,7 +51,7 @@ import {
   withFreshAccountToken,
 } from '../engine/light/config';
 import { ensureNotificationPermission, notifyEvent } from '../lib/notify';
-import { isAppActive, openUrl } from '../lib/platform';
+import { isAppActive } from '../lib/platform';
 import {
   intakeFiles,
   intakeImagePicker,
@@ -532,6 +532,10 @@ export class Store {
    * 发起的尝试也会被这台手机打开 —— 用户点到已经取消/过期的链接就会看到"授权失败"。
    */
   private pendingSignIn = false;
+  /** 用户是在轻引擎下点的登录：登完自动切回轻引擎（账号 token 会被轻引擎复用） */
+  private signInReturnToLight = false;
+  /** 这次登录是不是我们打开的 App 内置浏览器：登录成功后自动关掉 */
+  private authBrowserOpened = false;
   /** 已经弹过通知的审批，避免重连/重放时重复打扰 */
   private notifiedApprovals = new Set<string>();
 
@@ -872,6 +876,7 @@ export class Store {
   }
 
   closeInAppBrowser(): void {
+    this.authBrowserOpened = false;
     this.patch({ inAppBrowserUrl: null });
   }
 
@@ -2362,32 +2367,52 @@ export class Store {
     }
   }
 
+  /** 等桥真正连上：切引擎后 mode 会先变成 full，client 可能晚一拍 */
+  private async waitForClient(timeoutMs = 10000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (this.client) return true;
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    return this.client !== null;
+  }
+
   /**
    * 开始浏览器登录。
    *
    * 回调地址由宿主决定（本机模式下就是引擎自己的 loopback），
-   * 这里只负责把宿主给的 authorizeUrl 交给系统浏览器。
+   * 这里只负责把宿主给的 authorizeUrl 交给内置浏览器。
    */
   async startAccountSignIn(): Promise<void> {
-    // 账号登录走完整引擎的浏览器 OAuth；轻引擎在线时先切到完整引擎，
-    // 否则用户会在「账号」页看到一个永远 unsupported 的登录按钮。
-    if (this.state.engineKind === 'light') {
+    // 账号登录走完整引擎的浏览器 OAuth；轻引擎在线时先切到完整引擎。
+    // 切换完成后要等桥真正连上（不是只看 mode === 'full'），否则用户会看到
+    // “引擎还没连上”这种没意义的提示。
+    const startedFromLight = this.state.engineKind === 'light';
+    this.signInReturnToLight = startedFromLight;
+    if (startedFromLight) {
       const ok = await this.switchEngine('full');
       if (!ok) {
-        this.setError('账号登录需要完整引擎；完整引擎没启动起来，稍后再试，或先用第三方模型渠道。');
+        this.signInReturnToLight = false;
+        this.setError('账号登录需要完整引擎，但完整引擎没启动起来。可以先用「轻引擎渠道」填 API Key。');
         return;
       }
     }
-    if (!this.client) {
-      // 切引擎成功了但桥没连上：别静默返回，否则用户看到的是“点了没反应”
-      this.setError('引擎还没连上，稍等两秒再点一次登录。');
+    if (!(await this.waitForClient())) {
+      this.signInReturnToLight = false;
+      this.setError('完整引擎还没连接就绪，请稍后再点一次登录。');
+      return;
+    }
+    const client = this.client;
+    if (!client) {
+      this.signInReturnToLight = false;
+      this.setError('完整引擎连接已断开，请重试。');
       return;
     }
     this.pendingSignIn = true;
     this.openedAttemptId = null;
     this.patch({ busy: true, error: null });
     try {
-      const { account } = await this.client.request('account.signIn', {});
+      const { account } = await client.request('account.signIn', {});
       this.applyAccount(account);
     } catch (err) {
       this.fail(err);
@@ -2399,12 +2424,14 @@ export class Store {
   /** 手动重开当前这次的授权页（浏览器被关掉时用） */
   openAccountAuthPage(): void {
     const attempt = this.state.account?.attempt;
-    if (attempt?.authorizeUrl) void openUrl(attempt.authorizeUrl);
+    if (attempt?.authorizeUrl) this.openInAppBrowser(attempt.authorizeUrl);
   }
 
   async cancelAccountSignIn(): Promise<void> {
     const attempt = this.state.account?.attempt;
     this.pendingSignIn = false;
+    this.signInReturnToLight = false;
+    this.authBrowserOpened = false;
     if (!this.client || !attempt) return;
     try {
       const { account } = await this.client.request('account.cancelSignIn', { attemptId: attempt.id });
@@ -2435,6 +2462,21 @@ export class Store {
       void this.refreshModels();
       void this.refreshCredentials();
     }
+    // 从轻引擎发起、登录成功后自动切回轻引擎：轻引擎会重新读 .credentials.yaml 里的 token
+    if (isSignedIn && this.signInReturnToLight) {
+      this.signInReturnToLight = false;
+      setTimeout(() => {
+        if (this.state.engineKind !== 'light') void this.switchEngine('light');
+      }, 900);
+    }
+    // 登录成功：把 App 内置的授权页收掉（留 0.8s 让用户看到“授权成功”）
+    if (isSignedIn && this.authBrowserOpened) {
+      this.authBrowserOpened = false;
+      setTimeout(() => {
+        if (this.state.inAppBrowserUrl) this.patch({ inAppBrowserUrl: null });
+      }, 800);
+    }
+    if (account.status === 'signed-out') this.signInReturnToLight = false;
     const attempt = account.attempt;
     if (attempt?.phase !== 'waiting-browser' || !attempt.authorizeUrl) return;
     // 不是本机发起的、已经过期的尝试，一律不自动开浏览器 —— 那只会给用户一个"授权失败"
@@ -2443,7 +2485,9 @@ export class Store {
     if (this.openedAttemptId === attempt.id) return;
     this.openedAttemptId = attempt.id;
     this.pendingSignIn = false;
-    void openUrl(attempt.authorizeUrl);
+    // 授权页在 App 内置浏览器里打开，不再跳到系统浏览器
+    this.authBrowserOpened = true;
+    this.openInAppBrowser(attempt.authorizeUrl);
   }
 
   setDraftPreset(presetId: string): void {
