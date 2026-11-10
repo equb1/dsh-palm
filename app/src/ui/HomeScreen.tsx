@@ -137,10 +137,10 @@ export function HomeScreen(): React.ReactElement {
       <View style={styles.header}>
         <IconButton glyph="☰" label="打开会话列表" onPress={() => setDrawer(true)} />
         <View style={styles.brandMark}>
-          <Text style={styles.brandGlyph}>锦</Text>
+          <Text style={styles.brandGlyph}>蟹</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.brand}>锦囊</Text>
+          <Text style={styles.brand}>Crabstack</Text>
           <View style={styles.subRow}>
             <Pressable
               accessibilityRole="button"
@@ -267,7 +267,7 @@ export function HomeScreen(): React.ReactElement {
           draft={draft}
           onChangeDraft={setDraft}
           onSend={send}
-          placeholder="给锦囊发消息…"
+          placeholder="给 Crabstack 发消息…"
           presets={presets}
           activePresetId={state.draftPresetId}
           onPickPreset={(id) => store.setDraftPreset(id)}

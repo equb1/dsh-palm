@@ -395,7 +395,7 @@ export function ChatScreen({ session }: { session: SessionDetail }): React.React
               ? state.caps?.actions.includes('steer')
                 ? '生成中 · 可直接插话'
                 : '生成中 · 等这一轮跑完'
-              : '给锦囊发消息…'
+              : '给 Crabstack 发消息…'
           }
           presets={state.caps?.presets ?? []}
           activePresetId={session.presetId}

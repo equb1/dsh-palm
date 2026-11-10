@@ -70,7 +70,7 @@ export async function createLightHost(setup: LightEngineSetup): Promise<LightHos
       ...(normalized.providerName ? { providerName: normalized.providerName } : {}),
     },
     ...(image ? { image } : {}),
-    hostName: '锦囊轻引擎（本机）',
+    hostName: 'Crabstack 轻引擎（本机）',
     onWarn: (message) => console.warn('[light]', message),
     onLog: (message) => console.log('[light] ' + message),
   });
